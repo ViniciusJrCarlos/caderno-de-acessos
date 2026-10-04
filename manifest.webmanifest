@@ -1,0 +1,9 @@
+{
+  "name": "Caderno de Acessos",
+  "short_name": "Caderno",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#F4F6F8",
+  "theme_color": "#1B365D",
+  "lang": "pt-BR"
+}

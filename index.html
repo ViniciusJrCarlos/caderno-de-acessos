@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1B365D">
+<title>Caderno de Acessos</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header>
+  <h1>Caderno de Acessos</h1>
+  <p id="sub">Equipe · offline neste aparelho</p>
+</header>
+<div class="chips" id="chips"></div>
+<input id="busca" placeholder="Buscar portal, cliente, URL">
+<main id="lista"></main>
+<button class="fab" id="novo" type="button">+</button>
+<nav class="nav">
+  <button type="button" data-aba="equipe" class="on">Equipe</button>
+  <button type="button" data-aba="meu">Meus</button>
+  <button type="button" data-aba="vencendo">Vencendo</button>
+  <button type="button" data-aba="arquivo">Arquivo</button>
+  <button type="button" data-aba="mais">Mais</button>
+</nav>
+<div class="sheet" id="sheet">
+  <div class="panel">
+    <h3 id="fichaTitulo">Novo acesso</h3>
+    <div id="campos"></div>
+    <div class="botoes">
+      <button type="button" id="ciclo">Troca = hoje</button>
+      <button type="button" id="salvar" class="pri">Salvar</button>
+      <button type="button" id="fechar">Fechar</button>
+    </div>
+  </div>
+</div>
+<script src="js/app.js"></script>
+</body>
+</html>

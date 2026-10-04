@@ -1,0 +1,5 @@
+Caderno de Acessos — web (Python continua em espera)
+================================================
+Abra index.html no Chrome, ou publique a pasta no GitHub Pages
+como o Anota Conta. Sem banco. Dados ficam no navegador.
+Exportar JSON leva os cards para outro celular.
