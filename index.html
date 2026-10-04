@@ -8,7 +8,17 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="css/app.css">
 </head>
-<body>
+<body class="travado">
+<section id="login" class="login">
+  <form id="loginForm" class="login-box" autocomplete="off">
+    <h1>Caderno de Acessos</h1>
+    <input id="loginSenha" type="password" placeholder="Senha de acesso" autocomplete="current-password" aria-label="Senha de acesso">
+    <button type="submit" id="loginBtn">Abrir caderno</button>
+    <p id="loginErro" class="login-erro" role="alert"></p>
+    <p class="login-rodape" id="loginRodape">Caderno de Acessos v1.0 · © Todos os direitos reservados · Desenv. WebDev</p>
+  </form>
+</section>
+<div id="app">
 <header>
   <h1>Caderno de Acessos</h1>
   <p id="sub">Equipe · offline neste aparelho</p>
@@ -34,6 +44,7 @@
       <button type="button" id="fechar">Fechar</button>
     </div>
   </div>
+</div>
 </div>
 <script src="js/app.js"></script>
 </body>

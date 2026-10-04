@@ -36,3 +36,13 @@ main { padding:0 12px 12px; display:flex; flex-direction:column; gap:10px; }
 .panel .botoes { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
 .panel .botoes button.pri { background:var(--navy); color:#fff; border:0; }
 @media (min-width:800px) { main { display:grid; grid-template-columns:1fr 1fr; } .grupo { grid-column:1 / -1; } }
+.login { position:fixed; inset:0; background:var(--bg); display:none; align-items:center; justify-content:center; padding:24px; z-index:10; }
+body.travado .login { display:flex; }
+body.travado #app { display:none; }
+.login-box { width:100%; max-width:440px; }
+.login-box h1 { margin:0 0 22px; font-size:30px; color:var(--navy); }
+.login-box input { width:100%; border:1px solid var(--line); border-radius:10px; padding:12px; font-size:16px; background:#fff; }
+.login-box button { margin-top:14px; background:var(--navy); color:#fff; border:0; border-radius:10px; padding:10px 14px; font-size:15px; }
+.login-box button:disabled { opacity:.6; }
+.login-erro { color:var(--red); font-size:13px; min-height:18px; margin:10px 0 0; }
+.login-rodape { color:var(--muted); font-size:13px; margin:8px 0 0; }

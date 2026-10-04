@@ -29,16 +29,33 @@ function rotulo(it) {
   return "Vence em " + dias + " dias";
 }
 function exemplos() {
+  // Dados 100% fictícios para demonstração (ids s1..s10).
+  const c = (o) => Object.assign({ horario: "", escalonamento: "", obs: "", arquivado_em: null }, o);
   return [
-    { id: "f1", titulo: "Painel Nuvem Azul", aplicacao: "Nuvem Azul", cliente: "Nuvem Azul Tecnologia", categoria: "Interno", visibilidade: "Equipe", url: "https://painel.nuvemazul.example", usuario: "ops.nuvem", senha: "exemplo", ciclo: "60", ultima: hoje(), horario: "Seg–Sex 08–18", escalonamento: "N1 0800", obs: "" },
-    { id: "f2", titulo: "Gestor Ponto Certo", aplicacao: "Ponto Certo", cliente: "Ponto Certo Sistemas", categoria: "Interno", visibilidade: "Equipe", url: "https://app.pontocerto.example", usuario: "ops.ponto", senha: "exemplo", ciclo: "60", ultima: hoje(), horario: "", escalonamento: "", obs: "" },
-    { id: "f3", titulo: "Portal Fornecedor Alfa", aplicacao: "Alfa Suprimentos", cliente: "Alfa Suprimentos", categoria: "Externo", visibilidade: "Equipe", url: "https://portal.alfasuprimentos.example", usuario: "svc.alfa", senha: "exemplo", ciclo: "30", ultima: addDias(hoje(), -26), horario: "09–17", escalonamento: "Carla", obs: "" }
+    c({ id: "s1", titulo: "CRM Operação A", aplicacao: "CRM Fluxo", cliente: "Operação A", categoria: "Interno", visibilidade: "Equipe", url: "https://crm.fluxo.example/opa", usuario: "suporte.opa", senha: "exemplo123", ciclo: "90", ultima: addDias(hoje(), -10), horario: "24x7", escalonamento: "N2 Sistemas ramal 4010", obs: "Mesmo CRM, instância da Operação A" }),
+    c({ id: "s2", titulo: "CRM Operação B", aplicacao: "CRM Fluxo", cliente: "Operação B", categoria: "Interno", visibilidade: "Equipe", url: "https://crm.fluxo.example/opb", usuario: "suporte.opb", senha: "exemplo456", ciclo: "30", ultima: addDias(hoje(), -25), horario: "Seg–Sex 08–20", escalonamento: "N2 Sistemas ramal 4010", obs: "Mesmo CRM, instância da Operação B" }),
+    c({ id: "s3", titulo: "Chamados Operação A", aplicacao: "Central de Chamados Delta", cliente: "Operação A", categoria: "Interno", visibilidade: "Equipe", url: "https://chamados.delta.example/opa", usuario: "analista.opa", senha: "teste123", ciclo: "60", ultima: addDias(hoje(), -65), escalonamento: "Coordenação Suporte" }),
+    c({ id: "s4", titulo: "Chamados Operação B", aplicacao: "Central de Chamados Delta", cliente: "Operação B", categoria: "Interno", visibilidade: "Individual", url: "https://chamados.delta.example/opb", usuario: "meu.usuario", senha: "teste456", ciclo: "60", ultima: addDias(hoje(), -5), obs: "Login pessoal do analista" }),
+    c({ id: "s5", titulo: "VPN Corporativa", aplicacao: "VPN Ponte Segura", cliente: "Interno", categoria: "Interno", visibilidade: "Individual", url: "https://vpn.pontesegura.example", usuario: "meu.usuario", senha: "exemplo789", ciclo: "90", ultima: addDias(hoje(), -20) }),
+    c({ id: "s6", titulo: "Portal Fornecedor Alfa", aplicacao: "Alfa Suprimentos", cliente: "Alfa Suprimentos", categoria: "Externo", visibilidade: "Equipe", url: "https://portal.alfasuprimentos.example", usuario: "svc.alfa", senha: "fornecedor123", ciclo: "30", ultima: addDias(hoje(), -27), horario: "09–17", escalonamento: "Contato fictício: Carla (0800 000 0001)" }),
+    c({ id: "s7", titulo: "Painel Nuvem Azul", aplicacao: "Nuvem Azul", cliente: "Nuvem Azul Tecnologia", categoria: "Externo", visibilidade: "Equipe", url: "https://painel.nuvemazul.example", usuario: "ops.nuvem", senha: "nuvem123", ciclo: "Nunca", ultima: addDias(hoje(), -120), horario: "Seg–Sex 08–18", escalonamento: "N1 0800 000 0002" }),
+    c({ id: "s8", titulo: "Gestor Ponto Certo", aplicacao: "Ponto Certo", cliente: "Ponto Certo Sistemas", categoria: "Externo", visibilidade: "Individual", url: "https://app.pontocerto.example", usuario: "meu.usuario", senha: "ponto123", ciclo: "90", ultima: addDias(hoje(), -95) }),
+    c({ id: "s9", titulo: "Telefonia Sinal Verde", aplicacao: "Sinal Verde Telecom", cliente: "Sinal Verde Telecom", categoria: "Externo", visibilidade: "Equipe", url: "https://admin.sinalverde.example", usuario: "suporte.sv", senha: "exemplo321", ciclo: "60", ultima: addDias(hoje(), -30), horario: "24x7", escalonamento: "NOC fictício 0800 000 0003" }),
+    c({ id: "s10", titulo: "Portal Beta Logística (antigo)", aplicacao: "Beta Logística", cliente: "Beta Logística", categoria: "Externo", visibilidade: "Equipe", url: "https://portal.betalogistica.example", usuario: "svc.beta", senha: "antigo123", ciclo: "30", ultima: addDias(hoje(), -200), obs: "Contrato encerrado, mantido só para histórico", arquivado_em: addDias(hoje(), -15) })
   ];
 }
 function load() {
   try { itens = JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) { itens = []; }
-  itens = itens.filter((it) => !(["j1", "j2", "a1"].includes(it.id) && it.senha === "exemplo"));
-  if (!itens.length) itens = exemplos();
+  if (!Array.isArray(itens)) itens = [];
+  const antes = itens.length;
+  // Remove exemplos de versões anteriores (só se ainda estiverem com a senha de exemplo original).
+  itens = itens.filter((it) => !(["j1", "j2", "a1", "f1", "f2", "f3"].includes(it.id) && it.senha === "exemplo"));
+  const removeuAntigos = itens.length < antes;
+  if (!itens.length || removeuAntigos) {
+    const ids = new Set(itens.map((it) => it.id));
+    exemplos().forEach((it) => { if (!ids.has(it.id)) itens.push(it); });
+  }
+  if (removeuAntigos) localStorage.setItem(KEY, JSON.stringify(itens));
 }
 function save() {
   localStorage.setItem(KEY, JSON.stringify(itens));
@@ -228,5 +245,44 @@ document.getElementById("busca").addEventListener("input", render);
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => {});
 }
-load();
-render();
+// Tela de login: senha padrão fixa. Só o hash PBKDF2-SHA256 fica no código.
+const LOGIN = { iter: 310000, salt: "cf445a656d7cf7a10ebbff8099ec6eac", hash: "8e68fdea644aa331d17b39ae0f6c3dd94c33f5d05f3ce2a674ee94536d5d8b1e" };
+const SESSAO = "caderno-acessos-sessao";
+function hexParaBytes(h) { const b = new Uint8Array(h.length / 2); for (let i = 0; i < b.length; i++) b[i] = parseInt(h.substr(i * 2, 2), 16); return b; }
+async function conferirSenha(senha) {
+  if (!(window.crypto && crypto.subtle)) throw new Error("sem-crypto");
+  const chave = await crypto.subtle.importKey("raw", new TextEncoder().encode(senha), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: hexParaBytes(LOGIN.salt), iterations: LOGIN.iter }, chave, 256);
+  const hex = Array.from(new Uint8Array(bits)).map((x) => x.toString(16).padStart(2, "0")).join("");
+  let dif = hex.length ^ LOGIN.hash.length;
+  for (let i = 0; i < hex.length; i++) dif |= hex.charCodeAt(i) ^ LOGIN.hash.charCodeAt(i);
+  return dif === 0;
+}
+function entrar() {
+  document.body.classList.remove("travado");
+  load();
+  render();
+}
+document.getElementById("loginForm").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const inp = document.getElementById("loginSenha");
+  const erro = document.getElementById("loginErro");
+  const btn = document.getElementById("loginBtn");
+  erro.textContent = "";
+  btn.disabled = true;
+  try {
+    if (await conferirSenha(inp.value)) {
+      sessionStorage.setItem(SESSAO, LOGIN.hash.slice(0, 16));
+      inp.value = "";
+      entrar();
+    } else {
+      erro.textContent = "Senha incorreta. Tente novamente.";
+      inp.select();
+    }
+  } catch (e) {
+    erro.textContent = "Não foi possível verificar a senha neste navegador (abra pelo link https).";
+  }
+  btn.disabled = false;
+});
+if (sessionStorage.getItem(SESSAO) === LOGIN.hash.slice(0, 16)) entrar();
+else document.getElementById("loginSenha").focus();
