@@ -1,5 +1,5 @@
-const CACHE = "caderno-web-v5";
-const FILES = ["./", "./index.html", "./css/app.css", "./js/app.js", "./manifest.webmanifest"];
+const CACHE = "caderno-web-v6";
+const FILES = ["./", "./index.html", "./css/app.css", "./js/app.js", "./manifest.webmanifest", "./favicon.ico", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-maskable-192.png", "./icons/icon-maskable-512.png", "./icons/apple-touch-icon.png"];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)));
   self.skipWaiting();

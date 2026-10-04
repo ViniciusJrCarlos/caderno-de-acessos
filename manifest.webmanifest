@@ -1,9 +1,18 @@
 {
+  "id": "./",
   "name": "Caderno de Acessos",
   "short_name": "Caderno",
+  "description": "Caderno de acessos da equipe de suporte a sistemas, offline e sem banco.",
   "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#F4F6F8",
   "theme_color": "#1B365D",
-  "lang": "pt-BR"
+  "lang": "pt-BR",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
 }
