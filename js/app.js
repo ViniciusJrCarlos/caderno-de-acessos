@@ -246,7 +246,7 @@ if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => {});
 }
 // Tela de login: senha padrão fixa. Só o hash PBKDF2-SHA256 fica no código.
-const LOGIN = { iter: 310000, salt: "cf445a656d7cf7a10ebbff8099ec6eac", hash: "8e68fdea644aa331d17b39ae0f6c3dd94c33f5d05f3ce2a674ee94536d5d8b1e" };
+const LOGIN = { iter: 310000, salt: "015d5ac2a5ab08fdac13e98dd8b789fc", hash: "033d6adcf778bd29c7199d684d705ecebbd10bb47d86ecd732a0d225ffa2e9b8" };
 const SESSAO = "caderno-acessos-sessao";
 function hexParaBytes(h) { const b = new Uint8Array(h.length / 2); for (let i = 0; i < b.length; i++) b[i] = parseInt(h.substr(i * 2, 2), 16); return b; }
 async function conferirSenha(senha) {
