@@ -226,7 +226,7 @@ document.querySelectorAll(".nav button").forEach((b) => {
 });
 document.getElementById("busca").addEventListener("input", render);
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("sw.js").catch(() => {});
+  navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => {});
 }
 load();
 render();
