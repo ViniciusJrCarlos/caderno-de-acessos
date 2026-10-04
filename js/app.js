@@ -74,8 +74,110 @@ function save() {
   localStorage.setItem(KEY, JSON.stringify(itens));
   render();
 }
+
+/* ---------- Ícones SVG inline (funcionam offline) ---------- */
+const IC = {
+  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  eyeOff: '<path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a9.7 9.7 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
+  copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/>',
+  external: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  refresh: '<path d="M20 11a8 8 0 0 0-14.7-4.3L4 8M4 4v4h4M4 13a8 8 0 0 0 14.7 4.3L20 16M20 20v-4h-4"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  alert: '<path d="M12 3l10 18H2z"/><path d="M12 10v4M12 17h.01"/>',
+  check: '<path d="M5 12l5 5L20 7"/>',
+  more: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/>',
+  archive: '<rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4"/>',
+  restore: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
+  download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+  upload: '<path d="M12 20V9M7 14l5-5 5 5M5 4h14"/>',
+  table: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  logout: '<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 17l5-5-5-5M15 12H3"/>',
+  users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6.5 6.5 0 0 1 3.5 6"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  building: '<rect x="4" y="3" width="16" height="18" rx="1"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2M10 21v-3h4v3"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>'
+};
+function svg(nome, tam) {
+  return '<svg class="ic" viewBox="0 0 24 24" width="' + (tam || 18) + '" height="' + (tam || 18) + '" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (IC[nome] || "") + "</svg>";
+}
+function aplicarIcones(raiz) {
+  (raiz || document).querySelectorAll("[data-ic]").forEach((n) => {
+    if (n.dataset.icOk) return;
+    n.insertAdjacentHTML("afterbegin", svg(n.dataset.ic, n.classList.contains("fab") ? 26 : 20));
+    n.dataset.icOk = "1";
+  });
+}
+
+/* ---------- Helpers ---------- */
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+}
+function btn(cls, icone, texto, fn, titulo) {
+  const b = el("button", cls);
+  b.type = "button";
+  if (icone) b.insertAdjacentHTML("beforeend", svg(icone, 18));
+  if (texto) b.appendChild(el("span", "", texto));
+  if (titulo) { b.title = titulo; b.setAttribute("aria-label", titulo); }
+  b.addEventListener("click", (ev) => { ev.stopPropagation(); fn(ev); });
+  return b;
+}
+let toastTimer = null;
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("on"), 2200);
+}
+function copiar(texto, rotuloMsg) {
+  if (!texto) { toast("Nada para copiar"); return; }
+  const ok = () => toast((rotuloMsg || "Senha") + " copiada");
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(texto).then(ok).catch(() => fallbackCopiar(texto) ? ok() : toast("Não foi possível copiar"));
+  } else if (fallbackCopiar(texto)) ok();
+  else toast("Não foi possível copiar");
+}
+function fallbackCopiar(texto) {
+  const ta = document.createElement("textarea");
+  ta.value = texto; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.select();
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+  ta.remove();
+  return ok;
+}
+function abrirUrl(url) {
+  if (!url) { toast("Card sem URL"); return; }
+  const u = /^[a-z]+:\/\//i.test(url) ? url : "https://" + url;
+  window.open(u, "_blank", "noopener");
+}
+function diasRestantes(it) {
+  if (!it.ultima || !it.ciclo || it.ciclo === "Nunca") return null;
+  return Math.round((new Date(addDias(it.ultima, Number(it.ciclo)) + "T12:00:00") - new Date(hoje() + "T12:00:00")) / 86400000);
+}
+const CORES = ["#0F6B8A", "#1B5FAD", "#1B365D", "#5B4BB7", "#0E7C5A", "#B4530A", "#9D2B6B", "#2F6F73"];
+function corDe(it) {
+  const s = (it.aplicacao || it.titulo || "") + "|" + (it.categoria || "");
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return CORES[h % CORES.length];
+}
+const MASCARA = "••••••••••";
+
+/* ---------- Lista ---------- */
 function visiveis() {
-  const q = (document.getElementById("busca").value || "").toLowerCase();
+  const q = (document.getElementById("busca").value || "").trim().toLowerCase();
   return itens.filter((it) => {
     const arq = !!it.arquivado_em;
     if (aba === "equipe" && (it.visibilidade !== "Equipe" || arq)) return false;
@@ -83,109 +185,248 @@ function visiveis() {
     if (aba === "vencendo" && (arq || ["Vencendo", "Vencido"].indexOf(statusDe(it)) < 0)) return false;
     if (aba === "arquivo" && !arq) return false;
     if (aba === "mais") return false;
-    const blob = [it.titulo, it.aplicacao, it.cliente, it.usuario, it.url, it.categoria].join(" ").toLowerCase();
+    const blob = [it.titulo, it.aplicacao, it.cliente, it.usuario, it.url, it.categoria, it.visibilidade].join(" ").toLowerCase();
     return !q || blob.indexOf(q) >= 0;
-  }).sort((a, b) => (a.aplicacao || "").localeCompare(b.aplicacao || "") || (a.titulo || "").localeCompare(b.titulo || ""));
-}
-function el(tag, cls, text) {
-  const n = document.createElement(tag);
-  if (cls) n.className = cls;
-  if (text != null) n.textContent = text;
-  return n;
+  }).sort((a, b) => (a.aplicacao || a.titulo || "").localeCompare(b.aplicacao || b.titulo || "") || (a.cliente || "").localeCompare(b.cliente || "") || (a.titulo || "").localeCompare(b.titulo || ""));
 }
 function render() {
   const box = document.getElementById("lista");
   box.innerHTML = "";
-  document.getElementById("sub").textContent = aba === "mais" ? "Exportar, importar, instalar" : "Dados deste aparelho · sem banco";
-  document.getElementById("novo").style.display = aba === "mais" ? "none" : "block";
-  document.getElementById("busca").style.display = aba === "mais" ? "none" : "block";
+  fecharMenus();
+  const nVenc = itens.filter((it) => !it.arquivado_em && ["Vencendo", "Vencido"].indexOf(statusDe(it)) >= 0).length;
+  document.getElementById("contVenc").textContent = nVenc ? String(nVenc) : "";
+  document.getElementById("buscaWrap").style.display = aba === "mais" ? "none" : "";
+  document.getElementById("novo").classList.toggle("oculto", aba === "mais");
+  box.classList.toggle("mais", aba === "mais");
   if (aba === "mais") { renderMais(box); return; }
   const list = visiveis();
-  if (!list.length) { box.appendChild(el("p", "meta", "Nenhum card nesta aba.")); return; }
-  let g = null;
+  if (!list.length) {
+    box.appendChild(el("p", "vazio", document.getElementById("busca").value ? "Nenhum acesso encontrado para essa busca." : "Nenhum card nesta aba."));
+    return;
+  }
+  const grupos = [];
   list.forEach((it) => {
-    const nome = it.aplicacao || it.titulo;
-    if (nome !== g) { g = nome; box.appendChild(el("div", "grupo", g)); }
-    const st = statusDe(it);
-    const c = el("article", "card" + (st === "Vencendo" ? " vencendo" : st === "Vencido" ? " vencido" : it.arquivado_em ? " arq" : ""));
-    c.appendChild(el("h2", "", it.titulo + (it.cliente ? " · " + it.cliente : "")));
-    c.appendChild(el("div", "meta", (it.visibilidade || "") + " · " + (it.categoria || "") + " · ciclo " + (it.ciclo || "Nunca")));
-    c.appendChild(el("div", "url", it.url || "—"));
-    c.appendChild(el("div", "meta", "Usuário " + (it.usuario || "—") + " · " + rotulo(it)));
-    const row = el("div", "acoes");
-    addBtn(row, "Mostrar", () => alert(it.senha || "(vazia)"));
-    addBtn(row, "Copiar", () => copiar(it.senha || ""));
-    addBtn(row, "Abrir", () => { if (it.url) window.open(it.url, "_blank"); });
-    addBtn(row, "Editar", () => abrirFicha(it));
-    if (it.arquivado_em) addBtn(row, "Reativar", () => { it.arquivado_em = null; save(); }, "ok");
-    else addBtn(row, "Arquivar", () => { it.arquivado_em = hoje(); save(); }, "warn");
-    c.appendChild(row);
-    box.appendChild(c);
+    const nome = it.aplicacao || it.titulo || "Sem aplicação";
+    let g = grupos.find((x) => x.nome === nome);
+    if (!g) { g = { nome: nome, itens: [] }; grupos.push(g); }
+    g.itens.push(it);
+  });
+  grupos.forEach((g) => {
+    const sec = el("section", "grupo");
+    const h = el("h2", "grupo-topo");
+    h.insertAdjacentHTML("beforeend", svg("folder", 20));
+    h.appendChild(el("span", "", g.nome));
+    if (g.itens.length > 1) h.appendChild(el("span", "grupo-qtd", g.itens.length + " acessos"));
+    sec.appendChild(h);
+    g.itens.forEach((it) => sec.appendChild(cardDe(it)));
+    box.appendChild(sec);
   });
 }
-function addBtn(parent, text, fn, cls) {
-  const b = el("button", cls || "", text);
-  b.type = "button";
-  b.addEventListener("click", fn);
-  parent.appendChild(b);
+function statusBadge(it) {
+  const st = statusDe(it);
+  const d = diasRestantes(it);
+  if (st === "Arquivado") return el("span", "st st-arq", "Arquivado");
+  if (st === "Vencido") { const b = el("span", "st st-vencido"); b.insertAdjacentHTML("beforeend", svg("alert", 14)); b.appendChild(el("span", "", "Vencido")); b.title = "Vencido há " + Math.abs(d) + " dia(s)"; return b; }
+  if (st === "Vencendo") { const b = el("span", "st st-vencendo"); b.insertAdjacentHTML("beforeend", svg("clock", 14)); b.appendChild(el("span", "", "Vencendo")); b.title = "Vence em " + d + " dia(s)"; return b; }
+  if (st === "Sem expiração") return el("span", "st st-ok", "Não expira");
+  const b = el("span", "st st-ok"); b.insertAdjacentHTML("beforeend", svg("check", 14)); b.appendChild(el("span", "", "OK")); return b;
 }
-function copiar(texto) {
-  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(texto).catch(() => {});
-  else alert(texto);
+function linhaSecreta(rotulo, valor, card, tipo) {
+  const row = el("div", "linha");
+  row.appendChild(el("span", "linha-rot", rotulo));
+  const val = el("span", "linha-val secreto", valor ? MASCARA : "—");
+  val.dataset.tipo = tipo;
+  row.appendChild(val);
+  if (valor) {
+    const olho = btn("olho", "eye", "", () => alternar(), "Mostrar " + rotulo.toLowerCase());
+    function alternar(forcar) {
+      const ver = forcar != null ? forcar : !val.classList.contains("aberto");
+      val.classList.toggle("aberto", ver);
+      val.textContent = ver ? valor : MASCARA;
+      olho.innerHTML = svg(ver ? "eyeOff" : "eye", 18);
+      olho.setAttribute("aria-label", (ver ? "Ocultar " : "Mostrar ") + rotulo.toLowerCase());
+      olho.title = olho.getAttribute("aria-label");
+    }
+    row.appendChild(olho);
+    card._alternadores = (card._alternadores || []).concat([alternar]);
+  } else {
+    row.appendChild(el("span", "olho-vazio"));
+  }
+  return row;
 }
+function cardDe(it) {
+  const st = statusDe(it);
+  const c = el("article", "card c-" + ({ Vencendo: "vencendo", Vencido: "vencido", Arquivado: "arq" }[st] || "ok"));
+  c.dataset.id = it.id;
+  const topo = el("div", "card-topo");
+  const av = el("span", "avatar");
+  av.style.background = corDe(it);
+  av.innerHTML = svg(it.categoria === "Externo" ? "globe" : "building", 22);
+  topo.appendChild(av);
+  const tt = el("div", "card-tit");
+  tt.appendChild(el("h3", "", it.titulo || it.aplicacao || "(sem título)"));
+  const ind = it.visibilidade === "Individual";
+  tt.appendChild(el("div", "card-sub", (ind ? "Acesso individual" : "Acesso compartilhado") + (it.cliente ? " · " + it.cliente : "")));
+  const tags = el("div", "tags");
+  const tv = el("span", "tag " + (ind ? "tag-ind" : "tag-eq"));
+  tv.insertAdjacentHTML("beforeend", svg(ind ? "user" : "users", 13));
+  tv.appendChild(el("span", "", ind ? "Individual" : "Equipe"));
+  tags.appendChild(tv);
+  tags.appendChild(el("span", "tag " + (it.categoria === "Externo" ? "tag-ext" : "tag-int"), it.categoria || "Interno"));
+  tt.appendChild(tags);
+  topo.appendChild(tt);
+  const dir = el("div", "card-dir");
+  dir.appendChild(statusBadge(it));
+  dir.appendChild(btn("ico-mini mais-btn", "more", "", (ev) => abrirMenuCard(it, ev.currentTarget), "Mais ações"));
+  topo.appendChild(dir);
+  c.appendChild(topo);
+
+  const linhas = el("div", "linhas");
+  linhas.appendChild(linhaSecreta("Usuário", it.usuario, c, "usuario"));
+  linhas.appendChild(linhaSecreta("Senha", it.senha, c, "senha"));
+  const lu = el("div", "linha");
+  lu.appendChild(el("span", "linha-rot", "URL"));
+  if (it.url) {
+    const a = el("a", "linha-val url", it.url.replace(/^https?:\/\//, ""));
+    a.href = /^[a-z]+:\/\//i.test(it.url) ? it.url : "https://" + it.url;
+    a.target = "_blank"; a.rel = "noopener";
+    lu.appendChild(a);
+    lu.appendChild(btn("olho", "external", "", () => abrirUrl(it.url), "Abrir URL"));
+  } else { lu.appendChild(el("span", "linha-val", "—")); lu.appendChild(el("span", "olho-vazio")); }
+  linhas.appendChild(lu);
+  const d = diasRestantes(it);
+  let info = it.arquivado_em ? "Arquivado em " + it.arquivado_em : (it.ciclo === "Nunca" || !it.ciclo) ? "Ciclo: não expira" : "Ciclo " + it.ciclo + " dias · " + (d < 0 ? "vencido há " + Math.abs(d) + " dia(s)" : "vence em " + d + " dia(s)");
+  if (ind && !it.senha && !it.usuario) info += " · usuário/senha não compartilhados";
+  linhas.appendChild(el("div", "card-info", info));
+  c.appendChild(linhas);
+
+  const acoes = el("div", "acoes");
+  const bMostrar = btn("acao", "eye", "Mostrar", () => {
+    const abrir = !c.classList.contains("revelado");
+    c.classList.toggle("revelado", abrir);
+    (c._alternadores || []).forEach((f) => f(abrir));
+    bMostrar.querySelector("span").textContent = abrir ? "Ocultar" : "Mostrar";
+    bMostrar.querySelector("svg").outerHTML = svg(abrir ? "eyeOff" : "eye", 18);
+  });
+  if (!it.senha && !it.usuario) bMostrar.disabled = true;
+  acoes.appendChild(bMostrar);
+  const bCop = btn("acao", "copy", "Copiar", () => copiar(it.senha, "Senha"));
+  if (!it.senha) bCop.disabled = true;
+  acoes.appendChild(bCop);
+  const bAb = btn("acao", "external", "Abrir", () => abrirUrl(it.url));
+  if (!it.url) bAb.disabled = true;
+  acoes.appendChild(bAb);
+  c.appendChild(acoes);
+  return c;
+}
+function fecharMenus() { document.querySelectorAll(".menu-card").forEach((m) => m.remove()); }
+function abrirMenuCard(it, ancora) {
+  const jaAberto = ancora.parentNode.querySelector(".menu-card");
+  fecharMenus();
+  if (jaAberto) return;
+  const m = el("div", "menu-card");
+  m.setAttribute("role", "menu");
+  m.appendChild(btn("mi", "edit", "Editar", () => { fecharMenus(); abrirFicha(it); }));
+  m.appendChild(btn("mi", "copy", "Copiar usuário", () => { fecharMenus(); copiar(it.usuario, "Usuário"); }));
+  if (it.arquivado_em) m.appendChild(btn("mi ok", "restore", "Reativar", () => { it.arquivado_em = null; save(); toast("Card reativado"); }));
+  else m.appendChild(btn("mi warn", "archive", "Arquivar", () => { it.arquivado_em = hoje(); save(); toast("Card arquivado"); }));
+  ancora.parentNode.appendChild(m);
+}
+document.addEventListener("click", (ev) => { if (!ev.target.closest(".menu-card")) fecharMenus(); });
+
+/* ---------- Aba Mais ---------- */
 function renderMais(box) {
-  const c = el("article", "card");
-  c.appendChild(el("h2", "", "Levar para outro aparelho"));
-  c.appendChild(el("p", "meta", "O JSON guarda todos os cards. Na versão nova, importe o arquivo e os campos voltam preenchidos."));
-  const row = el("div", "acoes");
-  addBtn(row, "Exportar JSON", exportarJson);
-  addBtn(row, "Importar JSON", () => document.getElementById("imp").click());
-  addBtn(row, "Excel Interno/Externo", exportarExcel);
-  c.appendChild(row);
-  const inp = document.createElement("input");
-  inp.type = "file";
-  inp.id = "imp";
-  inp.accept = ".json,application/json";
-  inp.style.display = "none";
-  inp.addEventListener("change", importarJson);
-  c.appendChild(inp);
-  box.appendChild(c);
-  const d = el("article", "card");
-  d.appendChild(el("h2", "", "Offline"));
-  d.appendChild(el("p", "meta", "Abra pelo Chrome. Se o site estiver publicado, o menu pode oferecer Adicionar à tela inicial. Sem internet, os cards já salvos continuam neste aparelho."));
-  box.appendChild(d);
+  const bloco = (titulo, texto, botoes) => {
+    const c = el("article", "card painel-mais");
+    c.appendChild(el("h3", "", titulo));
+    c.appendChild(el("p", "meta", texto));
+    const row = el("div", "acoes-mais");
+    botoes.forEach((b) => row.appendChild(b));
+    c.appendChild(row);
+    box.appendChild(c);
+  };
+  bloco("Compartilhar com a equipe", "Gera o JSON para os outros analistas. Cards Individuais vão sem usuário e sem senha (só título, aplicação, cliente, URL etc.).",
+    [btn("btn pri", "download", "Exportar JSON", exportarEquipe)]);
+  bloco("Backup pessoal (inclui minhas senhas)", "Arquivo completo, com os usuários e senhas dos seus acessos Individuais. Use só para levar para outro aparelho seu. Não compartilhe.",
+    [btn("btn", "lock", "Backup pessoal (inclui minhas senhas)", backupPessoal)]);
+  bloco("Importar", "Junta os cards do arquivo com os deste aparelho (pelo id). Cards que só existem aqui continuam. Usuário e senha que você já tem não são apagados por um arquivo que veio sem eles.",
+    [btn("btn", "upload", "Importar JSON", () => document.getElementById("imp").click())]);
+  bloco("Planilha", "Excel separado em Fornecedores externos e Ferramentas internas. Usuário e senha dos acessos Individuais não entram.",
+    [btn("btn", "table", "Excel Interno/Externo", exportarExcel)]);
+  bloco("Offline e instalação", "Abra o link no Chrome uma vez com internet (fora da VPN) e use “Instalar app”. Depois funciona sem internet; quando houver internet, a versão nova chega sozinha.",
+    [btn("btn", "logout", "Sair (bloquear)", sair)]);
 }
+
+/* ---------- Exportar / importar ---------- */
 function download(name, text, type) {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([text], { type: type }));
   a.download = name;
+  document.body.appendChild(a);
   a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
-function exportarJson() {
-  download("caderno-acessos.json", JSON.stringify({ versao: "web-1", itens: itens }, null, 2), "application/json");
+function semSegredoIndividual(it) {
+  if (it.visibilidade !== "Individual") return Object.assign({}, it);
+  const c = Object.assign({}, it);
+  c.usuario = "";
+  c.senha = "";
+  return c;
+}
+function exportarEquipe() {
+  download("caderno-acessos-equipe-" + hoje() + ".json", JSON.stringify({ versao: "web-2", tipo: "equipe", gerado_em: hoje(), itens: itens.map(semSegredoIndividual) }, null, 2), "application/json");
+  toast("JSON da equipe exportado (sem senhas individuais)");
+}
+function backupPessoal() {
+  download("caderno-acessos-backup-pessoal-" + hoje() + ".json", JSON.stringify({ versao: "web-2", tipo: "backup-pessoal", gerado_em: hoje(), itens: itens }, null, 2), "application/json");
+  toast("Backup pessoal exportado");
+}
+function mesclar(lista) {
+  let novos = 0, atualizados = 0;
+  lista.forEach((inc) => {
+    if (!inc || typeof inc !== "object") return;
+    if (!inc.id) inc.id = Math.random().toString(16).slice(2, 10);
+    const i = itens.findIndex((x) => x.id === inc.id);
+    if (i < 0) { itens.push(inc); novos++; return; }
+    const atual = itens[i];
+    const junto = Object.assign({}, atual, inc);
+    ["usuario", "senha"].forEach((k) => { if (!inc[k] && atual[k]) junto[k] = atual[k]; });
+    itens[i] = junto;
+    atualizados++;
+  });
+  return { novos: novos, atualizados: atualizados };
 }
 function importarJson(ev) {
   const f = ev.target.files && ev.target.files[0];
   if (!f) return;
   const r = new FileReader();
   r.onload = () => {
-    const data = JSON.parse(r.result);
-    itens = Array.isArray(data) ? data : (data.itens || []);
-    save();
-    alert("Importado: " + itens.length + " card(s).");
+    try {
+      const data = JSON.parse(r.result);
+      const lista = Array.isArray(data) ? data : (data.itens || []);
+      const res = mesclar(lista);
+      save();
+      alert("Importado: " + res.novos + " novo(s), " + res.atualizados + " atualizado(s). Total: " + itens.length + " card(s).");
+    } catch (e) {
+      alert("Arquivo inválido: não é um JSON do Caderno.");
+    }
+    ev.target.value = "";
   };
   r.readAsText(f);
 }
 function exportarExcel() {
   const head = ["Titulo", "Aplicacao", "Cliente", "Categoria", "Visibilidade", "URL", "Usuario", "Senha", "Ciclo", "UltimaTroca", "Horario", "Escalonamento", "Obs", "Arquivado"];
+  const esc = (v) => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   function tabela(lista, titulo) {
     let html = "<h2>" + titulo + "</h2><table border='1'><tr>";
     head.forEach((h) => { html += "<th>" + h + "</th>"; });
     html += "</tr>";
-    lista.forEach((it) => {
-      const vals = [it.titulo, it.aplicacao, it.cliente, it.categoria, it.visibilidade, it.url, it.usuario, it.senha, it.ciclo, it.ultima, it.horario, it.escalonamento, it.obs, it.arquivado_em || ""];
+    lista.forEach((orig) => {
+      const it = semSegredoIndividual(orig);
+      const ind = orig.visibilidade === "Individual";
+      const vals = [it.titulo, it.aplicacao, it.cliente, it.categoria, it.visibilidade, it.url, ind ? "(individual)" : it.usuario, ind ? "(individual)" : it.senha, it.ciclo, it.ultima, it.horario, it.escalonamento, it.obs, it.arquivado_em || ""];
       html += "<tr>";
-      vals.forEach((v) => { html += "<td>" + String(v == null ? "" : v).replace(/</g, "") + "</td>"; });
+      vals.forEach((v) => { html += "<td>" + esc(v) + "</td>"; });
       html += "</tr>";
     });
     return html + "</table>";
@@ -193,68 +434,138 @@ function exportarExcel() {
   const ext = itens.filter((i) => i.categoria === "Externo");
   const inn = itens.filter((i) => i.categoria !== "Externo");
   download("caderno-acessos.xls", "<html><meta charset='utf-8'><body>" + tabela(ext, "Fornecedores externos") + tabela(inn, "Ferramentas internas") + "</body></html>", "application/vnd.ms-excel");
+  toast("Excel exportado (sem senhas individuais)");
 }
-const CAMPOS = [
-  ["titulo", "Título"], ["aplicacao", "Aplicação"], ["cliente", "Cliente"],
-  ["categoria", "Categoria", ["Externo", "Interno"]],
-  ["visibilidade", "Visibilidade", ["Equipe", "Individual"]],
-  ["url", "URL do portal"], ["usuario", "Usuário"], ["senha", "Senha"],
-  ["ciclo", "Ciclo", ["30", "60", "90", "Nunca"]],
-  ["ultima", "Última troca AAAA-MM-DD"],
-  ["horario", "Horário"], ["escalonamento", "Escalonamento"], ["obs", "Observação"]
-];
+
+/* ---------- Formulário Novo / Editar ---------- */
+const NOVO = "__novo__";
+function preencherSelect(sel, valores, atual, rotuloNovo) {
+  sel.innerHTML = "";
+  const vazio = el("option", "", "Selecione...");
+  vazio.value = "";
+  sel.appendChild(vazio);
+  valores.forEach((v) => { const o = el("option", "", v); o.value = v; sel.appendChild(o); });
+  const n = el("option", "", rotuloNovo);
+  n.value = NOVO;
+  sel.appendChild(n);
+  sel.value = atual && valores.includes(atual) ? atual : "";
+}
+function unicos(campo) {
+  return Array.from(new Set(itens.map((it) => (it[campo] || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+}
+function ligarNovo(sel, input) {
+  const upd = () => { input.hidden = sel.value !== NOVO; if (!input.hidden) input.focus(); };
+  sel.onchange = upd;
+  input.hidden = true;
+}
+const $ = (id) => document.getElementById(id);
 function abrirFicha(it) {
-  edit = it ? Object.assign({}, it) : { id: Math.random().toString(16).slice(2, 10), visibilidade: aba === "meu" ? "Individual" : "Equipe", categoria: "Externo", ciclo: "90", ultima: hoje() };
-  document.getElementById("fichaTitulo").textContent = it ? "Editar acesso" : "Novo acesso";
-  const box = document.getElementById("campos");
-  box.innerHTML = "";
-  CAMPOS.forEach((def) => {
-    const lab = el("label", "", def[1]);
-    let input;
-    if (def[2]) {
-      input = document.createElement("select");
-      def[2].forEach((o) => {
-        const op = document.createElement("option");
-        op.value = o;
-        op.textContent = o;
-        if ((edit[def[0]] || def[2][0]) === o) op.selected = true;
-        input.appendChild(op);
-      });
-    } else if (def[0] === "obs" || def[0] === "escalonamento") {
-      input = document.createElement("textarea");
-      input.value = edit[def[0]] || "";
-    } else {
-      input = document.createElement("input");
-      input.value = edit[def[0]] || "";
-    }
-    input.dataset.k = def[0];
-    lab.appendChild(input);
-    box.appendChild(lab);
-  });
-  document.getElementById("sheet").classList.add("on");
+  fecharMenus();
+  edit = it ? Object.assign({}, it) : { id: Math.random().toString(16).slice(2, 10), visibilidade: aba === "meu" ? "Individual" : "Equipe", categoria: "Interno", ciclo: "90", ultima: hoje() };
+  $("fichaTitulo").textContent = it ? "Editar acesso" : "Novo acesso";
+  $("fTitulo").value = edit.titulo || "";
+  preencherSelect($("fAplicacao"), unicos("aplicacao"), edit.aplicacao, "+ Nova aplicação...");
+  preencherSelect($("fCliente"), unicos("cliente"), edit.cliente, "+ Novo cliente / operação...");
+  ligarNovo($("fAplicacao"), $("fAplicacaoNova"));
+  ligarNovo($("fCliente"), $("fClienteNovo"));
+  $("fAplicacaoNova").value = ""; $("fClienteNovo").value = "";
+  $("fCategoria").value = edit.categoria === "Externo" ? "Externo" : "Interno";
+  $("fVisibilidade").value = edit.visibilidade === "Individual" ? "Individual" : "Equipe";
+  $("fUrl").value = edit.url || "";
+  $("fUsuario").value = edit.usuario || "";
+  $("fSenha").value = edit.senha || "";
+  $("fSenha").type = "password";
+  $("fOlho").innerHTML = svg("eye", 20);
+  $("fCiclo").value = ["30", "60", "90", "Nunca"].includes(String(edit.ciclo)) ? String(edit.ciclo) : "90";
+  $("fUltima").value = edit.ultima || "";
+  $("fHorario").value = edit.horario || "";
+  $("fEscalonamento").value = edit.escalonamento || "";
+  $("fObs").value = edit.obs || "";
+  $("erroForm").textContent = "";
+  $("avisoInd").hidden = $("fVisibilidade").value !== "Individual";
+  abrirSheet("sheet");
+  setTimeout(() => $("fTitulo").focus(), 50);
 }
-function fechar() { document.getElementById("sheet").classList.remove("on"); }
-document.getElementById("fechar").addEventListener("click", fechar);
-document.getElementById("salvar").addEventListener("click", () => {
-  document.querySelectorAll("#campos [data-k]").forEach((input) => { edit[input.dataset.k] = input.value.trim(); });
-  const i = itens.findIndex((x) => x.id === edit.id);
-  if (i >= 0) itens[i] = edit; else itens.push(edit);
-  fechar();
+$("fVisibilidade").addEventListener("change", () => { $("avisoInd").hidden = $("fVisibilidade").value !== "Individual"; });
+$("fOlho").addEventListener("click", () => {
+  const ver = $("fSenha").type === "password";
+  $("fSenha").type = ver ? "text" : "password";
+  $("fOlho").innerHTML = svg(ver ? "eyeOff" : "eye", 20);
+  $("fOlho").setAttribute("aria-label", ver ? "Ocultar senha" : "Mostrar senha");
+});
+function lerFicha() {
+  const valSel = (sel, nova) => sel.value === NOVO ? nova.value.trim() : sel.value;
+  const o = Object.assign({}, edit, {
+    titulo: $("fTitulo").value.trim(),
+    aplicacao: valSel($("fAplicacao"), $("fAplicacaoNova")),
+    cliente: valSel($("fCliente"), $("fClienteNovo")),
+    categoria: $("fCategoria").value,
+    visibilidade: $("fVisibilidade").value,
+    url: $("fUrl").value.trim(),
+    usuario: $("fUsuario").value.trim(),
+    senha: $("fSenha").value,
+    ciclo: $("fCiclo").value,
+    ultima: $("fUltima").value,
+    horario: $("fHorario").value.trim(),
+    escalonamento: $("fEscalonamento").value.trim(),
+    obs: $("fObs").value.trim()
+  });
+  if (!o.titulo && !o.aplicacao) { $("erroForm").textContent = "Preencha pelo menos o Título ou a Aplicação."; return null; }
+  if (!o.titulo) o.titulo = o.aplicacao + (o.cliente ? " " + o.cliente : "");
+  if (!o.aplicacao) o.aplicacao = o.titulo;
+  return o;
+}
+function gravar(o, msg) {
+  const i = itens.findIndex((x) => x.id === o.id);
+  if (i >= 0) itens[i] = o; else itens.push(o);
+  fecharSheet("sheet");
   save();
+  toast(msg);
+}
+$("ficha").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  const o = lerFicha();
+  if (o) gravar(o, "Acesso salvo");
 });
-document.getElementById("ciclo").addEventListener("click", () => {
-  const input = document.querySelector("#campos [data-k=ultima]");
-  if (input) input.value = hoje();
+$("atualizarSenha").addEventListener("click", () => {
+  const o = lerFicha();
+  if (!o) return;
+  o.ultima = hoje();
+  o.senha_atualizada_em = hoje();
+  gravar(o, "Senha atualizada hoje" + (o.ciclo !== "Nunca" ? " · próxima troca em " + o.ciclo + " dias" : ""));
 });
-document.getElementById("novo").addEventListener("click", () => abrirFicha(null));
-document.querySelectorAll(".nav button").forEach((b) => {
+$("fechar").addEventListener("click", () => fecharSheet("sheet"));
+
+/* ---------- Sheets, menu, abas ---------- */
+function abrirSheet(id) { $(id).classList.add("on"); $(id).setAttribute("aria-hidden", "false"); document.body.classList.add("sem-scroll"); }
+function fecharSheet(id) { $(id).classList.remove("on"); $(id).setAttribute("aria-hidden", "true"); if (!document.querySelector(".sheet.on, .drawer.on")) document.body.classList.remove("sem-scroll"); }
+document.querySelectorAll("[data-fecha]").forEach((b) => b.addEventListener("click", () => fecharSheet(b.dataset.fecha)));
+document.querySelectorAll(".sheet, .drawer").forEach((s) => s.addEventListener("click", (ev) => { if (ev.target === s) fecharSheet(s.id); }));
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") { document.querySelectorAll(".sheet.on, .drawer.on").forEach((s) => fecharSheet(s.id)); fecharMenus(); } });
+$("btnMenu").addEventListener("click", () => abrirSheet("drawer"));
+$("btnInfo").addEventListener("click", () => abrirSheet("sobre"));
+const ACOES = { novo: () => abrirFicha(null), exportar: exportarEquipe, backup: backupPessoal, importar: () => $("imp").click(), excel: exportarExcel, sair: sair };
+document.querySelectorAll(".dr-item").forEach((b) => b.addEventListener("click", () => { fecharSheet("drawer"); ACOES[b.dataset.acao](); }));
+$("dNovo").addEventListener("click", () => abrirFicha(null));
+$("dExport").addEventListener("click", exportarEquipe);
+$("dImport").addEventListener("click", () => $("imp").click());
+$("dExcel").addEventListener("click", exportarExcel);
+$("imp").addEventListener("change", importarJson);
+$("novo").addEventListener("click", () => abrirFicha(null));
+document.querySelectorAll("#abas button").forEach((b) => {
   b.addEventListener("click", () => {
     aba = b.dataset.aba;
-    document.querySelectorAll(".nav button").forEach((x) => x.classList.toggle("on", x === b));
+    document.querySelectorAll("#abas button").forEach((x) => x.classList.toggle("on", x === b));
     render();
+    window.scrollTo(0, 0);
   });
 });
-document.getElementById("busca").addEventListener("input", render);
+$("busca").addEventListener("input", render);
+function sair() {
+  sessionStorage.removeItem("caderno-acessos-sessao");
+  location.reload();
+}
+aplicarIcones();
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => {});
 }
