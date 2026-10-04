@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#1B365D">
+<script>(function(){try{var t=localStorage.getItem("caderno-tema");var c={claro:"#1B365D",escuro:"#0B1626",suave:"#2C4766"};if(!c[t])t="claro";document.documentElement.setAttribute("data-tema",t);document.querySelector('meta[name="theme-color"]').setAttribute("content",c[t]);}catch(e){}})();</script>
 <title>Caderno de Acessos</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="favicon.ico" sizes="any">
@@ -63,6 +64,7 @@
     <button type="button" class="dr-item" data-acao="backup"><span data-ic="lock"></span>Backup pessoal (inclui minhas senhas)</button>
     <button type="button" class="dr-item" data-acao="importar"><span data-ic="upload"></span>Importar JSON</button>
     <button type="button" class="dr-item" data-acao="excel"><span data-ic="table"></span>Excel Interno/Externo</button>
+    <button type="button" class="dr-item" data-acao="tema"><span data-ic="palette"></span>Tema: <span class="dr-tema">Claro</span></button>
     <button type="button" class="dr-item" data-acao="sair"><span data-ic="logout"></span>Sair (bloquear)</button>
   </div>
 </div>
@@ -121,6 +123,22 @@
       <p class="meta">Caderno de Acessos v1.1 · © Todos os direitos reservados · Desenv. WebDev</p>
       <p class="meta">Funciona offline. Os cards ficam salvos só neste navegador, sem banco de dados.</p>
       <p class="meta">Acessos <strong>Individuais</strong>: usuário e senha nunca vão no "Exportar JSON" da equipe nem no Excel. Para levar as suas senhas para outro aparelho, use "Backup pessoal".</p>
+    </div>
+  </div>
+</div>
+<div class="sel-bar" id="selBar" hidden>
+  <span id="selQtd">0 selecionados</span>
+  <button type="button" class="btn" id="selReativar">Reativar</button>
+  <button type="button" class="btn perigo" id="selExcluir">Excluir</button>
+  <button type="button" class="btn" id="selCancelar">Cancelar</button>
+</div>
+<div class="sheet dlg-wrap" id="dlg" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="dlgTitulo">
+  <div class="dlg">
+    <h3 id="dlgTitulo"></h3>
+    <p id="dlgTexto"></p>
+    <div class="dlg-botoes">
+      <button type="button" class="btn" id="dlgCancelar">Cancelar</button>
+      <button type="button" class="btn pri" id="dlgOk">OK</button>
     </div>
   </div>
 </div>

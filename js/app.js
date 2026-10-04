@@ -52,7 +52,7 @@ function load() {
   // Remove exemplos de versões anteriores (só se ainda estiverem com a senha de exemplo original).
   itens = itens.filter((it) => !(["j1", "j2", "a1", "f1", "f2", "f3"].includes(it.id) && it.senha === "exemplo"));
   const removeuAntigos = itens.length < antes;
-  if (!itens.length || removeuAntigos) {
+  if (localStorage.getItem(KEY) === null || removeuAntigos) {
     const ids = new Set(itens.map((it) => it.id));
     exemplos().forEach((it) => { if (!ids.has(it.id)) itens.push(it); });
   }
@@ -103,6 +103,8 @@ const IC = {
   users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6.5 6.5 0 0 1 3.5 6"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
   building: '<rect x="4" y="3" width="16" height="18" rx="1"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2M10 21v-3h4v3"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/>',
+  palette: '<path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.8 1.6-1.6 0-.5-.2-.8-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5c0-4-4-7.4-9-7.4z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7.5" r="1"/><circle cx="14.5" cy="7.5" r="1"/>',
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>'
 };
 function svg(nome, tam) {
@@ -133,12 +135,143 @@ function btn(cls, icone, texto, fn, titulo) {
   return b;
 }
 let toastTimer = null;
-function toast(msg) {
+function toast(msg, acao) {
   const t = document.getElementById("toast");
-  t.textContent = msg;
+  t.innerHTML = "";
+  t.appendChild(el("span", "", msg));
+  t.classList.toggle("com-acao", !!acao);
+  if (acao) {
+    const b = el("button", "toast-acao", acao.texto);
+    b.type = "button";
+    b.addEventListener("click", (ev) => { ev.stopPropagation(); t.classList.remove("on"); clearTimeout(toastTimer); acao.fn(); });
+    t.appendChild(b);
+  }
   t.classList.add("on");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove("on"), 2200);
+  toastTimer = setTimeout(() => t.classList.remove("on"), acao ? (acao.ms || 6000) : 2200);
+}
+
+/* ---------- Diálogo no visual do app (substitui alert/confirm) ---------- */
+function dialogo(op) {
+  return new Promise((resolve) => {
+    const box = $("dlg");
+    $("dlgTitulo").textContent = op.titulo || "";
+    $("dlgTexto").textContent = op.texto || "";
+    $("dlgTexto").hidden = !op.texto;
+    const ok = $("dlgOk"), cancel = $("dlgCancelar");
+    ok.textContent = op.ok || "OK";
+    ok.className = "btn " + (op.perigo ? "perigo" : "pri");
+    cancel.hidden = op.cancelar === false;
+    cancel.textContent = op.cancelar || "Cancelar";
+    function fim(v) {
+      ok.onclick = cancel.onclick = box.onclick = null;
+      document.removeEventListener("keydown", tecla, true);
+      fecharSheet("dlg");
+      resolve(v);
+    }
+    function tecla(ev) { if (ev.key === "Escape") { ev.stopPropagation(); fim(false); } }
+    ok.onclick = () => fim(true);
+    cancel.onclick = () => fim(false);
+    box.onclick = (ev) => { if (ev.target === box) fim(false); };
+    document.addEventListener("keydown", tecla, true);
+    abrirSheet("dlg");
+    setTimeout(() => (op.cancelar === false ? ok : cancel).focus(), 30);
+  });
+}
+function aviso(titulo, texto) { return dialogo({ titulo: titulo, texto: texto, ok: "OK", cancelar: false }); }
+
+/* ---------- Excluir (só arquivados) com desfazer ---------- */
+function nomeDe(it) { return it.titulo || it.aplicacao || "este acesso"; }
+async function excluir(lista) {
+  lista = lista.filter((it) => it && it.arquivado_em);
+  if (!lista.length) return false;
+  const sim = await dialogo({
+    titulo: lista.length === 1 ? "Excluir " + nomeDe(lista[0]) + " de vez?" : "Excluir " + lista.length + " acessos de vez?",
+    texto: "Essa ação não pode ser desfeita.",
+    ok: "Excluir", cancelar: "Cancelar", perigo: true
+  });
+  if (!sim) return false;
+  const removidos = [];
+  lista.forEach((it) => { const i = itens.indexOf(it); if (i >= 0) removidos.push({ i: i, it: it }); });
+  removidos.sort((a, b) => b.i - a.i).forEach((r) => itens.splice(r.i, 1));
+  sairSelecao(false);
+  save();
+  toast(removidos.length === 1 ? "Excluído" : removidos.length + " excluídos", { texto: "Desfazer", ms: 6000, fn: () => {
+    removidos.sort((a, b) => a.i - b.i).forEach((r) => { if (!itens.some((x) => x.id === r.it.id)) itens.splice(Math.min(r.i, itens.length), 0, r.it); });
+    save();
+    toast("Restaurado");
+  } });
+  return true;
+}
+
+/* ---------- Seleção múltipla (só na aba Arquivo) ---------- */
+let selecao = null;
+let ignorarClique = false;
+// Um novo toque/clique começa: descarta o "engolir clique" do long-press anterior (o DOM pode ter sido redesenhado).
+document.addEventListener("pointerdown", () => { ignorarClique = false; }, true);
+function entrarSelecao(id) {
+  if (aba !== "arquivo") return;
+  if (!selecao) selecao = new Set();
+  selecao.add(id);
+  render();
+}
+function alternarSelecao(id) {
+  if (!selecao) return;
+  if (selecao.has(id)) selecao.delete(id); else selecao.add(id);
+  if (!selecao.size) { sairSelecao(); return; }
+  render();
+}
+function sairSelecao(rerender) {
+  selecao = null;
+  if (rerender !== false) render();
+}
+function selecionados() { return selecao ? itens.filter((it) => selecao.has(it.id)) : []; }
+function ligarPressao(c, it) {
+  let timer = null, x0 = 0, y0 = 0;
+  const cancelar = () => { clearTimeout(timer); timer = null; };
+  c.addEventListener("pointerdown", (ev) => {
+    if (aba !== "arquivo" || (ev.pointerType === "mouse" && ev.button !== 0)) return;
+    x0 = ev.clientX; y0 = ev.clientY;
+    cancelar();
+    timer = setTimeout(() => { timer = null; ignorarClique = true; entrarSelecao(it.id); if (navigator.vibrate) navigator.vibrate(30); }, 500);
+  });
+  c.addEventListener("pointermove", (ev) => { if (timer && Math.hypot(ev.clientX - x0, ev.clientY - y0) > 10) cancelar(); });
+  ["pointerup", "pointercancel", "pointerleave"].forEach((t) => c.addEventListener(t, cancelar));
+  c.addEventListener("contextmenu", (ev) => {
+    if (aba !== "arquivo") return;
+    ev.preventDefault();
+    cancelar();
+    if (!selecao || !selecao.has(it.id)) entrarSelecao(it.id);
+  });
+  c.addEventListener("click", (ev) => {
+    if (ignorarClique) { ignorarClique = false; ev.preventDefault(); ev.stopPropagation(); return; }
+    if (selecao && aba === "arquivo") { ev.preventDefault(); ev.stopPropagation(); alternarSelecao(it.id); }
+  }, true);
+}
+function atualizarBarraSelecao() {
+  const bar = $("selBar");
+  const on = !!(selecao && aba === "arquivo");
+  bar.hidden = !on;
+  document.body.classList.toggle("selecionando", on);
+  if (on) $("selQtd").textContent = selecao.size + (selecao.size === 1 ? " selecionado" : " selecionados");
+}
+
+/* ---------- Temas ---------- */
+const TEMAS = { claro: { nome: "Claro", cor: "#1B365D" }, escuro: { nome: "Escuro", cor: "#0B1626" }, suave: { nome: "Suave", cor: "#2C4766" } };
+const TEMA_KEY = "caderno-tema";
+function temaAtual() { const t = localStorage.getItem(TEMA_KEY); return TEMAS[t] ? t : "claro"; }
+function aplicarTema(t) {
+  if (!TEMAS[t]) t = "claro";
+  document.documentElement.setAttribute("data-tema", t);
+  const m = document.querySelector('meta[name="theme-color"]');
+  if (m) m.setAttribute("content", TEMAS[t].cor);
+  const dr = document.querySelector('.dr-item[data-acao="tema"] .dr-tema');
+  if (dr) dr.textContent = TEMAS[t].nome;
+}
+function definirTema(t) {
+  localStorage.setItem(TEMA_KEY, t);
+  aplicarTema(t);
+  if (aba === "mais") render();
 }
 function copiar(texto, rotuloMsg) {
   if (!texto) { toast("Nada para copiar"); return; }
@@ -193,6 +326,10 @@ function render() {
   const box = document.getElementById("lista");
   box.innerHTML = "";
   fecharMenus();
+  if (aba !== "arquivo") selecao = null;
+  if (selecao) { const ids = new Set(itens.map((x) => x.id)); selecao.forEach((id) => { if (!ids.has(id)) selecao.delete(id); }); if (!selecao.size) selecao = null; }
+  atualizarBarraSelecao();
+  box.classList.toggle("modo-sel", !!selecao);
   const nVenc = itens.filter((it) => !it.arquivado_em && ["Vencendo", "Vencido"].indexOf(statusDe(it)) >= 0).length;
   document.getElementById("contVenc").textContent = nVenc ? String(nVenc) : "";
   document.getElementById("buscaWrap").style.display = aba === "mais" ? "none" : "";
@@ -258,6 +395,17 @@ function cardDe(it) {
   const st = statusDe(it);
   const c = el("article", "card c-" + ({ Vencendo: "vencendo", Vencido: "vencido", Arquivado: "arq" }[st] || "ok"));
   c.dataset.id = it.id;
+  if (aba === "arquivo") {
+    ligarPressao(c, it);
+    if (selecao) {
+      const marcado = selecao.has(it.id);
+      c.classList.toggle("selecionado", marcado);
+      c.setAttribute("aria-selected", marcado ? "true" : "false");
+      const chk = el("span", "sel-check");
+      if (marcado) chk.innerHTML = svg("check", 16);
+      c.appendChild(chk);
+    }
+  }
   const topo = el("div", "card-topo");
   const av = el("span", "avatar");
   av.style.background = corDe(it);
@@ -328,7 +476,10 @@ function abrirMenuCard(it, ancora) {
   m.setAttribute("role", "menu");
   m.appendChild(btn("mi", "edit", "Editar", () => { fecharMenus(); abrirFicha(it); }));
   m.appendChild(btn("mi", "copy", "Copiar usuário", () => { fecharMenus(); copiar(it.usuario, "Usuário"); }));
-  if (it.arquivado_em) m.appendChild(btn("mi ok", "restore", "Reativar", () => { it.arquivado_em = null; save(); toast("Card reativado"); }));
+  if (it.arquivado_em) {
+    m.appendChild(btn("mi ok", "restore", "Reativar", () => { it.arquivado_em = null; save(); toast("Card reativado"); }));
+    m.appendChild(btn("mi warn", "trash", "Excluir", () => { fecharMenus(); excluir([it]); }));
+  }
   else m.appendChild(btn("mi warn", "archive", "Arquivar", () => { it.arquivado_em = hoje(); save(); toast("Card arquivado"); }));
   ancora.parentNode.appendChild(m);
 }
@@ -345,6 +496,15 @@ function renderMais(box) {
     c.appendChild(row);
     box.appendChild(c);
   };
+  const tema = temaAtual();
+  const bt = Object.keys(TEMAS).map((k) => {
+    const b = btn("btn tema-op" + (k === tema ? " on" : ""), null, TEMAS[k].nome, () => definirTema(k));
+    b.dataset.tema = k;
+    b.setAttribute("aria-pressed", k === tema ? "true" : "false");
+    b.insertAdjacentHTML("afterbegin", '<span class="amostra amostra-' + k + '"></span>');
+    return b;
+  });
+  bloco("Tema", "Aparência só deste aparelho. Vale também para a tela de login.", bt);
   bloco("Compartilhar com a equipe", "Gera o JSON para os outros analistas. Cards Individuais vão sem usuário e sem senha (só título, aplicação, cliente, URL etc.).",
     [btn("btn pri", "download", "Exportar JSON", exportarEquipe)]);
   bloco("Backup pessoal (inclui minhas senhas)", "Arquivo completo, com os usuários e senhas dos seus acessos Individuais. Use só para levar para outro aparelho seu. Não compartilhe.",
@@ -406,9 +566,9 @@ function importarJson(ev) {
       const lista = Array.isArray(data) ? data : (data.itens || []);
       const res = mesclar(lista);
       save();
-      alert("Importado: " + res.novos + " novo(s), " + res.atualizados + " atualizado(s). Total: " + itens.length + " card(s).");
+      aviso("Importação concluída", res.novos + " novo(s), " + res.atualizados + " atualizado(s). Total: " + itens.length + " card(s).");
     } catch (e) {
-      alert("Arquivo inválido: não é um JSON do Caderno.");
+      aviso("Arquivo inválido", "Esse arquivo não é um JSON do Caderno de Acessos.");
     }
     ev.target.value = "";
   };
@@ -540,12 +700,27 @@ $("fechar").addEventListener("click", () => fecharSheet("sheet"));
 function abrirSheet(id) { $(id).classList.add("on"); $(id).setAttribute("aria-hidden", "false"); document.body.classList.add("sem-scroll"); }
 function fecharSheet(id) { $(id).classList.remove("on"); $(id).setAttribute("aria-hidden", "true"); if (!document.querySelector(".sheet.on, .drawer.on")) document.body.classList.remove("sem-scroll"); }
 document.querySelectorAll("[data-fecha]").forEach((b) => b.addEventListener("click", () => fecharSheet(b.dataset.fecha)));
-document.querySelectorAll(".sheet, .drawer").forEach((s) => s.addEventListener("click", (ev) => { if (ev.target === s) fecharSheet(s.id); }));
-document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") { document.querySelectorAll(".sheet.on, .drawer.on").forEach((s) => fecharSheet(s.id)); fecharMenus(); } });
+document.querySelectorAll(".sheet:not(#dlg), .drawer").forEach((s) => s.addEventListener("click", (ev) => { if (ev.target === s) fecharSheet(s.id); }));
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Escape") return;
+  const abertos = document.querySelectorAll(".sheet.on, .drawer.on");
+  abertos.forEach((s) => fecharSheet(s.id));
+  fecharMenus();
+  if (!abertos.length && selecao) sairSelecao();
+});
 $("btnMenu").addEventListener("click", () => abrirSheet("drawer"));
 $("btnInfo").addEventListener("click", () => abrirSheet("sobre"));
-const ACOES = { novo: () => abrirFicha(null), exportar: exportarEquipe, backup: backupPessoal, importar: () => $("imp").click(), excel: exportarExcel, sair: sair };
-document.querySelectorAll(".dr-item").forEach((b) => b.addEventListener("click", () => { fecharSheet("drawer"); ACOES[b.dataset.acao](); }));
+const ACOES = { novo: () => abrirFicha(null), exportar: exportarEquipe, backup: backupPessoal, importar: () => $("imp").click(), excel: exportarExcel, sair: sair, tema: () => { const ks = Object.keys(TEMAS); definirTema(ks[(ks.indexOf(temaAtual()) + 1) % ks.length]); } };
+document.querySelectorAll(".dr-item").forEach((b) => b.addEventListener("click", () => { if (b.dataset.acao !== "tema") fecharSheet("drawer"); ACOES[b.dataset.acao](); }));
+$("selExcluir").addEventListener("click", () => excluir(selecionados()));
+$("selReativar").addEventListener("click", () => {
+  const l = selecionados();
+  l.forEach((it) => { it.arquivado_em = null; });
+  selecao = null;
+  save();
+  toast(l.length + (l.length === 1 ? " card reativado" : " cards reativados"));
+});
+$("selCancelar").addEventListener("click", () => sairSelecao());
 $("dNovo").addEventListener("click", () => abrirFicha(null));
 $("dExport").addEventListener("click", exportarEquipe);
 $("dImport").addEventListener("click", () => $("imp").click());
@@ -565,6 +740,7 @@ function sair() {
   sessionStorage.removeItem("caderno-acessos-sessao");
   location.reload();
 }
+aplicarTema(temaAtual());
 aplicarIcones();
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => {});
