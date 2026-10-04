@@ -41,7 +41,8 @@ function exemplos() {
     c({ id: "s7", titulo: "Painel Nuvem Azul", aplicacao: "Nuvem Azul", cliente: "Nuvem Azul Tecnologia", categoria: "Externo", visibilidade: "Equipe", url: "https://painel.nuvemazul.example", usuario: "ops.nuvem", senha: "nuvem123", ciclo: "Nunca", ultima: addDias(hoje(), -120), horario: "Seg–Sex 08–18", escalonamento: "N1 0800 000 0002" }),
     c({ id: "s8", titulo: "Gestor Ponto Certo", aplicacao: "Ponto Certo", cliente: "Ponto Certo Sistemas", categoria: "Externo", visibilidade: "Individual", url: "https://app.pontocerto.example", usuario: "meu.usuario", senha: "ponto123", ciclo: "90", ultima: addDias(hoje(), -95) }),
     c({ id: "s9", titulo: "Telefonia Sinal Verde", aplicacao: "Sinal Verde Telecom", cliente: "Sinal Verde Telecom", categoria: "Externo", visibilidade: "Equipe", url: "https://admin.sinalverde.example", usuario: "suporte.sv", senha: "exemplo321", ciclo: "60", ultima: addDias(hoje(), -30), horario: "24x7", escalonamento: "NOC fictício 0800 000 0003" }),
-    c({ id: "s10", titulo: "Portal Beta Logística (antigo)", aplicacao: "Beta Logística", cliente: "Beta Logística", categoria: "Externo", visibilidade: "Equipe", url: "https://portal.betalogistica.example", usuario: "svc.beta", senha: "antigo123", ciclo: "30", ultima: addDias(hoje(), -200), obs: "Contrato encerrado, mantido só para histórico", arquivado_em: addDias(hoje(), -15) })
+    c({ id: "s10", titulo: "Portal Beta Logística (antigo)", aplicacao: "Beta Logística", cliente: "Beta Logística", categoria: "Externo", visibilidade: "Equipe", url: "https://portal.betalogistica.example", usuario: "svc.beta", senha: "antigo123", ciclo: "30", ultima: addDias(hoje(), -200), obs: "Contrato encerrado, mantido só para histórico", arquivado_em: addDias(hoje(), -15) }),
+    c({ id: "s11", titulo: "VIN CRM", aplicacao: "VIN CRM", cliente: "VIN CRM", categoria: "Externo", visibilidade: "Equipe", url: "https://portal.vincrm.example", usuario: "svc.vincrm", senha: "exemplo789", ciclo: "60", ultima: hoje(), horario: "Seg–Sex 08–18", escalonamento: "Suporte fictício 0800 000 0011" })
   ];
 }
 function load() {
@@ -55,7 +56,19 @@ function load() {
     const ids = new Set(itens.map((it) => it.id));
     exemplos().forEach((it) => { if (!ids.has(it.id)) itens.push(it); });
   }
-  if (removeuAntigos) localStorage.setItem(KEY, JSON.stringify(itens));
+  // Exemplos novos entram uma única vez em quem já tem cards (se apagar, não volta).
+  let entregues = [];
+  try { entregues = JSON.parse(localStorage.getItem(KEY + "_exemplos") || "[]"); } catch (e) { entregues = []; }
+  const presentes = new Set(itens.map((it) => it.id));
+  let mudou = removeuAntigos;
+  exemplos().forEach((it) => {
+    if (!entregues.includes(it.id)) {
+      if (!presentes.has(it.id) && localStorage.getItem(KEY)) { itens.push(it); mudou = true; }
+      entregues.push(it.id);
+    }
+  });
+  localStorage.setItem(KEY + "_exemplos", JSON.stringify(entregues));
+  if (mudou) localStorage.setItem(KEY, JSON.stringify(itens));
 }
 function save() {
   localStorage.setItem(KEY, JSON.stringify(itens));
