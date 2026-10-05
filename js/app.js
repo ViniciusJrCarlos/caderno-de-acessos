@@ -29,18 +29,35 @@ function rotulo(it) {
   return "Vence em " + dias + " dias";
 }
 function exemplos() {
-  // Dados 100% fictícios para demonstração (ids s1..s10).
-  const c = (o) => Object.assign({ horario: "", escalonamento: "", obs: "", arquivado_em: null }, o);
+  // Dados 100% fictícios para demonstração (ids s1..s11).
+  const c = (o) => Object.assign({ horario: "", escalonamento: "", escalonamentos: [], obs: "", arquivado_em: null }, o);
   return [
     c({ id: "s1", titulo: "CRM Operação A", aplicacao: "CRM Fluxo", cliente: "Operação A", categoria: "Interno", visibilidade: "Equipe", url: "https://crm.fluxo.example/opa", usuario: "suporte.opa", senha: "exemplo123", ciclo: "90", ultima: addDias(hoje(), -10), horario: "24x7", escalonamento: "N2 Sistemas ramal 4010", obs: "Mesmo CRM, instância da Operação A" }),
     c({ id: "s2", titulo: "CRM Operação B", aplicacao: "CRM Fluxo", cliente: "Operação B", categoria: "Interno", visibilidade: "Equipe", url: "https://crm.fluxo.example/opb", usuario: "suporte.opb", senha: "exemplo456", ciclo: "30", ultima: addDias(hoje(), -25), horario: "Seg–Sex 08–20", escalonamento: "N2 Sistemas ramal 4010", obs: "Mesmo CRM, instância da Operação B" }),
     c({ id: "s3", titulo: "Chamados Operação A", aplicacao: "Central de Chamados Delta", cliente: "Operação A", categoria: "Interno", visibilidade: "Equipe", url: "https://chamados.delta.example/opa", usuario: "analista.opa", senha: "teste123", ciclo: "60", ultima: addDias(hoje(), -65), escalonamento: "Coordenação Suporte" }),
     c({ id: "s4", titulo: "Chamados Operação B", aplicacao: "Central de Chamados Delta", cliente: "Operação B", categoria: "Interno", visibilidade: "Individual", url: "https://chamados.delta.example/opb", usuario: "meu.usuario", senha: "teste456", ciclo: "60", ultima: addDias(hoje(), -5), obs: "Login pessoal do analista" }),
     c({ id: "s5", titulo: "VPN Corporativa", aplicacao: "VPN Ponte Segura", cliente: "Interno", categoria: "Interno", visibilidade: "Individual", url: "https://vpn.pontesegura.example", usuario: "meu.usuario", senha: "exemplo789", ciclo: "90", ultima: addDias(hoje(), -20) }),
-    c({ id: "s6", titulo: "Portal Fornecedor Alfa", aplicacao: "Alfa Suprimentos", cliente: "Alfa Suprimentos", categoria: "Externo", visibilidade: "Equipe", url: "https://portal.alfasuprimentos.example", usuario: "svc.alfa", senha: "fornecedor123", ciclo: "30", ultima: addDias(hoje(), -27), horario: "09–17", escalonamento: "Contato fictício: Carla (0800 000 0001)" }),
-    c({ id: "s7", titulo: "Painel Nuvem Azul", aplicacao: "Nuvem Azul", cliente: "Nuvem Azul Tecnologia", categoria: "Externo", visibilidade: "Equipe", url: "https://painel.nuvemazul.example", usuario: "ops.nuvem", senha: "nuvem123", ciclo: "Nunca", ultima: addDias(hoje(), -120), horario: "Seg–Sex 08–18", escalonamento: "N1 0800 000 0002" }),
+    c({ id: "s6", titulo: "Portal Fornecedor Alfa", aplicacao: "Alfa Suprimentos", cliente: "Alfa Suprimentos", categoria: "Externo", visibilidade: "Equipe", url: "https://portal.alfasuprimentos.example", usuario: "svc.alfa", senha: "fornecedor123", ciclo: "30", ultima: addDias(hoje(), -27), horario: "09–17",
+      escalonamento: "N1 portal · N2 Carla · N3 NOC",
+      escalonamentos: [
+        { nivel: 1, canal: "portal", valor: "https://portal.alfasuprimentos.example/sd", nome: "Service Desk", horario: "09–17", obs: "Abrir chamado no portal" },
+        { nivel: 2, canal: "telefone", valor: "0800 000 0001", nome: "Carla Mendes", horario: "09–17", obs: "" },
+        { nivel: 3, canal: "email", valor: "noc@alfasuprimentos.example", nome: "NOC Alfa", horario: "24x7", obs: "" }
+      ] }),
+    c({ id: "s7", titulo: "Painel Nuvem Azul", aplicacao: "Nuvem Azul", cliente: "Nuvem Azul Tecnologia", categoria: "Externo", visibilidade: "Equipe", url: "https://painel.nuvemazul.example", usuario: "ops.nuvem", senha: "nuvem123", ciclo: "Nunca", ultima: addDias(hoje(), -120), horario: "Seg–Sex 08–18",
+      escalonamento: "N1 0800 000 0002 · N2 plantão",
+      escalonamentos: [
+        { nivel: 1, canal: "telefone", valor: "0800 000 0002", nome: "Suporte N1", horario: "Seg–Sex 08–18", obs: "" },
+        { nivel: 2, canal: "email", valor: "plantao@nuvemazul.example", nome: "Plantão", horario: "24x7", obs: "" }
+      ] }),
     c({ id: "s8", titulo: "Gestor Ponto Certo", aplicacao: "Ponto Certo", cliente: "Ponto Certo Sistemas", categoria: "Externo", visibilidade: "Individual", url: "https://app.pontocerto.example", usuario: "meu.usuario", senha: "ponto123", ciclo: "90", ultima: addDias(hoje(), -95) }),
-    c({ id: "s9", titulo: "Telefonia Sinal Verde", aplicacao: "Sinal Verde Telecom", cliente: "Sinal Verde Telecom", categoria: "Externo", visibilidade: "Equipe", url: "https://admin.sinalverde.example", usuario: "suporte.sv", senha: "exemplo321", ciclo: "60", ultima: addDias(hoje(), -30), horario: "24x7", escalonamento: "NOC fictício 0800 000 0003" }),
+    c({ id: "s9", titulo: "Telefonia Sinal Verde", aplicacao: "Sinal Verde Telecom", cliente: "Sinal Verde Telecom", categoria: "Externo", visibilidade: "Equipe", url: "https://admin.sinalverde.example", usuario: "suporte.sv", senha: "exemplo321", ciclo: "60", ultima: addDias(hoje(), -30), horario: "24x7",
+      escalonamento: "NOC fictício 0800 000 0003",
+      escalonamentos: [
+        { nivel: 1, canal: "portal", valor: "https://admin.sinalverde.example/tickets", nome: "Portal de chamados", horario: "24x7", obs: "" },
+        { nivel: 2, canal: "telefone", valor: "0800 000 0003", nome: "NOC Sinal Verde", horario: "24x7", obs: "" },
+        { nivel: 3, canal: "email", valor: "escalonamento@sinalverde.example", nome: "Escalonamento", horario: "24x7", obs: "" }
+      ] }),
     c({ id: "s10", titulo: "Portal Beta Logística (antigo)", aplicacao: "Beta Logística", cliente: "Beta Logística", categoria: "Externo", visibilidade: "Equipe", url: "https://portal.betalogistica.example", usuario: "svc.beta", senha: "antigo123", ciclo: "30", ultima: addDias(hoje(), -200), obs: "Contrato encerrado, mantido só para histórico", arquivado_em: addDias(hoje(), -15) }),
     c({ id: "s11", titulo: "VIN CRM", aplicacao: "VIN CRM", cliente: "VIN CRM", categoria: "Externo", visibilidade: "Equipe", url: "https://portal.vincrm.example", usuario: "svc.vincrm", senha: "exemplo789", ciclo: "60", ultima: hoje(), horario: "Seg–Sex 08–18", escalonamento: "Suporte fictício 0800 000 0011" })
   ];
@@ -68,6 +85,25 @@ function load() {
     }
   });
   localStorage.setItem(KEY + "_exemplos", JSON.stringify(entregues));
+  itens.forEach((it) => {
+    if (!Array.isArray(it.escalonamentos)) it.escalonamentos = [];
+    if (!it.escalonamentos.length && it.escalonamento) {
+      const parsed = parseEscalonamentoTexto(it.escalonamento);
+      if (parsed.length) { it.escalonamentos = parsed; mudou = true; }
+    }
+  });
+  // v1.4: enriquece exemplos fictícios que ainda estão com a senha de demo e sem níveis estruturados.
+  const demoSenhas = new Set(["fornecedor123", "nuvem123", "exemplo321"]);
+  const porId = Object.fromEntries(exemplos().map((e) => [e.id, e]));
+  itens.forEach((it) => {
+    const ex = porId[it.id];
+    if (!ex || !ex.escalonamentos || !ex.escalonamentos.length) return;
+    if (!demoSenhas.has(it.senha)) return;
+    if (it.escalonamentos && it.escalonamentos.length) return;
+    it.escalonamentos = ex.escalonamentos.map((n) => Object.assign({}, n));
+    if (!it.escalonamento) it.escalonamento = ex.escalonamento || resumoEscalonamentos(it.escalonamentos);
+    mudou = true;
+  });
   if (mudou) localStorage.setItem(KEY, JSON.stringify(itens));
 }
 function save() {
@@ -337,6 +373,134 @@ function corDe(it) {
 }
 const MASCARA = "••••••••••";
 
+
+/* ---------- Escalonamento ---------- */
+const CANAIS_ESC = [
+  { id: "portal", rotulo: "Portal" },
+  { id: "email", rotulo: "E-mail" },
+  { id: "telefone", rotulo: "Telefone" },
+  { id: "outro", rotulo: "Outro" }
+];
+function canalRotulo(c) {
+  const hit = CANAIS_ESC.find((x) => x.id === c);
+  return hit ? hit.rotulo : (c || "Outro");
+}
+function nivelEscVazio(n) {
+  return { nivel: n || 1, canal: "email", valor: "", nome: "", horario: "", obs: "" };
+}
+function limparNivelEsc(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const canal = ["portal", "email", "telefone", "outro"].includes(raw.canal) ? raw.canal : "outro";
+  const nivel = Number(raw.nivel);
+  return {
+    nivel: Number.isFinite(nivel) && nivel > 0 ? Math.floor(nivel) : 1,
+    canal: canal,
+    valor: String(raw.valor || "").trim(),
+    nome: String(raw.nome || "").trim(),
+    horario: String(raw.horario || "").trim(),
+    obs: String(raw.obs || "").trim()
+  };
+}
+function resumoEscalonamentos(lista) {
+  if (!lista || !lista.length) return "";
+  return lista.map((n) => {
+    const ped = ["N" + n.nivel, canalRotulo(n.canal)];
+    if (n.nome) ped.push(n.nome);
+    if (n.valor) ped.push(n.valor);
+    return ped.join(" · ");
+  }).join(" | ");
+}
+function parseEscalonamentoTexto(texto) {
+  const t = String(texto || "").replace(/\u200b/g, "").trim();
+  if (!t) return [];
+  const linhas = t.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const emailRe = /[\w.+-]+@[\w.-]+\.\w+/g;
+  const phoneRe = /(?:\+?\d{1,3}[\s.-]?)?(?:\(?\d{2,3}\)?[\s.-]?)?\d{4,5}[\s.-]?\d{4}|\b0800[\s.-]?\d{2,4}[\s.-]?\d{3,5}\b/g;
+  const urlRe = /https?:\/\/[^\s)\]>]+/gi;
+  const niveis = [];
+  let atual = null;
+  function flush() {
+    if (!atual) return;
+    if (!atual.valor && !atual.nome && !atual.obs) { atual = null; return; }
+    if (!atual.valor && atual.obs) {
+      const urls = atual.obs.match(urlRe);
+      const emails = atual.obs.match(emailRe);
+      const phones = atual.obs.match(phoneRe);
+      if (urls && urls[0]) { atual.valor = urls[0]; atual.canal = "portal"; }
+      else if (emails && emails[0]) { atual.valor = emails[0]; atual.canal = "email"; }
+      else if (phones && phones[0]) { atual.valor = phones[0]; atual.canal = "telefone"; }
+    }
+    niveis.push(atual);
+    atual = null;
+  }
+  function novoNivel(num, resto) {
+    flush();
+    atual = nivelEscVazio(num);
+    const urls = resto.match(urlRe);
+    const emails = resto.match(emailRe);
+    const phones = resto.match(phoneRe);
+    if (urls && urls[0]) { atual.canal = "portal"; atual.valor = urls[0]; }
+    else if (emails && emails[0]) { atual.canal = "email"; atual.valor = emails[0]; }
+    else if (phones && phones[0]) { atual.canal = "telefone"; atual.valor = phones[0]; }
+    let nome = resto
+      .replace(urlRe, " ")
+      .replace(emailRe, " ")
+      .replace(phoneRe, " ")
+      .replace(/[-–—|:]+/g, " ")
+      .replace(/\(\s*\)/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    nome = nome.replace(/^(abrir chamado|ligar|enviar|contato|suporte|help\s*desk|plant[aã]o)\b[\s-]*/i, "").trim();
+    if (nome && nome.length <= 60) atual.nome = nome;
+    atual.obs = resto.trim();
+  }
+  if (!linhas.length) return [];
+  linhas.forEach((line) => {
+    const m = line.match(/^(?:n[ií]vel|escalonamento)\s*-?\s*(\d+)\s*[-–—:]?\s*(.*)$/i);
+    if (m) { novoNivel(Number(m[1]), m[2] || ""); return; }
+    if (!atual) {
+      // sem marcador de nível: cria sequência
+      novoNivel(niveis.length + 1, line);
+      return;
+    }
+    const urls = line.match(urlRe);
+    const emails = line.match(emailRe);
+    const phones = line.match(phoneRe);
+    if (!atual.valor) {
+      if (urls && urls[0]) { atual.canal = "portal"; atual.valor = urls[0]; }
+      else if (emails && emails[0]) { atual.canal = "email"; atual.valor = emails[0]; }
+      else if (phones && phones[0]) { atual.canal = "telefone"; atual.valor = phones[0]; }
+    } else if (emails && emails[0] && atual.canal !== "email") {
+      // linha extra com outro contato → novo nível
+      novoNivel(niveis.length + (atual ? 1 : 0) + 1, line);
+      return;
+    }
+    if (!atual.nome) {
+      let nome = line.replace(urlRe, " ").replace(emailRe, " ").replace(phoneRe, " ").replace(/[-–—|:()]+/g, " ").replace(/\s+/g, " ").trim();
+      if (nome && nome.length <= 60) atual.nome = nome;
+    }
+    atual.obs = (atual.obs ? atual.obs + " | " : "") + line;
+  });
+  flush();
+  // se parser gerou 1 nível genérico sem canal útil, ainda retorna
+  return niveis.map((n, i) => { n.nivel = n.nivel || (i + 1); return limparNivelEsc(n); }).filter(Boolean);
+}
+function niveisDe(it) {
+  if (!it) return [];
+  if (Array.isArray(it.escalonamentos) && it.escalonamentos.length) {
+    return it.escalonamentos.map(limparNivelEsc).filter(Boolean).sort((a, b) => a.nivel - b.nivel);
+  }
+  return parseEscalonamentoTexto(it.escalonamento);
+}
+function hrefEsc(nivel) {
+  const v = (nivel.valor || "").trim();
+  if (!v) return "";
+  if (nivel.canal === "email" || /^[\w.+-]+@[\w.-]+\.\w+$/.test(v)) return "mailto:" + v;
+  if (nivel.canal === "telefone" || /^[\d\s()+.-]{8,}$/.test(v)) return "tel:" + v.replace(/[^\d+]/g, "");
+  if (nivel.canal === "portal" || /^https?:\/\//i.test(v) || /\./.test(v)) return /^[a-z]+:\/\//i.test(v) ? v : "https://" + v;
+  return "";
+}
+
 /* ---------- Lista ---------- */
 function visiveis() {
   const q = (document.getElementById("busca").value || "").trim().toLowerCase();
@@ -347,7 +511,7 @@ function visiveis() {
     if (aba === "vencendo" && (arq || ["Vencendo", "Vencido"].indexOf(statusDe(it)) < 0)) return false;
     if (aba === "arquivo" && !arq) return false;
     if (aba === "mais") return false;
-    const blob = [it.titulo, it.aplicacao, it.cliente, it.usuario, it.url, it.categoria, it.visibilidade].join(" ").toLowerCase();
+    const blob = [it.titulo, it.aplicacao, it.cliente, it.usuario, it.url, it.categoria, it.visibilidade, it.escalonamento, resumoEscalonamentos(niveisDe(it))].join(" ").toLowerCase();
     return !q || blob.indexOf(q) >= 0;
   }).sort((a, b) => (a.aplicacao || a.titulo || "").localeCompare(b.aplicacao || b.titulo || "") || (a.cliente || "").localeCompare(b.cliente || "") || (a.titulo || "").localeCompare(b.titulo || ""));
 }
@@ -477,6 +641,53 @@ function cardDe(it) {
   linhas.appendChild(el("div", "card-info", info));
   c.appendChild(linhas);
 
+  const niveis = niveisDe(it);
+  if (niveis.length || (it.escalonamento && String(it.escalonamento).trim())) {
+    const esc = el("div", "esc-bloco");
+    const tog = el("button", "esc-toggle");
+    tog.type = "button";
+    tog.insertAdjacentHTML("beforeend", svg("users", 16));
+    tog.appendChild(el("span", "", "Escalonamento" + (niveis.length ? " (" + niveis.length + ")" : "")));
+    const chev = el("span", "esc-chev");
+    chev.innerHTML = svg("plus", 16);
+    tog.appendChild(chev);
+    const corpo = el("div", "esc-corpo");
+    if (niveis.length) {
+      niveis.forEach((nv) => {
+        const item = el("div", "esc-item");
+        const topoN = el("div", "esc-item-topo");
+        topoN.appendChild(el("span", "esc-nivel", "N" + nv.nivel));
+        topoN.appendChild(el("span", "esc-canal", canalRotulo(nv.canal)));
+        item.appendChild(topoN);
+        if (nv.nome) item.appendChild(el("div", "esc-nome", nv.nome));
+        const val = el("div", "esc-valor");
+        const href = hrefEsc(nv);
+        if (href && nv.valor) {
+          const a = el("a", "", nv.valor);
+          a.href = href;
+          if (href.startsWith("http")) { a.target = "_blank"; a.rel = "noopener"; }
+          val.appendChild(a);
+        } else {
+          val.textContent = nv.valor || "—";
+        }
+        item.appendChild(val);
+        const meta = [nv.horario, nv.obs].filter(Boolean).join(" · ");
+        if (meta) item.appendChild(el("div", "esc-meta", meta));
+        corpo.appendChild(item);
+      });
+    } else {
+      corpo.appendChild(el("div", "esc-vazio", it.escalonamento));
+    }
+    tog.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      esc.classList.toggle("aberto");
+      chev.innerHTML = svg(esc.classList.contains("aberto") ? "x" : "plus", 16);
+    });
+    esc.appendChild(tog);
+    esc.appendChild(corpo);
+    c.appendChild(esc);
+  }
+
   const acoes = el("div", "acoes");
   const bMostrar = btn("acao", "eye", "Mostrar", () => {
     const abrir = !c.classList.contains("revelado");
@@ -539,8 +750,9 @@ function renderMais(box) {
   bloco("Backup pessoal (inclui minhas senhas)", "Arquivo completo, com os usuários e senhas dos seus acessos Individuais. Use só para levar para outro aparelho seu. Não compartilhe.",
     [btn("btn", "lock", "Backup pessoal (inclui minhas senhas)", backupPessoal)]);
   bloco("Importar", "Junta os cards do arquivo com os deste aparelho (pelo id). Cards que só existem aqui continuam. Usuário e senha que você já tem não são apagados por um arquivo que veio sem eles.",
-    [btn("btn", "upload", "Importar JSON", () => document.getElementById("imp").click())]);
-  bloco("Planilha", "Excel separado em Fornecedores externos e Ferramentas internas. Usuário e senha dos acessos Individuais não entram.",
+    [btn("btn", "upload", "Importar JSON", () => document.getElementById("imp").click()),
+     btn("btn", "table", "Importar planilha Excel", escolherPlanilha)]);
+  bloco("Planilha", "Excel separado em Fornecedores externos e Ferramentas internas. Usuário e senha dos acessos Individuais não entram. Use “Importar planilha” para ler a planilha de brokers/suporte.",
     [btn("btn", "table", "Excel Interno/Externo", exportarExcel)]);
   bloco("Senha deste aparelho", "Altera a senha de acesso salva só neste navegador. Outros aparelhos continuam com a senha padrão até alguém trocar lá também.",
     [btn("btn", "lock", "Trocar senha", abrirTrocaSenha)]);
@@ -577,15 +789,38 @@ function mesclar(lista) {
   lista.forEach((inc) => {
     if (!inc || typeof inc !== "object") return;
     if (!inc.id) inc.id = Math.random().toString(16).slice(2, 10);
+    if (Array.isArray(inc.escalonamentos)) inc.escalonamentos = inc.escalonamentos.map(limparNivelEsc).filter(Boolean);
     const i = itens.findIndex((x) => x.id === inc.id);
-    if (i < 0) { itens.push(inc); novos++; return; }
+    if (i < 0) {
+      // também evita duplicar por fornecedor+aplicação se id diferente
+      const chave = chaveCard(inc);
+      const j = chave ? itens.findIndex((x) => chaveCard(x) === chave) : -1;
+      if (j >= 0) {
+        const atual = itens[j];
+        const junto = Object.assign({}, atual, inc, { id: atual.id });
+        ["usuario", "senha"].forEach((k) => { if (!inc[k] && atual[k]) junto[k] = atual[k]; });
+        if ((!inc.escalonamentos || !inc.escalonamentos.length) && atual.escalonamentos && atual.escalonamentos.length) junto.escalonamentos = atual.escalonamentos;
+        itens[j] = junto;
+        atualizados++;
+        return;
+      }
+      itens.push(inc); novos++; return;
+    }
     const atual = itens[i];
     const junto = Object.assign({}, atual, inc);
     ["usuario", "senha"].forEach((k) => { if (!inc[k] && atual[k]) junto[k] = atual[k]; });
+    if ((!inc.escalonamentos || !inc.escalonamentos.length) && atual.escalonamentos && atual.escalonamentos.length) junto.escalonamentos = atual.escalonamentos;
     itens[i] = junto;
     atualizados++;
   });
   return { novos: novos, atualizados: atualizados };
+}
+function chaveCard(it) {
+  const a = String(it.aplicacao || "").trim().toLowerCase();
+  const f = String(it.cliente || it.titulo || "").trim().toLowerCase();
+  const t = String(it.titulo || "").trim().toLowerCase();
+  if (!a && !f && !t) return "";
+  return a + "|" + f + "|" + t;
 }
 function importarJson(ev) {
   const f = ev.target.files && ev.target.files[0];
@@ -615,7 +850,8 @@ function exportarExcel() {
     lista.forEach((orig) => {
       const it = semSegredoIndividual(orig);
       const ind = orig.visibilidade === "Individual";
-      const vals = [it.titulo, it.aplicacao, it.cliente, it.categoria, it.visibilidade, it.url, ind ? "(individual)" : it.usuario, ind ? "(individual)" : it.senha, it.ciclo, it.ultima, it.horario, it.escalonamento, it.obs, it.arquivado_em || ""];
+      const escTxt = it.escalonamento || resumoEscalonamentos(niveisDe(orig));
+      const vals = [it.titulo, it.aplicacao, it.cliente, it.categoria, it.visibilidade, it.url, ind ? "(individual)" : it.usuario, ind ? "(individual)" : it.senha, it.ciclo, it.ultima, it.horario, escTxt, it.obs, it.arquivado_em || ""];
       html += "<tr>";
       vals.forEach((v) => { html += "<td>" + esc(v) + "</td>"; });
       html += "</tr>";
@@ -626,6 +862,255 @@ function exportarExcel() {
   const inn = itens.filter((i) => i.categoria !== "Externo");
   download("caderno-acessos.xls", "<html><meta charset='utf-8'><body>" + tabela(ext, "Fornecedores externos") + tabela(inn, "Ferramentas internas") + "</body></html>", "application/vnd.ms-excel");
   toast("Excel exportado (sem senhas individuais)");
+}
+
+/* ---------- Importar planilha Excel (SheetJS sob demanda) ---------- */
+let xlsxLibPromise = null;
+function carregarXlsxLib() {
+  if (window.XLSX) return Promise.resolve(window.XLSX);
+  if (xlsxLibPromise) return xlsxLibPromise;
+  xlsxLibPromise = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js";
+    s.async = true;
+    s.onload = () => window.XLSX ? resolve(window.XLSX) : reject(new Error("XLSX indisponível"));
+    s.onerror = () => reject(new Error("Falha ao carregar SheetJS"));
+    document.head.appendChild(s);
+  });
+  return xlsxLibPromise;
+}
+function normHeader(h) {
+  return String(h || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+function mapearColunas(headers) {
+  const idx = {};
+  headers.forEach((h, i) => {
+    const n = normHeader(h);
+    if (!n) return;
+    if (/tipo de servico|tipo servico/.test(n)) idx.tipo = i;
+    else if (/^fornecedor$/.test(n)) idx.fornecedor = i;
+    else if (/^aplicacao$|^aplicacao /.test(n) || n === "aplicacao") idx.aplicacao = i;
+    else if (/sites? ?\/? ?operacoes|sites operacoes|cliente/.test(n)) idx.sites = i;
+    else if (/service desk|servicedesk/.test(n)) idx.sd = i;
+    else if (/^acesso$/.test(n)) idx.acesso = i;
+    else if (/^contato$/.test(n)) idx.contato = i;
+    else if (/escalation|escalonamento/.test(n)) idx.escalation = i;
+    else if (/observacoes|^obs$/.test(n)) idx.obs = i;
+    else if (/site validado/.test(n)) idx.siteValidado = i;
+  });
+  return idx;
+}
+function classificarAba(nome) {
+  const n = normHeader(nome);
+  if (/antig/.test(n)) return "antigos";
+  if (/broker|whatsapp|sms/.test(n)) return "brokers";
+  if (/suporte|tecnico/.test(n)) return "suporte";
+  return "outro";
+}
+function celula(row, i) {
+  if (i == null || i < 0 || !row) return "";
+  const v = row[i];
+  return v == null ? "" : String(v);
+}
+function detectarVisibilidade(acesso) {
+  const a = String(acesso || "").toLowerCase();
+  if (/individual/.test(a)) return "Individual";
+  if (/compartilhad/.test(a)) return "Equipe";
+  return "Equipe";
+}
+function extrairCredenciais(acesso) {
+  // Só preenche se a própria coluna trouxer usuário/senha. Não inventa.
+  const s = String(acesso || "");
+  const out = { usuario: "", senha: "" };
+  const um = s.match(/(?:user|usu[aá]rio)\s*[:：]\s*(\S+)/i);
+  const sm = s.match(/(?:senha|password|pwd)\s*[:：]\s*(\S+)/i);
+  if (um) out.usuario = um[1].trim();
+  if (sm) out.senha = sm[1].trim();
+  return out;
+}
+function extrairUrl(sd, contato) {
+  const blob = [sd, contato].filter(Boolean).join("\n");
+  const m = blob.match(/https?:\/\/[^\s)\]>]+/i);
+  if (m) return m[0].replace(/[.,;]+$/, "");
+  // e-mail puro no service desk → não é URL de portal
+  return "";
+}
+function idEstavel(partes) {
+  const s = partes.join("|").toLowerCase();
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return "xl-" + (h >>> 0).toString(16);
+}
+function linhaVazia(row) {
+  return !row || !row.some((c) => c != null && String(c).trim() !== "");
+}
+function sheetTemVermelho(sheet, XLSX) {
+  // SheetJS community build may not keep fonts; we rely on sheet name "Antigos" + optional !rows styles if present.
+  return false;
+}
+function cardsDePlanilha(workbook, XLSX) {
+  const gerados = [];
+  const vistos = new Set();
+  const ordem = workbook.SheetNames.slice().sort((a, b) => {
+    const rank = (n) => ({ brokers: 0, suporte: 1, antigos: 2, outro: 3 })[classificarAba(n)] ?? 3;
+    return rank(a) - rank(b);
+  });
+  ordem.forEach((sheetName) => {
+    const tipoAba = classificarAba(sheetName);
+    const ws = workbook.Sheets[sheetName];
+    if (!ws) return;
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "" });
+    if (!rows.length) return;
+    const headers = rows[0].map((h) => String(h || ""));
+    const col = mapearColunas(headers);
+    if (col.fornecedor == null && col.aplicacao == null) return;
+    for (let r = 1; r < rows.length; r++) {
+      const row = rows[r];
+      if (linhaVazia(row)) continue;
+      const fornecedor = celula(row, col.fornecedor).trim();
+      const aplicacao = celula(row, col.aplicacao).trim() || fornecedor;
+      if (!fornecedor && !aplicacao) continue;
+      const sites = celula(row, col.sites).trim();
+      const sd = celula(row, col.sd).trim();
+      const acesso = celula(row, col.acesso).trim();
+      const contato = celula(row, col.contato).trim();
+      const escValid = celula(row, col.escalation).trim();
+      const obs = celula(row, col.obs).trim();
+      const tipoServ = celula(row, col.tipo).trim();
+      const chave = (fornecedor + "|" + aplicacao).toLowerCase().replace(/\s+/g, " ").trim();
+      if (vistos.has(chave)) continue; // dedupe Brokers > Suporte > Antigos
+      vistos.add(chave);
+      const niveis = parseEscalonamentoTexto([contato, escValid].filter(Boolean).join("\n"));
+      const vis = detectarVisibilidade(acesso);
+      const cred = extrairCredenciais(acesso);
+      const url = extrairUrl(sd, contato);
+      const blobInativo = (fornecedor + "\n" + aplicacao + "\n" + obs).toLowerCase();
+      const arquivar = tipoAba === "antigos" || /\b(inativo|encerrado|desativad|contrato encerrado|legado|legacy)\b/.test(blobInativo);
+      const titulo = (aplicacao || fornecedor) + (sites ? " · " + sites.split(/\n/)[0].slice(0, 40) : "");
+      const obsParts = [];
+      if (tipoServ) obsParts.push(tipoServ);
+      if (obs) obsParts.push(obs);
+      if (acesso && !cred.usuario && !/^(individual|compartilhad|-)$/i.test(acesso.split("\n")[0].trim())) {
+        // guarda dica de canal de abertura sem senha
+        const dica = acesso.split("\n")[0].trim();
+        if (dica && dica.length < 120) obsParts.push("Acesso: " + dica);
+      }
+      const card = {
+        id: idEstavel([fornecedor, aplicacao, "planilha"]),
+        titulo: titulo.slice(0, 120),
+        aplicacao: aplicacao || fornecedor,
+        cliente: sites ? sites.replace(/\s+/g, " ").trim().slice(0, 160) : (fornecedor || ""),
+        categoria: "Externo",
+        visibilidade: vis,
+        url: url,
+        usuario: cred.usuario || "",
+        senha: cred.senha || "",
+        ciclo: "Nunca",
+        ultima: hoje(),
+        horario: "",
+        escalonamento: resumoEscalonamentos(niveis) || contato.slice(0, 240),
+        escalonamentos: niveis,
+        obs: obsParts.join("\n\n").slice(0, 2000),
+        arquivado_em: arquivar ? hoje() : null,
+        origem_import: "planilha"
+      };
+      gerados.push(card);
+    }
+  });
+  return gerados;
+}
+async function importarPlanilha(ev) {
+  const f = ev.target.files && ev.target.files[0];
+  if (!f) return;
+  try {
+    toast("Lendo planilha…");
+    const XLSX = await carregarXlsxLib();
+    const buf = await f.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array", cellStyles: true });
+    const lista = cardsDePlanilha(wb, XLSX);
+    if (!lista.length) {
+      aviso("Nada importado", "Não encontrei abas/colunas reconhecíveis (Fornecedor, Aplicação, Contato…).");
+      return;
+    }
+    const res = mesclar(lista);
+    save();
+    aviso("Planilha importada", res.novos + " novo(s), " + res.atualizados + " atualizado(s). Senhas individuais já preenchidas neste aparelho não foram apagadas.");
+  } catch (e) {
+    aviso("Falha na importação", "Não foi possível ler a planilha. Verifique se é .xlsx/.xls e se há internet na primeira vez (biblioteca SheetJS).");
+  } finally {
+    ev.target.value = "";
+  }
+}
+function escolherPlanilha() { $("impXls").click(); }
+
+/* ---------- Editor de escalonamento (formulário) ---------- */
+let escDraft = [];
+function renderEscEditor() {
+  const box = $("escLista");
+  if (!box) return;
+  box.innerHTML = "";
+  if (!escDraft.length) {
+    box.appendChild(el("p", "esc-vazio", "Nenhum nível ainda. Toque em + Nível."));
+    return;
+  }
+  escDraft.forEach((nv, idx) => {
+    const row = el("div", "esc-row");
+    row.dataset.idx = String(idx);
+
+    const labN = el("span", "esc-lab", "Nível");
+    const inpN = document.createElement("input");
+    inpN.type = "number"; inpN.min = "1"; inpN.value = String(nv.nivel || idx + 1);
+    inpN.addEventListener("input", () => { escDraft[idx].nivel = Number(inpN.value) || (idx + 1); });
+
+    const labC = el("span", "esc-lab", "Canal");
+    const selC = document.createElement("select");
+    CANAIS_ESC.forEach((c) => { const o = el("option", "", c.rotulo); o.value = c.id; selC.appendChild(o); });
+    selC.value = nv.canal || "email";
+    selC.addEventListener("change", () => { escDraft[idx].canal = selC.value; });
+
+    const labV = el("span", "esc-lab", "Valor");
+    const inpV = document.createElement("input");
+    inpV.type = "text"; inpV.placeholder = "URL, e-mail ou telefone";
+    inpV.value = nv.valor || "";
+    inpV.addEventListener("input", () => { escDraft[idx].valor = inpV.value; });
+
+    const labNome = el("span", "esc-lab", "Nome");
+    const inpNome = document.createElement("input");
+    inpNome.type = "text"; inpNome.placeholder = "Contato / área";
+    inpNome.value = nv.nome || "";
+    inpNome.addEventListener("input", () => { escDraft[idx].nome = inpNome.value; });
+
+    const labH = el("span", "esc-lab", "Horário");
+    const inpH = document.createElement("input");
+    inpH.type = "text"; inpH.placeholder = "Ex.: 24x7";
+    inpH.value = nv.horario || "";
+    inpH.addEventListener("input", () => { escDraft[idx].horario = inpH.value; });
+
+    const labO = el("span", "esc-lab", "Obs.");
+    const inpO = document.createElement("textarea");
+    inpO.rows = 2; inpO.placeholder = "Observação do nível";
+    inpO.value = nv.obs || "";
+    inpO.addEventListener("input", () => { escDraft[idx].obs = inpO.value; });
+
+    const acoes = el("div", "esc-row-acoes");
+    acoes.appendChild(btn("btn pequeno", "trash", "Excluir", () => {
+      escDraft.splice(idx, 1);
+      escDraft.forEach((x, i) => { if (!x.nivel) x.nivel = i + 1; });
+      renderEscEditor();
+    }));
+
+    row.appendChild(labN); row.appendChild(inpN);
+    row.appendChild(labC); row.appendChild(selC);
+    row.appendChild(labV); row.appendChild(inpV);
+    row.appendChild(labNome); row.appendChild(inpNome);
+    row.appendChild(labH); row.appendChild(inpH);
+    row.appendChild(labO); row.appendChild(inpO);
+    row.appendChild(acoes);
+    box.appendChild(row);
+  });
+}
+function lerEscDraft() {
+  return escDraft.map((n, i) => limparNivelEsc(Object.assign({}, n, { nivel: n.nivel || i + 1 }))).filter((n) => n && (n.valor || n.nome || n.obs));
 }
 
 /* ---------- Formulário Novo / Editar ---------- */
@@ -670,6 +1155,9 @@ function abrirFicha(it) {
   $("fCiclo").value = ["30", "60", "90", "Nunca"].includes(String(edit.ciclo)) ? String(edit.ciclo) : "90";
   $("fUltima").value = edit.ultima || "";
   $("fHorario").value = edit.horario || "";
+  escDraft = niveisDe(edit).map((n) => Object.assign({}, n));
+  if (!escDraft.length && edit.escalonamento) escDraft = parseEscalonamentoTexto(edit.escalonamento);
+  renderEscEditor();
   $("fEscalonamento").value = edit.escalonamento || "";
   $("fObs").value = edit.obs || "";
   $("erroForm").textContent = "";
@@ -680,6 +1168,11 @@ function abrirFicha(it) {
 $("fVisibilidade").addEventListener("change", () => { $("avisoInd").hidden = $("fVisibilidade").value !== "Individual"; });
 $("fOlho").dataset.alvo = "fSenha";
 ligarOlho($("fOlho"));
+const escAddBtn = $("escAdd");
+if (escAddBtn) escAddBtn.addEventListener("click", () => {
+  escDraft.push(nivelEscVazio(escDraft.length + 1));
+  renderEscEditor();
+});
 function lerFicha() {
   const valSel = (sel, nova) => sel.value === NOVO ? nova.value.trim() : sel.value;
   const o = Object.assign({}, edit, {
@@ -695,8 +1188,10 @@ function lerFicha() {
     ultima: $("fUltima").value,
     horario: $("fHorario").value.trim(),
     escalonamento: $("fEscalonamento").value.trim(),
+    escalonamentos: lerEscDraft(),
     obs: $("fObs").value.trim()
   });
+  if (!o.escalonamento && o.escalonamentos.length) o.escalonamento = resumoEscalonamentos(o.escalonamentos);
   if (!o.titulo && !o.aplicacao) { $("erroForm").textContent = "Preencha pelo menos o Título ou a Aplicação."; return null; }
   if (!o.titulo) o.titulo = o.aplicacao + (o.cliente ? " " + o.cliente : "");
   if (!o.aplicacao) o.aplicacao = o.titulo;
@@ -737,7 +1232,7 @@ document.addEventListener("keydown", (ev) => {
 });
 $("btnMenu").addEventListener("click", () => abrirSheet("drawer"));
 $("btnInfo").addEventListener("click", () => abrirSheet("sobre"));
-const ACOES = { novo: () => abrirFicha(null), exportar: exportarEquipe, backup: backupPessoal, importar: () => $("imp").click(), excel: exportarExcel, sair: sair, trocar: abrirTrocaSenha, tema: () => { const ks = Object.keys(TEMAS); definirTema(ks[(ks.indexOf(temaAtual()) + 1) % ks.length]); } };
+const ACOES = { novo: () => abrirFicha(null), exportar: exportarEquipe, backup: backupPessoal, importar: () => $("imp").click(), "importar-xls": escolherPlanilha, excel: exportarExcel, sair: sair, trocar: abrirTrocaSenha, tema: () => { const ks = Object.keys(TEMAS); definirTema(ks[(ks.indexOf(temaAtual()) + 1) % ks.length]); } };
 document.querySelectorAll(".dr-item").forEach((b) => b.addEventListener("click", () => { if (b.dataset.acao !== "tema") fecharSheet("drawer"); ACOES[b.dataset.acao](); }));
 $("selExcluir").addEventListener("click", () => excluir(selecionados()));
 $("selReativar").addEventListener("click", () => {
@@ -751,8 +1246,10 @@ $("selCancelar").addEventListener("click", () => sairSelecao());
 $("dNovo").addEventListener("click", () => abrirFicha(null));
 $("dExport").addEventListener("click", exportarEquipe);
 $("dImport").addEventListener("click", () => $("imp").click());
+if ($("dImportXls")) $("dImportXls").addEventListener("click", escolherPlanilha);
 $("dExcel").addEventListener("click", exportarExcel);
 $("imp").addEventListener("change", importarJson);
+if ($("impXls")) $("impXls").addEventListener("change", (ev) => { importarPlanilha(ev); });
 $("novo").addEventListener("click", () => abrirFicha(null));
 document.querySelectorAll("#abas button").forEach((b) => {
   b.addEventListener("click", () => {

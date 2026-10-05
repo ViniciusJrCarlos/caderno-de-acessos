@@ -25,7 +25,7 @@
     </span>
     <button type="submit" id="loginBtn">Abrir caderno</button>
     <p id="loginErro" class="login-erro" role="alert"></p>
-    <p class="login-rodape" id="loginRodape">Caderno de Acessos v1.3 · © Todos os direitos reservados · Desenv. WebDev</p>
+    <p class="login-rodape" id="loginRodape">Caderno de Acessos v1.4 · © Todos os direitos reservados · Desenv. WebDev</p>
     <p class="login-instalar" id="loginInstalarWrap" hidden><button type="button" class="link-instalar" id="btnInstalarApp">Instalar app</button></p>
   </form>
 </section>
@@ -41,6 +41,7 @@
     <button type="button" class="tb-btn pri" id="dNovo"><span data-ic="plus"></span>Novo</button>
     <button type="button" class="tb-btn" id="dExport">Exportar JSON</button>
     <button type="button" class="tb-btn" id="dImport">Importar JSON</button>
+    <button type="button" class="tb-btn" id="dImportXls">Importar planilha</button>
     <button type="button" class="tb-btn link" id="dExcel">Excel Interno/<br>Externo</button>
   </div>
   <button type="button" class="ico-btn" id="btnInfo" aria-label="Sobre" data-ic="info"></button>
@@ -59,6 +60,7 @@
 <main id="lista"></main>
 <button class="fab so-mobile" id="novo" type="button" aria-label="Novo acesso" data-ic="plus"></button>
 <input type="file" id="imp" accept=".json,application/json" hidden>
+<input type="file" id="impXls" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden>
 
 <div class="drawer" id="drawer" aria-hidden="true">
   <div class="drawer-panel">
@@ -67,6 +69,7 @@
     <button type="button" class="dr-item" data-acao="exportar"><span data-ic="download"></span>Exportar JSON (equipe)</button>
     <button type="button" class="dr-item" data-acao="backup"><span data-ic="lock"></span>Backup pessoal (inclui minhas senhas)</button>
     <button type="button" class="dr-item" data-acao="importar"><span data-ic="upload"></span>Importar JSON</button>
+    <button type="button" class="dr-item" data-acao="importar-xls"><span data-ic="table"></span>Importar planilha Excel</button>
     <button type="button" class="dr-item" data-acao="excel"><span data-ic="table"></span>Excel Interno/Externo</button>
     <button type="button" class="dr-item" data-acao="tema"><span data-ic="palette"></span>Tema: <span class="dr-tema">Claro</span></button>
     <button type="button" class="dr-item" data-acao="trocar"><span data-ic="lock"></span>Trocar senha</button>
@@ -104,11 +107,19 @@
       <label>Ciclo (dias)
         <select id="fCiclo"><option>30</option><option>60</option><option>90</option><option>Nunca</option></select>
       </label>
-      <details class="mais-campos">
+      <details class="mais-campos" id="maisDetalhes">
         <summary>Mais detalhes (última troca, horário, escalonamento, observação)</summary>
         <label>Última troca<input id="fUltima" type="date"></label>
         <label>Horário<input id="fHorario" placeholder="Ex.: Seg–Sex 08–18"></label>
-        <label>Escalonamento<textarea id="fEscalonamento" rows="2"></textarea></label>
+        <div class="esc-edit" id="escEdit">
+          <div class="esc-edit-topo">
+            <strong>Escalonamento</strong>
+            <button type="button" class="btn pequeno" id="escAdd">+ Nível</button>
+          </div>
+          <div id="escLista" class="esc-lista"></div>
+          <p class="hint esc-hint">Níveis de contato (portal, e-mail, telefone). Dá para adicionar, editar ou excluir.</p>
+        </div>
+        <label class="esc-resumo-label">Resumo (texto livre, opcional)<textarea id="fEscalonamento" rows="2" placeholder="Opcional — o app também guarda os níveis estruturados acima"></textarea></label>
         <label>Observação<textarea id="fObs" rows="2"></textarea></label>
       </details>
       <p class="aviso-ind" id="avisoInd" hidden>Acesso individual: usuário e senha ficam só neste aparelho e não vão no JSON da equipe nem no Excel.</p>
@@ -125,7 +136,7 @@
   <div class="panel pequeno">
     <div class="panel-topo"><h3>Sobre</h3><button type="button" class="ico-btn escuro" data-fecha="sobre" aria-label="Fechar" data-ic="x"></button></div>
     <div class="panel-corpo">
-      <p class="meta">Caderno de Acessos v1.3 · © Todos os direitos reservados · Desenv. WebDev</p>
+      <p class="meta">Caderno de Acessos v1.4 · © Todos os direitos reservados · Desenv. WebDev</p>
       <p class="meta">Funciona offline. Os cards ficam salvos só neste navegador, sem banco de dados.</p>
       <p class="meta">Acessos <strong>Individuais</strong>: usuário e senha nunca vão no "Exportar JSON" da equipe nem no Excel. Para levar as suas senhas para outro aparelho, use "Backup pessoal".</p>
     </div>

@@ -1,0 +1,3 @@
+Planilha de exemplo (100% fictícia) para testar "Importar planilha Excel".
+Não contém dados reais de fornecedores.
+Abas: Brokers SMS | WHATSAPP, Suporte Técnico, Fornecedores Antigos.

@@ -297,3 +297,43 @@ body.selecionando .toast { bottom:130px; }
 .link-instalar { background:none; border:0; color:var(--teal); font-size:14px; font-weight:600; padding:4px 6px; text-decoration:underline; cursor:pointer; font-family:inherit; }
 .link-instalar:hover { opacity:.85; }
 .login-instalar { margin:10px 0 0; text-align:center; }
+
+/* Escalonamento no card */
+.esc-bloco { border-top:1px solid var(--line2); padding:0; }
+.esc-toggle { width:100%; display:flex; align-items:center; gap:8px; background:transparent; border:0; color:var(--teal); font-size:14px; font-weight:600; padding:10px 12px; text-align:left; font-family:inherit; }
+.esc-toggle:hover { background:var(--hover); }
+.esc-toggle .esc-chev { margin-left:auto; transition:transform .15s ease; }
+.esc-bloco.aberto .esc-toggle .esc-chev { transform:rotate(180deg); }
+.esc-corpo { display:none; padding:0 12px 12px; }
+.esc-bloco.aberto .esc-corpo { display:block; }
+.esc-item { border:1px solid var(--line2); border-radius:10px; padding:10px; margin-top:8px; background:var(--surface2); }
+.esc-item-topo { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
+.esc-nivel { font-size:12px; font-weight:700; color:var(--on-brand); background:var(--pri); border-radius:999px; padding:2px 8px; }
+.esc-canal { font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.02em; }
+.esc-nome { font-size:14px; font-weight:600; color:var(--head); margin:2px 0; word-break:break-word; }
+.esc-valor a, .esc-valor { font-size:14px; color:var(--teal); word-break:break-word; }
+.esc-meta { font-size:12px; color:var(--muted); margin-top:4px; line-height:1.35; }
+.esc-vazio { font-size:13px; color:var(--muted); padding:4px 0; }
+
+/* Editor de escalonamento no formulário */
+.esc-edit { margin:4px 0 12px; padding:12px; border:1px solid var(--line2); border-radius:12px; background:var(--surface2); }
+.esc-edit-topo { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
+.esc-edit-topo strong { color:var(--head); font-size:15px; }
+.btn.pequeno { padding:6px 10px; font-size:13px; border-radius:8px; border:1px solid var(--line); background:var(--surface); color:var(--head); }
+.btn.pequeno:hover { background:var(--hover); }
+.esc-lista { display:flex; flex-direction:column; gap:8px; }
+.esc-row { display:grid; grid-template-columns:64px 1fr; gap:6px 8px; padding:10px; border:1px solid var(--line2); border-radius:10px; background:var(--surface); align-items:center; }
+.esc-row label { display:contents; font-size:12px; color:var(--muted); }
+.esc-row .esc-lab { grid-column:1; font-size:12px; color:var(--muted); }
+.esc-row input, .esc-row select, .esc-row textarea { grid-column:2; width:100%; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:14px; background:var(--input); color:var(--text); font-family:inherit; }
+.esc-row textarea { min-height:52px; resize:vertical; }
+.esc-row-acoes { grid-column:1 / -1; display:flex; justify-content:flex-end; gap:6px; margin-top:2px; }
+.esc-hint { margin:8px 0 0; color:var(--muted); font-size:12px; line-height:1.35; }
+.esc-resumo-label { margin-top:10px; }
+
+@media (min-width:900px) {
+  .topo-acoes .tb-btn#dImportXls { white-space:nowrap; }
+  .esc-row { grid-template-columns:72px 1fr 110px 1.2fr; }
+  .esc-row .esc-span2 { grid-column:2 / -1; }
+  .esc-row-acoes { grid-column:1 / -1; }
+}
