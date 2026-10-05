@@ -225,7 +225,8 @@ body.travado #app { display:none; }
 .login-box { width:100%; max-width:440px; }
 .login-box h1 { margin:0 0 22px; font-size:30px; color:var(--head); }
 .login-box input { width:100%; border:1px solid var(--line); border-radius:10px; padding:12px; font-size:16px; background:var(--input); color:var(--text); }
-.login-box button { margin-top:14px; background:var(--pri); color:#fff; border:0; border-radius:10px; padding:10px 14px; font-size:15px; }
+.login-box button:not(.olho) { margin-top:14px; background:var(--pri); color:#fff; border:0; border-radius:10px; padding:10px 14px; font-size:15px; }
+.login-box .senha-campo .olho { margin:0; top:50%; transform:translateY(-50%); }
 .login-box button:disabled { opacity:.6; }
 .login-erro { color:var(--red); font-size:13px; min-height:18px; margin:10px 0 0; }
 .login-rodape { color:var(--muted); font-size:13px; margin:8px 0 0; }
