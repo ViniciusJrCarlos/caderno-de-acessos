@@ -119,6 +119,26 @@ main { padding:0 12px 12px; }
 .url:hover { text-decoration:underline; }
 .olho { background:none; border:0; color:var(--icon); width:34px; height:34px; border-radius:8px; display:inline-flex; align-items:center; justify-content:center; padding:0; flex:none; }
 .olho:hover { background:var(--hover); color:var(--head); }
+
+/* Esconde o olho nativo do Edge/Chrome pra não ficar duplicado com o nosso */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear,
+input[type="password"]::-webkit-credentials-auto-fill-button,
+input[type="password"]::-webkit-textfield-decoration-container {
+  display: none !important;
+  visibility: hidden;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+  margin: 0;
+  padding: 0;
+}
+.senha-campo input[type="password"],
+.senha-campo input[type="text"],
+.login-box .senha-campo input {
+  padding-right: 42px;
+}
+
 .olho-vazio { width:34px; flex:none; }
 .card-info { color:var(--muted); font-size:12px; padding-top:8px; }
 .acoes { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding:10px 12px 12px; border-top:1px solid var(--line2); }
