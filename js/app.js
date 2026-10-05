@@ -117,6 +117,35 @@ function aplicarIcones(raiz) {
     n.dataset.icOk = "1";
   });
 }
+function setOlho(btn, ver) {
+  if (!btn) return;
+  btn.innerHTML = svg(ver ? "eyeOff" : "eye", 20);
+  btn.setAttribute("aria-label", ver ? "Ocultar senha" : "Mostrar senha");
+  btn.title = btn.getAttribute("aria-label");
+}
+function ligarOlho(btn) {
+  if (!btn || btn.dataset.olhoOk) return;
+  btn.dataset.olhoOk = "1";
+  btn.type = "button";
+  btn.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    const id = btn.dataset.alvo;
+    const inp = id ? document.getElementById(id) : btn.closest(".senha-campo") && btn.closest(".senha-campo").querySelector("input");
+    if (!inp) return;
+    const ver = inp.type === "password";
+    inp.type = ver ? "text" : "password";
+    setOlho(btn, ver);
+  });
+}
+function resetarOlhos(ids) {
+  ids.forEach((id) => {
+    const inp = document.getElementById(id);
+    if (inp) inp.type = "password";
+    const btn = document.querySelector('.olho[data-alvo="' + id + '"]');
+    setOlho(btn, false);
+  });
+}
+
 
 /* ---------- Helpers ---------- */
 function el(tag, cls, text) {
@@ -513,6 +542,8 @@ function renderMais(box) {
     [btn("btn", "upload", "Importar JSON", () => document.getElementById("imp").click())]);
   bloco("Planilha", "Excel separado em Fornecedores externos e Ferramentas internas. Usuário e senha dos acessos Individuais não entram.",
     [btn("btn", "table", "Excel Interno/Externo", exportarExcel)]);
+  bloco("Senha deste aparelho", "Altera a senha de acesso salva só neste navegador. Outros aparelhos continuam com a senha padrão até alguém trocar lá também.",
+    [btn("btn", "lock", "Trocar senha", abrirTrocaSenha)]);
   bloco("Offline e instalação", "Abra o link no Chrome uma vez com internet (fora da VPN) e use “Instalar app”. Depois funciona sem internet; quando houver internet, a versão nova chega sozinha.",
     [btn("btn", "logout", "Sair (bloquear)", sair)]);
 }
@@ -635,7 +666,7 @@ function abrirFicha(it) {
   $("fUsuario").value = edit.usuario || "";
   $("fSenha").value = edit.senha || "";
   $("fSenha").type = "password";
-  $("fOlho").innerHTML = svg("eye", 20);
+  setOlho($("fOlho"), false);
   $("fCiclo").value = ["30", "60", "90", "Nunca"].includes(String(edit.ciclo)) ? String(edit.ciclo) : "90";
   $("fUltima").value = edit.ultima || "";
   $("fHorario").value = edit.horario || "";
@@ -647,12 +678,8 @@ function abrirFicha(it) {
   setTimeout(() => $("fTitulo").focus(), 50);
 }
 $("fVisibilidade").addEventListener("change", () => { $("avisoInd").hidden = $("fVisibilidade").value !== "Individual"; });
-$("fOlho").addEventListener("click", () => {
-  const ver = $("fSenha").type === "password";
-  $("fSenha").type = ver ? "text" : "password";
-  $("fOlho").innerHTML = svg(ver ? "eyeOff" : "eye", 20);
-  $("fOlho").setAttribute("aria-label", ver ? "Ocultar senha" : "Mostrar senha");
-});
+$("fOlho").dataset.alvo = "fSenha";
+ligarOlho($("fOlho"));
 function lerFicha() {
   const valSel = (sel, nova) => sel.value === NOVO ? nova.value.trim() : sel.value;
   const o = Object.assign({}, edit, {
@@ -700,7 +727,7 @@ $("fechar").addEventListener("click", () => fecharSheet("sheet"));
 function abrirSheet(id) { $(id).classList.add("on"); $(id).setAttribute("aria-hidden", "false"); document.body.classList.add("sem-scroll"); }
 function fecharSheet(id) { $(id).classList.remove("on"); $(id).setAttribute("aria-hidden", "true"); if (!document.querySelector(".sheet.on, .drawer.on")) document.body.classList.remove("sem-scroll"); }
 document.querySelectorAll("[data-fecha]").forEach((b) => b.addEventListener("click", () => fecharSheet(b.dataset.fecha)));
-document.querySelectorAll(".sheet:not(#dlg), .drawer").forEach((s) => s.addEventListener("click", (ev) => { if (ev.target === s) fecharSheet(s.id); }));
+document.querySelectorAll(".sheet:not(#dlg):not(#dlgSenha), .drawer").forEach((s) => s.addEventListener("click", (ev) => { if (ev.target === s) fecharSheet(s.id); }));
 document.addEventListener("keydown", (ev) => {
   if (ev.key !== "Escape") return;
   const abertos = document.querySelectorAll(".sheet.on, .drawer.on");
@@ -710,7 +737,7 @@ document.addEventListener("keydown", (ev) => {
 });
 $("btnMenu").addEventListener("click", () => abrirSheet("drawer"));
 $("btnInfo").addEventListener("click", () => abrirSheet("sobre"));
-const ACOES = { novo: () => abrirFicha(null), exportar: exportarEquipe, backup: backupPessoal, importar: () => $("imp").click(), excel: exportarExcel, sair: sair, tema: () => { const ks = Object.keys(TEMAS); definirTema(ks[(ks.indexOf(temaAtual()) + 1) % ks.length]); } };
+const ACOES = { novo: () => abrirFicha(null), exportar: exportarEquipe, backup: backupPessoal, importar: () => $("imp").click(), excel: exportarExcel, sair: sair, trocar: abrirTrocaSenha, tema: () => { const ks = Object.keys(TEMAS); definirTema(ks[(ks.indexOf(temaAtual()) + 1) % ks.length]); } };
 document.querySelectorAll(".dr-item").forEach((b) => b.addEventListener("click", () => { if (b.dataset.acao !== "tema") fecharSheet("drawer"); ACOES[b.dataset.acao](); }));
 $("selExcluir").addEventListener("click", () => excluir(selecionados()));
 $("selReativar").addEventListener("click", () => {
@@ -745,23 +772,113 @@ aplicarIcones();
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => {});
 }
-// Tela de login: senha padrão fixa. Só o hash PBKDF2-SHA256 fica no código.
-const LOGIN = { iter: 310000, salt: "015d5ac2a5ab08fdac13e98dd8b789fc", hash: "033d6adcf778bd29c7199d684d705ecebbd10bb47d86ecd732a0d225ffa2e9b8" };
+// Tela de login: senha padrão (hash no código) ou senha customizada só deste aparelho (localStorage).
+const LOGIN_PADRAO = { iter: 310000, salt: "015d5ac2a5ab08fdac13e98dd8b789fc", hash: "033d6adcf778bd29c7199d684d705ecebbd10bb47d86ecd732a0d225ffa2e9b8" };
+const AUTH_KEY = "caderno-acessos-auth-v1";
 const SESSAO = "caderno-acessos-sessao";
+const AUTH_MIN = 8;
+const AUTH_REGRAS = "A nova senha precisa ter: no mínimo 8 caracteres, 1 letra maiúscula, 1 número e 1 caractere especial.";
 function hexParaBytes(h) { const b = new Uint8Array(h.length / 2); for (let i = 0; i < b.length; i++) b[i] = parseInt(h.substr(i * 2, 2), 16); return b; }
-async function conferirSenha(senha) {
-  if (!(window.crypto && crypto.subtle)) throw new Error("sem-crypto");
-  const chave = await crypto.subtle.importKey("raw", new TextEncoder().encode(senha), "PBKDF2", false, ["deriveBits"]);
-  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: hexParaBytes(LOGIN.salt), iterations: LOGIN.iter }, chave, 256);
-  const hex = Array.from(new Uint8Array(bits)).map((x) => x.toString(16).padStart(2, "0")).join("");
-  let dif = hex.length ^ LOGIN.hash.length;
-  for (let i = 0; i < hex.length; i++) dif |= hex.charCodeAt(i) ^ LOGIN.hash.charCodeAt(i);
+function bytesParaHex(buf) { return Array.from(new Uint8Array(buf)).map((x) => x.toString(16).padStart(2, "0")).join(""); }
+function saltAleatorio() { const b = new Uint8Array(16); crypto.getRandomValues(b); return bytesParaHex(b); }
+function hashIguais(a, b) {
+  const sa = String(a || ""), sb = String(b || "");
+  let dif = sa.length ^ sb.length;
+  const n = Math.max(sa.length, sb.length);
+  for (let i = 0; i < n; i++) dif |= (sa.charCodeAt(i) || 0) ^ (sb.charCodeAt(i) || 0);
   return dif === 0;
 }
+function senhaForte(senha) {
+  const s = String(senha || "");
+  return s.length >= AUTH_MIN && /[A-Z]/.test(s) && /[0-9]/.test(s) && /[^A-Za-z0-9]/.test(s);
+}
+function lerAuthLocal() {
+  try {
+    const o = JSON.parse(localStorage.getItem(AUTH_KEY) || "null");
+    if (!o || !o.hash || !o.salt || !o.iter) return null;
+    return o;
+  } catch (e) { return null; }
+}
+function loginAtivo() {
+  const local = lerAuthLocal();
+  return local ? { iter: local.iter, salt: local.salt, hash: local.hash, custom: true } : Object.assign({ custom: false }, LOGIN_PADRAO);
+}
+async function derivarSenha(senha, saltHex, iter) {
+  if (!(window.crypto && crypto.subtle)) throw new Error("sem-crypto");
+  const chave = await crypto.subtle.importKey("raw", new TextEncoder().encode(senha), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: hexParaBytes(saltHex), iterations: iter }, chave, 256);
+  return bytesParaHex(bits);
+}
+async function conferirSenha(senha) {
+  const auth = loginAtivo();
+  const hex = await derivarSenha(senha, auth.salt, auth.iter);
+  return hashIguais(hex, auth.hash);
+}
+function tokenSessao() { return loginAtivo().hash.slice(0, 16); }
+function abrirSessao() { sessionStorage.setItem(SESSAO, tokenSessao()); }
 function entrar() {
   document.body.classList.remove("travado");
   load();
   render();
+}
+function abrirTrocaSenha() {
+  $("tsAtual").value = "";
+  $("tsNova").value = "";
+  $("tsConf").value = "";
+  $("tsErro").textContent = "";
+  $("tsRegras").textContent = AUTH_REGRAS;
+  resetarOlhos(["tsAtual", "tsNova", "tsConf"]);
+  abrirSheet("dlgSenha");
+  setTimeout(() => $("tsAtual").focus(), 40);
+}
+async function salvarTrocaSenha(ev) {
+  ev.preventDefault();
+  const er = $("tsErro");
+  const atual = $("tsAtual").value;
+  const nova = $("tsNova").value;
+  const conf = $("tsConf").value;
+  er.textContent = "";
+  const btn = $("tsSalvar");
+  btn.disabled = true;
+  try {
+    if (!(await conferirSenha(atual))) {
+      er.textContent = "Senha atual incorreta.";
+      $("tsAtual").select();
+      return;
+    }
+    if (!senhaForte(nova)) {
+      er.textContent = AUTH_REGRAS;
+      $("tsNova").focus();
+      return;
+    }
+    if (nova === atual) {
+      er.textContent = "A nova senha precisa ser diferente da atual.";
+      $("tsNova").focus();
+      return;
+    }
+    if (nova !== conf) {
+      er.textContent = "A confirmação não é igual à nova senha.";
+      $("tsConf").select();
+      return;
+    }
+    const salt = saltAleatorio();
+    const hash = await derivarSenha(nova, salt, LOGIN_PADRAO.iter);
+    localStorage.setItem(AUTH_KEY, JSON.stringify({
+      versao: 1,
+      iter: LOGIN_PADRAO.iter,
+      salt: salt,
+      hash: hash,
+      alteradoEm: new Date().toISOString()
+    }));
+    abrirSessao();
+    fecharSheet("dlgSenha");
+    $("tsAtual").value = $("tsNova").value = $("tsConf").value = "";
+    toast("Senha alterada.");
+  } catch (e) {
+    er.textContent = "Não foi possível trocar a senha neste navegador (abra pelo link https).";
+  } finally {
+    btn.disabled = false;
+  }
 }
 document.getElementById("loginForm").addEventListener("submit", async (ev) => {
   ev.preventDefault();
@@ -772,8 +889,9 @@ document.getElementById("loginForm").addEventListener("submit", async (ev) => {
   btn.disabled = true;
   try {
     if (await conferirSenha(inp.value)) {
-      sessionStorage.setItem(SESSAO, LOGIN.hash.slice(0, 16));
+      abrirSessao();
       inp.value = "";
+      resetarOlhos(["loginSenha"]);
       entrar();
     } else {
       erro.textContent = "Senha incorreta. Tente novamente.";
@@ -784,5 +902,11 @@ document.getElementById("loginForm").addEventListener("submit", async (ev) => {
   }
   btn.disabled = false;
 });
-if (sessionStorage.getItem(SESSAO) === LOGIN.hash.slice(0, 16)) entrar();
+$("formTrocaSenha").addEventListener("submit", salvarTrocaSenha);
+$("tsCancelar").addEventListener("click", () => fecharSheet("dlgSenha"));
+$("dlgSenha").addEventListener("click", (ev) => { if (ev.target === $("dlgSenha")) fecharSheet("dlgSenha"); });
+document.querySelectorAll(".olho[data-alvo]").forEach(ligarOlho);
+aplicarIcones(document.getElementById("login"));
+aplicarIcones(document.getElementById("dlgSenha"));
+if (sessionStorage.getItem(SESSAO) === tokenSessao()) entrar();
 else document.getElementById("loginSenha").focus();

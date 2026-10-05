@@ -19,7 +19,10 @@
 <section id="login" class="login">
   <form id="loginForm" class="login-box" autocomplete="off">
     <h1>Caderno de Acessos</h1>
-    <input id="loginSenha" type="password" placeholder="Senha de acesso" autocomplete="current-password" aria-label="Senha de acesso">
+    <span class="senha-campo login-senha">
+      <input id="loginSenha" type="password" placeholder="Senha de acesso" autocomplete="current-password" aria-label="Senha de acesso">
+      <button type="button" class="olho" id="loginOlho" aria-label="Mostrar senha" data-alvo="loginSenha" data-ic="eye"></button>
+    </span>
     <button type="submit" id="loginBtn">Abrir caderno</button>
     <p id="loginErro" class="login-erro" role="alert"></p>
     <p class="login-rodape" id="loginRodape">Caderno de Acessos v1.2 · © Todos os direitos reservados · Desenv. WebDev</p>
@@ -65,6 +68,7 @@
     <button type="button" class="dr-item" data-acao="importar"><span data-ic="upload"></span>Importar JSON</button>
     <button type="button" class="dr-item" data-acao="excel"><span data-ic="table"></span>Excel Interno/Externo</button>
     <button type="button" class="dr-item" data-acao="tema"><span data-ic="palette"></span>Tema: <span class="dr-tema">Claro</span></button>
+    <button type="button" class="dr-item" data-acao="trocar"><span data-ic="lock"></span>Trocar senha</button>
     <button type="button" class="dr-item" data-acao="sair"><span data-ic="logout"></span>Sair (bloquear)</button>
   </div>
 </div>
@@ -141,6 +145,27 @@
       <button type="button" class="btn pri" id="dlgOk">OK</button>
     </div>
   </div>
+</div>
+
+<div class="sheet dlg-wrap" id="dlgSenha" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="dlgSenhaTitulo">
+  <form class="dlg dlg-senha" id="formTrocaSenha" autocomplete="off" novalidate>
+    <h3 id="dlgSenhaTitulo">Trocar senha</h3>
+    <label>Senha atual
+      <span class="senha-campo"><input id="tsAtual" type="password" autocomplete="current-password"><button type="button" class="olho" data-alvo="tsAtual" aria-label="Mostrar senha" data-ic="eye"></button></span>
+    </label>
+    <label>Nova senha
+      <span class="senha-campo"><input id="tsNova" type="password" autocomplete="new-password" placeholder="Nova senha"><button type="button" class="olho" data-alvo="tsNova" aria-label="Mostrar senha" data-ic="eye"></button></span>
+    </label>
+    <label>Confirmar nova
+      <span class="senha-campo"><input id="tsConf" type="password" autocomplete="new-password" placeholder="Repita a nova senha"><button type="button" class="olho" data-alvo="tsConf" aria-label="Mostrar senha" data-ic="eye"></button></span>
+    </label>
+    <p class="hint" id="tsRegras">A nova senha precisa ter: no mínimo 8 caracteres, 1 letra maiúscula, 1 número e 1 caractere especial.</p>
+    <p class="erro-form" id="tsErro" role="alert"></p>
+    <div class="dlg-botoes">
+      <button type="button" class="btn" id="tsCancelar">Cancelar</button>
+      <button type="submit" class="btn pri" id="tsSalvar">Salvar</button>
+    </div>
+  </form>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </div>

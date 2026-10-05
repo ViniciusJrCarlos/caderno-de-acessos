@@ -248,3 +248,16 @@ body.selecionando .toast { bottom:130px; }
 .amostra-escuro { background:linear-gradient(135deg,#18212F 50%,#5BC0DE 50%); }
 .amostra-suave { background:linear-gradient(135deg,#F1EADF 50%,#2C4766 50%); }
 .dr-tema { margin-left:-6px; color:var(--muted); }
+
+/* Login / trocar senha: campo com olho */
+.login-senha { display:block; margin:0; }
+.login-senha input { padding-right:48px; }
+.login-box .senha-campo .olho { color:var(--icon); }
+.dlg-senha { display:flex; flex-direction:column; gap:0; max-height:min(92vh, 640px); overflow:auto; }
+.dlg-senha label { display:grid; gap:6px; font-size:15px; color:var(--text); margin:0 0 12px; }
+.dlg-senha .senha-campo input { border:1px solid var(--line); border-radius:8px; padding:11px 48px 11px 12px; font-size:16px; width:100%; background:var(--input); color:var(--text); font-family:inherit; }
+.dlg-senha .senha-campo input:focus { outline:none; border-color:var(--teal); box-shadow:0 0 0 3px var(--focus); }
+.dlg-senha .hint { color:var(--muted); font-size:13px; margin:0 0 8px; line-height:1.4; }
+.dlg-senha .erro-form { margin:0 0 10px; min-height:18px; }
+.dlg-senha .dlg-botoes { margin-top:4px; }
+#dlgSenha.on { align-items:center; justify-content:center; padding:20px; z-index:15; }
