@@ -727,7 +727,7 @@ $("fechar").addEventListener("click", () => fecharSheet("sheet"));
 function abrirSheet(id) { $(id).classList.add("on"); $(id).setAttribute("aria-hidden", "false"); document.body.classList.add("sem-scroll"); }
 function fecharSheet(id) { $(id).classList.remove("on"); $(id).setAttribute("aria-hidden", "true"); if (!document.querySelector(".sheet.on, .drawer.on")) document.body.classList.remove("sem-scroll"); }
 document.querySelectorAll("[data-fecha]").forEach((b) => b.addEventListener("click", () => fecharSheet(b.dataset.fecha)));
-document.querySelectorAll(".sheet:not(#dlg):not(#dlgSenha), .drawer").forEach((s) => s.addEventListener("click", (ev) => { if (ev.target === s) fecharSheet(s.id); }));
+document.querySelectorAll(".sheet:not(#dlg):not(#dlgSenha):not(#dlgInstalar), .drawer").forEach((s) => s.addEventListener("click", (ev) => { if (ev.target === s) fecharSheet(s.id); }));
 document.addEventListener("keydown", (ev) => {
   if (ev.key !== "Escape") return;
   const abertos = document.querySelectorAll(".sheet.on, .drawer.on");
@@ -910,3 +910,115 @@ aplicarIcones(document.getElementById("login"));
 aplicarIcones(document.getElementById("dlgSenha"));
 if (sessionStorage.getItem(SESSAO) === tokenSessao()) entrar();
 else document.getElementById("loginSenha").focus();
+
+/* ---------- Aviso instalar / salvar PWA ---------- */
+const INSTALL_HINT_KEY = "caderno-acessos-install-hint-v1";
+let deferredInstall = null;
+
+function appJaInstalado() {
+  try {
+    if (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) return true;
+    if (window.matchMedia && window.matchMedia("(display-mode: fullscreen)").matches) return true;
+    if (window.navigator && window.navigator.standalone === true) return true;
+  } catch (e) {}
+  return false;
+}
+function installHintVisto() {
+  try { return localStorage.getItem(INSTALL_HINT_KEY) === "1"; } catch (e) { return false; }
+}
+function marcarInstallHint() {
+  try { localStorage.setItem(INSTALL_HINT_KEY, "1"); } catch (e) {}
+}
+function atualizarLinkInstalar() {
+  const wrap = document.getElementById("loginInstalarWrap");
+  if (!wrap) return;
+  wrap.hidden = appJaInstalado();
+}
+function mostrarTelaInstalar(n) {
+  const t1 = document.getElementById("instTela1");
+  const t2 = document.getElementById("instTela2");
+  if (!t1 || !t2) return;
+  t1.hidden = n !== 1;
+  t2.hidden = n !== 2;
+}
+async function tentarPromptInstalar() {
+  if (!deferredInstall) return false;
+  const ev = deferredInstall;
+  deferredInstall = null;
+  try {
+    await ev.prompt();
+    await ev.userChoice;
+  } catch (e) {}
+  atualizarLinkInstalar();
+  return true;
+}
+function fecharInstalar(marcar) {
+  if (marcar) marcarInstallHint();
+  fecharSheet("dlgInstalar");
+  mostrarTelaInstalar(1);
+  atualizarLinkInstalar();
+}
+function abrirInstalar(forcar) {
+  if (appJaInstalado()) { atualizarLinkInstalar(); return; }
+  if (!forcar && installHintVisto()) return;
+  mostrarTelaInstalar(1);
+  abrirSheet("dlgInstalar");
+  setTimeout(() => {
+    const b = document.getElementById("instEntendi");
+    if (b) b.focus();
+  }, 30);
+}
+
+window.addEventListener("beforeinstallprompt", (ev) => {
+  ev.preventDefault();
+  deferredInstall = ev;
+  atualizarLinkInstalar();
+});
+window.addEventListener("appinstalled", () => {
+  deferredInstall = null;
+  marcarInstallHint();
+  fecharSheet("dlgInstalar");
+  atualizarLinkInstalar();
+});
+
+(function ligarInstalarUI() {
+  const dlg = document.getElementById("dlgInstalar");
+  const btnEntendi = document.getElementById("instEntendi");
+  const btnEntendi2 = document.getElementById("instEntendi2");
+  const btnPasso = document.getElementById("instPassoAPasso");
+  const btnVoltar = document.getElementById("instVoltar");
+  const btnFooter = document.getElementById("btnInstalarApp");
+  if (!dlg || !btnEntendi) return;
+
+  async function onEntendi() {
+    await tentarPromptInstalar();
+    fecharInstalar(true);
+  }
+  btnEntendi.addEventListener("click", onEntendi);
+  if (btnEntendi2) btnEntendi2.addEventListener("click", onEntendi);
+  if (btnPasso) btnPasso.addEventListener("click", () => mostrarTelaInstalar(2));
+  if (btnVoltar) btnVoltar.addEventListener("click", () => mostrarTelaInstalar(1));
+  if (btnFooter) btnFooter.addEventListener("click", async () => {
+    if (deferredInstall) {
+      await tentarPromptInstalar();
+      marcarInstallHint();
+      return;
+    }
+    abrirInstalar(true);
+  });
+  dlg.addEventListener("click", (ev) => {
+    if (ev.target === dlg) fecharInstalar(true);
+  });
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && dlg.classList.contains("on")) {
+      ev.stopPropagation();
+      fecharInstalar(true);
+    }
+  }, true);
+
+  atualizarLinkInstalar();
+  // Mostra uma vez (até Entendi), só se ainda não for PWA instalado.
+  if (!appJaInstalado() && !installHintVisto()) {
+    setTimeout(() => abrirInstalar(false), 400);
+  }
+})();

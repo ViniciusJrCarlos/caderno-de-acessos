@@ -282,3 +282,18 @@ body.selecionando .toast { bottom:130px; }
 .dlg-senha .erro-form { margin:0 0 10px; min-height:18px; }
 .dlg-senha .dlg-botoes { margin-top:4px; }
 #dlgSenha.on { align-items:center; justify-content:center; padding:20px; z-index:15; }
+
+
+/* Aviso instalar PWA */
+#dlgInstalar.on { align-items:center; justify-content:center; padding:20px; z-index:16; }
+.dlg-instalar { max-height:min(92vh, 640px); overflow:auto; }
+.dlg-instalar .inst-texto p { margin:0 0 10px; color:var(--muted); font-size:15px; line-height:1.45; }
+.dlg-instalar .inst-texto p:last-child { margin-bottom:0; }
+.dlg-instalar .inst-sec { margin-top:14px !important; color:var(--head) !important; }
+.dlg-instalar .inst-sec:first-child { margin-top:0 !important; }
+.dlg-instalar .inst-texto { margin:0 0 18px; }
+.inst-botoes-1 { grid-template-columns:1fr; }
+.inst-link-wrap { margin:12px 0 0; text-align:center; }
+.link-instalar { background:none; border:0; color:var(--teal); font-size:14px; font-weight:600; padding:4px 6px; text-decoration:underline; cursor:pointer; font-family:inherit; }
+.link-instalar:hover { opacity:.85; }
+.login-instalar { margin:10px 0 0; text-align:center; }

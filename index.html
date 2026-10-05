@@ -26,6 +26,7 @@
     <button type="submit" id="loginBtn">Abrir caderno</button>
     <p id="loginErro" class="login-erro" role="alert"></p>
     <p class="login-rodape" id="loginRodape">Caderno de Acessos v1.3 · © Todos os direitos reservados · Desenv. WebDev</p>
+    <p class="login-instalar" id="loginInstalarWrap" hidden><button type="button" class="link-instalar" id="btnInstalarApp">Instalar app</button></p>
   </form>
 </section>
 <div id="app">
@@ -168,6 +169,40 @@
   </form>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</div>
+
+<div class="sheet dlg-wrap" id="dlgInstalar" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="instTitulo">
+  <div class="dlg dlg-instalar">
+    <div id="instTela1">
+      <h3 id="instTitulo">Salve o caderno no celular ou no computador</h3>
+      <div class="inst-texto" id="instTexto">
+        <p>Abra este site no Chrome ou no Edge.</p>
+        <p>Toque em Instalar (no celular, pode aparecer Adicionar à tela inicial).</p>
+        <p>Depois abra pelo ícone. O caderno fica no aparelho e abre mesmo sem internet.</p>
+      </div>
+      <div class="dlg-botoes inst-botoes-1">
+        <button type="button" class="btn pri" id="instEntendi">Entendi</button>
+      </div>
+      <p class="inst-link-wrap"><button type="button" class="link-instalar" id="instPassoAPasso">Ver passo a passo</button></p>
+    </div>
+    <div id="instTela2" hidden>
+      <h3 id="instTitulo2">Como salvar</h3>
+      <div class="inst-texto">
+        <p class="inst-sec"><strong>No computador (Chrome ou Edge)</strong></p>
+        <p>Abra o menu do navegador (os três pontinhos).</p>
+        <p>Clique em Instalar.</p>
+        <p>Confirme.</p>
+        <p class="inst-sec"><strong>No Android</strong></p>
+        <p>Toque em Adicionar à tela inicial.</p>
+        <p class="inst-sec"><strong>No iPhone</strong></p>
+        <p>Toque em Compartilhar e depois em Adicionar à Tela de Início.</p>
+      </div>
+      <div class="dlg-botoes">
+        <button type="button" class="btn" id="instVoltar">Voltar</button>
+        <button type="button" class="btn pri" id="instEntendi2">Entendi</button>
+      </div>
+    </div>
+  </div>
 </div>
 <script src="js/app.js"></script>
 </body>
