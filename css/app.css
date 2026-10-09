@@ -331,9 +331,36 @@ body.selecionando .toast { bottom:130px; }
 .esc-hint { margin:8px 0 0; color:var(--muted); font-size:12px; line-height:1.35; }
 .esc-resumo-label { margin-top:10px; }
 
-@media (min-width:900px) {
-  .topo-acoes .tb-btn#dImportXls { white-space:nowrap; }
-  .esc-row { grid-template-columns:72px 1fr 110px 1.2fr; }
-  .esc-row .esc-span2 { grid-column:2 / -1; }
-  .esc-row-acoes { grid-column:1 / -1; }
+/* Campos do nível: no celular o par rótulo+campo some como caixa (grade de 2 colunas da linha) */
+.esc-campo { display:contents; }
+@media (min-width:720px) {
+  /* Telas largas: 2 campos por linha, ocupando toda a largura (Nível+Canal, Valor, Nome+Horário, Obs) */
+  .esc-row { grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px 16px; align-items:start; padding:12px; }
+  .esc-campo { display:grid; grid-template-columns:56px minmax(0,1fr); gap:8px; align-items:center; min-width:0; }
+  .esc-campo.cheio { grid-column:1 / -1; }
+  .esc-campo:has(textarea) { align-items:start; }
+  .esc-campo:has(textarea) .esc-lab { padding-top:9px; }
 }
+@media (min-width:900px) {
+  .topo-acoes .tb-btn { white-space:nowrap; }
+}
+
+/* Menu "Excel ▾" do topo */
+.tb-drop { position:relative; display:inline-flex; }
+.tb-seta { font-size:11px; margin-left:2px; transition:transform .15s ease; }
+#dExcel.on .tb-seta { transform:rotate(180deg); }
+#dExcel.on { box-shadow:0 0 0 2px rgba(255,255,255,.55); }
+.tb-btn:focus-visible, .tb-mi:focus-visible { outline:2px solid var(--teal); outline-offset:2px; }
+.tb-menu { position:absolute; right:0; top:calc(100% + 8px); width:300px; max-width:calc(100vw - 24px); background:var(--surface); color:var(--text); border:1px solid var(--line); border-radius:12px; box-shadow:0 14px 32px var(--shadow); padding:6px; z-index:7; }
+.tb-mi { display:flex; align-items:flex-start; gap:10px; width:100%; background:none; border:0; border-radius:8px; padding:10px; text-align:left; color:var(--text); font-family:inherit; }
+.tb-mi:hover, .tb-mi:focus { background:var(--hover); outline:none; }
+.tb-mi-ic { color:var(--head); margin-top:1px; }
+.tb-mi-txt { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.tb-mi-txt strong { font-size:14px; color:var(--head); }
+.tb-mi-txt small { font-size:12px; color:var(--muted); line-height:1.3; }
+.tb-menu-nota { margin:4px 6px 2px; padding:8px 4px 2px; border-top:1px solid var(--line2); font-size:12px; color:var(--muted); }
+/* Drawer (celular): itens com subtítulo */
+.dr-item.dr-sub { align-items:flex-start; }
+.dr-txt { display:flex; flex-direction:column; gap:2px; }
+.dr-txt small { font-size:12px; color:var(--muted); line-height:1.3; }
+.dr-nota { margin:0 10px 6px 44px; font-size:12px; color:var(--muted); }

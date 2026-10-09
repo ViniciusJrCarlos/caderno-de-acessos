@@ -141,6 +141,7 @@ const IC = {
   building: '<rect x="4" y="3" width="16" height="18" rx="1"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2M10 21v-3h4v3"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/>',
   palette: '<path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.8 1.6-1.6 0-.5-.2-.8-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5c0-4-4-7.4-9-7.4z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7.5" r="1"/><circle cx="14.5" cy="7.5" r="1"/>',
+  book: '<path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5z"/><path d="M5 19.5A1.5 1.5 0 0 0 6.5 21H19M9 7h6M9 10.5h6"/>',
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>'
 };
 function svg(nome, tam) {
@@ -190,12 +191,13 @@ function el(tag, cls, text) {
   if (text != null) n.textContent = text;
   return n;
 }
-function btn(cls, icone, texto, fn, titulo) {
+function btn(cls, icone, texto, fn, titulo, dica) {
   const b = el("button", cls);
   b.type = "button";
   if (icone) b.insertAdjacentHTML("beforeend", svg(icone, 18));
   if (texto) b.appendChild(el("span", "", texto));
   if (titulo) { b.title = titulo; b.setAttribute("aria-label", titulo); }
+  if (dica) b.title = dica;
   b.addEventListener("click", (ev) => { ev.stopPropagation(); fn(ev); });
   return b;
 }
@@ -646,6 +648,7 @@ function cardDe(it) {
     const esc = el("div", "esc-bloco");
     const tog = el("button", "esc-toggle");
     tog.type = "button";
+    tog.title = "Ver ou esconder os contatos de escalonamento";
     tog.insertAdjacentHTML("beforeend", svg("users", 16));
     tog.appendChild(el("span", "", "Escalonamento" + (niveis.length ? " (" + niveis.length + ")" : "")));
     const chev = el("span", "esc-chev");
@@ -694,14 +697,15 @@ function cardDe(it) {
     c.classList.toggle("revelado", abrir);
     (c._alternadores || []).forEach((f) => f(abrir));
     bMostrar.querySelector("span").textContent = abrir ? "Ocultar" : "Mostrar";
+    bMostrar.title = abrir ? "Ocultar usuário e senha" : "Mostrar usuário e senha";
     bMostrar.querySelector("svg").outerHTML = svg(abrir ? "eyeOff" : "eye", 18);
-  });
+  }, null, "Mostrar usuário e senha");
   if (!it.senha && !it.usuario) bMostrar.disabled = true;
   acoes.appendChild(bMostrar);
-  const bCop = btn("acao", "copy", "Copiar", () => copiar(it.senha, "Senha"));
+  const bCop = btn("acao", "copy", "Copiar", () => copiar(it.senha, "Senha"), null, "Copiar a senha");
   if (!it.senha) bCop.disabled = true;
   acoes.appendChild(bCop);
-  const bAb = btn("acao", "external", "Abrir", () => abrirUrl(it.url));
+  const bAb = btn("acao", "external", "Abrir", () => abrirUrl(it.url), null, "Abrir a URL em nova aba");
   if (!it.url) bAb.disabled = true;
   acoes.appendChild(bAb);
   c.appendChild(acoes);
@@ -714,7 +718,7 @@ function abrirMenuCard(it, ancora) {
   if (jaAberto) return;
   const m = el("div", "menu-card");
   m.setAttribute("role", "menu");
-  m.appendChild(btn("mi", "edit", "Editar", () => { fecharMenus(); abrirFicha(it); }));
+  m.appendChild(btn("mi", "edit", "Editar", () => { fecharMenus(); abrirFicha(it); }, null, "Editar este acesso"));
   m.appendChild(btn("mi", "copy", "Copiar usuário", () => { fecharMenus(); copiar(it.usuario, "Usuário"); }));
   if (it.arquivado_em) {
     m.appendChild(btn("mi ok", "restore", "Reativar", () => { it.arquivado_em = null; save(); toast("Card reativado"); }));
@@ -752,8 +756,9 @@ function renderMais(box) {
   bloco("Importar", "Junta os cards do arquivo com os deste aparelho (pelo id). Cards que só existem aqui continuam. Usuário e senha que você já tem não são apagados por um arquivo que veio sem eles.",
     [btn("btn", "upload", "Importar JSON", () => document.getElementById("imp").click()),
      btn("btn", "table", "Importar planilha Excel", escolherPlanilha)]);
-  bloco("Planilha", "Excel separado em Fornecedores externos e Ferramentas internas. Usuário e senha dos acessos Individuais não entram. Use “Importar planilha” para ler a planilha de brokers/suporte.",
-    [btn("btn", "table", "Excel Interno/Externo", exportarExcel)]);
+  bloco("Planilha Excel", "“Excel para importar”: formato simples em abas (externos, internos, arquivados e escalonamento), para subir em “Importar planilha”. “Excel para consulta”: com navegação e escalonamento em blocos, somente leitura. Senhas individuais saem em branco.",
+    [btn("btn", "table", "Excel para importar", exportarExcelImportar, null, "Formato simples para importar no app"),
+     btn("btn", "book", "Excel para consulta", exportarExcelConsulta, null, "Com navegação e escalonamento, somente leitura")]);
   bloco("Senha deste aparelho", "Altera a senha de acesso salva só neste navegador. Outros aparelhos continuam com a senha padrão até alguém trocar lá também.",
     [btn("btn", "lock", "Trocar senha", abrirTrocaSenha)]);
   bloco("Offline e instalação", "Abra o link no Chrome uma vez com internet (fora da VPN) e use “Instalar app”. Depois funciona sem internet; quando houver internet, a versão nova chega sozinha.",
@@ -840,45 +845,472 @@ function importarJson(ev) {
   };
   r.readAsText(f);
 }
-function exportarExcel() {
-  const head = ["Titulo", "Aplicacao", "Cliente", "Categoria", "Visibilidade", "URL", "Usuario", "Senha", "Ciclo", "UltimaTroca", "Horario", "Escalonamento", "Obs", "Arquivado"];
-  const esc = (v) => String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  function tabela(lista, titulo) {
-    let html = "<h2>" + titulo + "</h2><table border='1'><tr>";
-    head.forEach((h) => { html += "<th>" + h + "</th>"; });
-    html += "</tr>";
-    lista.forEach((orig) => {
-      const it = semSegredoIndividual(orig);
-      const ind = orig.visibilidade === "Individual";
-      const escTxt = it.escalonamento || resumoEscalonamentos(niveisDe(orig));
-      const vals = [it.titulo, it.aplicacao, it.cliente, it.categoria, it.visibilidade, it.url, ind ? "(individual)" : it.usuario, ind ? "(individual)" : it.senha, it.ciclo, it.ultima, it.horario, escTxt, it.obs, it.arquivado_em || ""];
-      html += "<tr>";
-      vals.forEach((v) => { html += "<td>" + esc(v) + "</td>"; });
-      html += "</tr>";
-    });
-    return html + "</table>";
-  }
-  const ext = itens.filter((i) => i.categoria === "Externo");
-  const inn = itens.filter((i) => i.categoria !== "Externo");
-  download("caderno-acessos.xls", "<html><meta charset='utf-8'><body>" + tabela(ext, "Fornecedores externos") + tabela(inn, "Ferramentas internas") + "</body></html>", "application/vnd.ms-excel");
-  toast("Excel exportado (sem senhas individuais)");
-}
-
-/* ---------- Importar planilha Excel (SheetJS sob demanda) ---------- */
-let xlsxLibPromise = null;
-function carregarXlsxLib() {
-  if (window.XLSX) return Promise.resolve(window.XLSX);
-  if (xlsxLibPromise) return xlsxLibPromise;
-  xlsxLibPromise = new Promise((resolve, reject) => {
+/* ---------- Bibliotecas de planilha (vendorizadas em js/vendor, funcionam offline) ---------- */
+const libsCarregando = {};
+function carregarScript(src, global) {
+  if (window[global]) return Promise.resolve(window[global]);
+  if (libsCarregando[src]) return libsCarregando[src];
+  libsCarregando[src] = new Promise((resolve, reject) => {
     const s = document.createElement("script");
-    s.src = "https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js";
+    s.src = src;
     s.async = true;
-    s.onload = () => window.XLSX ? resolve(window.XLSX) : reject(new Error("XLSX indisponível"));
-    s.onerror = () => reject(new Error("Falha ao carregar SheetJS"));
+    s.onload = () => window[global] ? resolve(window[global]) : reject(new Error(global + " indisponível"));
+    s.onerror = () => { delete libsCarregando[src]; s.remove(); reject(new Error("Falha ao carregar " + src)); };
     document.head.appendChild(s);
   });
-  return xlsxLibPromise;
+  return libsCarregando[src];
 }
+function carregarXlsxLib() {
+  return carregarScript("js/vendor/xlsx.full.min.js", "XLSX")
+    .catch(() => carregarScript("https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js", "XLSX"));
+}
+function carregarExcelJS() { return carregarScript("js/vendor/exceljs.min.js", "ExcelJS"); }
+
+/* ---------- Exportar Excel (v1.5): "para importar" (simples) e "para consulta" (navegável) ---------- */
+const XL = { navy: "FF1B365D", ext: "FF2F6DB5", int: "FF1A8C86", ind: "FFDCEBFA", zebra: "FFF4F5F7", cinza: "FFD9D9D9", cinzaTx: "FF595959", sub: "FFDCE6F2", info: "FFEEF3F9", borda: "FFBFC4CC", branco: "FFFFFFFF", link: "FF2F6DB5" };
+const XL_NIVEL = { 1: ["FFDCE6F2", "FF1B365D"], 2: ["FFB4C7E7", "FF1B365D"], 3: ["FF7F9CC9", "FFFFFFFF"], 4: ["FF4A6FA5", "FFFFFFFF"], 5: ["FF1B365D", "FFFFFFFF"] };
+const XL_STATUS = { "OK": ["FFC6EFCE", "FF006100"], "Vencendo": ["FFFFEB9C", "FF9C5700"], "Vencido": ["FFFFC7CE", "FF9C0006"], "Não expira": ["FFE7E9EE", "FF44546A"], "Arquivado": ["FFD9D9D9", "FF595959"] };
+// Colunas da planilha "para importar": 1 coluna = 1 campo do card (ida e volta).
+const PLAN_COLS = [
+  ["ID", "id", 12], ["Título", "titulo", 30], ["Aplicação", "aplicacao", 24], ["Cliente / operação", "cliente", 24],
+  ["Categoria", "categoria", 11], ["Visibilidade", "visibilidade", 12], ["URL", "url", 38], ["Usuário", "usuario", 20],
+  ["Senha", "senha", 16], ["Ciclo (dias)", "ciclo", 11], ["Última troca", "ultima", 13], ["Horário", "horario", 18],
+  ["Escalonamento (resumo)", "escalonamento", 40], ["Observação", "obs", 36], ["Arquivado em", "arquivado_em", 13]
+];
+const PLAN_ESC_COLS = [["ID do card", 12], ["Fornecedor / Título", 30], ["Nível", 8], ["Canal", 11], ["Valor", 36], ["Nome", 24], ["Horário", 16], ["Obs", 36]];
+const ABAS_PLAN = [
+  { nome: "Fornecedores externos", sempre: true, filtro: (it) => !it.arquivado_em && it.categoria === "Externo" },
+  { nome: "Ferramentas internas", sempre: true, filtro: (it) => !it.arquivado_em && it.categoria !== "Externo" },
+  { nome: "Fornecedores arquivados", filtro: (it) => !!it.arquivado_em && it.categoria === "Externo" },
+  { nome: "Ferramentas arquivadas", filtro: (it) => !!it.arquivado_em && it.categoria !== "Externo" }
+];
+function ordenarCards(lista) {
+  return lista.slice().sort((a, b) => (a.aplicacao || a.titulo || "").localeCompare(b.aplicacao || b.titulo || "") || (a.cliente || "").localeCompare(b.cliente || "") || (a.titulo || "").localeCompare(b.titulo || ""));
+}
+function abasPlanilha() {
+  return ABAS_PLAN.map((a) => ({ nome: a.nome, sempre: !!a.sempre, arquivo: /arquivad/.test(a.nome), lista: ordenarCards(itens.filter(a.filtro)) }))
+    .filter((a) => a.sempre || a.lista.length);
+}
+function dataBR(iso) {
+  const m = String(iso || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? m[3] + "/" + m[2] + "/" + m[1] : (iso || "");
+}
+function statusPlan(it) {
+  const st = statusDe(it);
+  return st === "Ativo" ? "OK" : st === "Sem expiração" ? "Não expira" : st;
+}
+function valorPlan(it, k) {
+  const c = semSegredoIndividual(it);
+  if (k === "escalonamento") return c.escalonamento || resumoEscalonamentos(niveisDe(it));
+  if (k === "ultima" || k === "arquivado_em") return dataBR(c[k] || "");
+  if (k === "ciclo") return /^\d+$/.test(String(c.ciclo || "")) ? Number(c.ciclo) : (c.ciclo || "Nunca");
+  if (k === "categoria") return c.categoria === "Externo" ? "Externo" : "Interno";
+  if (k === "visibilidade") return c.visibilidade === "Individual" ? "Individual" : "Equipe";
+  return c[k] == null ? "" : String(c[k]);
+}
+function xlBorda() { const s = { style: "thin", color: { argb: XL.borda } }; return { top: s, left: s, bottom: s, right: s }; }
+function xlFill(cor) { return { type: "pattern", pattern: "solid", fgColor: { argb: cor } }; }
+function xlCabecalho(row, n) {
+  for (let i = 1; i <= n; i++) {
+    const c = row.getCell(i);
+    c.fill = xlFill(XL.navy);
+    c.font = { bold: true, color: { argb: XL.branco } };
+    c.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    c.border = xlBorda();
+  }
+  row.height = 30;
+}
+function xlLinkInterno(aba, ref, texto) {
+  const alvo = "#'" + aba.replace(/'/g, "''") + "'!" + ref;
+  return { formula: 'HYPERLINK("' + alvo.replace(/"/g, '""') + '","' + String(texto).replace(/"/g, '""') + '")', result: texto };
+}
+function xlUrl(v) { return /^[a-z]+:\/\//i.test(v) ? v : "https://" + v; }
+async function baixarWorkbook(wb, nome) {
+  const buf = await wb.xlsx.writeBuffer();
+  download(nome, buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+}
+
+function montarPlanilhaImportar(ExcelJS) {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Caderno de Acessos";
+  wb.created = new Date();
+  const abas = abasPlanilha();
+  abas.forEach((a) => {
+    const ws = wb.addWorksheet(a.nome, { views: [{ state: "frozen", ySplit: 1 }], properties: { tabColor: { argb: a.arquivo ? "FF8C8C8C" : (/Fornecedores/.test(a.nome) ? XL.ext : XL.int) } } });
+    ws.columns = PLAN_COLS.map(([h, k, w]) => ({ header: h, key: k, width: w }));
+    xlCabecalho(ws.getRow(1), PLAN_COLS.length);
+    a.lista.forEach((it, i) => {
+      const vals = {};
+      PLAN_COLS.forEach(([, k]) => { vals[k] = valorPlan(it, k); });
+      const row = ws.addRow(vals);
+      for (let j = 1; j <= PLAN_COLS.length; j++) {
+        const c = row.getCell(j);
+        c.border = xlBorda();
+        c.alignment = { vertical: "top", wrapText: true };
+        if (a.arquivo) { c.fill = xlFill(XL.cinza); c.font = { color: { argb: XL.cinzaTx } }; }
+        else if (i % 2) c.fill = xlFill(XL.zebra);
+      }
+    });
+    ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: a.lista.length + 1, column: PLAN_COLS.length } };
+  });
+  const we = wb.addWorksheet("Escalonamento", { views: [{ state: "frozen", ySplit: 1 }], properties: { tabColor: { argb: XL.navy } } });
+  we.columns = PLAN_ESC_COLS.map(([h, w]) => ({ header: h, width: w }));
+  xlCabecalho(we.getRow(1), PLAN_ESC_COLS.length);
+  let n = 0;
+  abas.forEach((a) => a.lista.forEach((it) => {
+    niveisDe(it).forEach((nv) => {
+      const row = we.addRow([it.id, it.titulo || it.aplicacao || "", nv.nivel, canalRotulo(nv.canal), nv.valor, nv.nome, nv.horario, nv.obs]);
+      for (let j = 1; j <= PLAN_ESC_COLS.length; j++) {
+        const c = row.getCell(j);
+        c.border = xlBorda();
+        c.alignment = { vertical: "top", wrapText: true };
+        if (n % 2) c.fill = xlFill(XL.zebra);
+      }
+      n++;
+    });
+  }));
+  we.autoFilter = { from: { row: 1, column: 1 }, to: { row: n + 1, column: PLAN_ESC_COLS.length } };
+  return wb;
+}
+
+function montarPlanilhaConsulta(ExcelJS) {
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "Caderno de Acessos";
+  wb.created = new Date();
+  const abas = abasPlanilha();
+  const COLS = [["Título", 30], ["Aplicação", 22], ["Cliente / operação", 24], ["Visibilidade", 12], ["URL", 38], ["Usuário", 18], ["Senha", 14], ["Ciclo", 9], ["Última troca", 13], ["Status", 12], ["Horário", 18], ["Observação", 34]];
+  const PRIMEIRA = 3; // linha 1 = barra, linha 2 = cabeçalho
+  // Posições: card -> (aba, linha); bloco de escalonamento -> linha na aba Escalonamento
+  const pos = {};
+  abas.forEach((a) => a.lista.forEach((it, i) => { pos[it.id] = { aba: a.nome, linha: PRIMEIRA + i }; }));
+  const comEsc = [];
+  abas.forEach((a) => a.lista.forEach((it) => { const nv = niveisDe(it); if (nv.length) comEsc.push({ it: it, aba: a.nome, arquivo: a.arquivo, niveis: nv }); }));
+  const IDX = 4; // cabeçalho do índice
+  let r = IDX + 1 + comEsc.length + 2;
+  comEsc.forEach((e) => { e.linha = r; r += 3 + e.niveis.length + 1; });
+  const blocoDe = Object.fromEntries(comEsc.map((e) => [e.it.id, e.linha]));
+
+  function topo(ws, titulo, ncols) {
+    const c = ws.getCell("A1");
+    c.value = xlLinkInterno("Leia-me", "A1", "◀ Voltar ao Leia-me");
+    c.font = { bold: true, color: { argb: XL.branco } };
+    c.fill = xlFill(XL.ext);
+    c.alignment = { horizontal: "center", vertical: "middle" };
+    c.border = xlBorda();
+    const t = ws.getCell(1, 2);
+    t.value = titulo;
+    t.font = { bold: true, size: 14, color: { argb: XL.navy } };
+    t.alignment = { vertical: "middle" };
+    ws.getRow(1).height = 28;
+  }
+
+  // Leia-me
+  const lm = wb.addWorksheet("Leia-me", { properties: { tabColor: { argb: XL.navy } } });
+  lm.getColumn(1).width = 30;
+  lm.getColumn(2).width = 92;
+  lm.getCell("A1").value = "Caderno de Acessos — Planilha para consulta";
+  lm.getCell("A1").font = { bold: true, size: 18, color: { argb: XL.navy } };
+  lm.getCell("A2").value = "Gerada em " + dataBR(hoje()) + " · somente leitura (para importar no app, use “Excel para importar”).";
+  lm.getCell("A2").font = { italic: true, color: { argb: XL.cinzaTx } };
+  let lr = 4;
+  const secao = (t) => { const c = lm.getCell(lr, 1); c.value = t; c.font = { bold: true, size: 13, color: { argb: XL.navy } }; lr++; };
+  const linha = (a, b, fundo, cor) => {
+    const c1 = lm.getCell(lr, 1), c2 = lm.getCell(lr, 2);
+    c1.value = a; c2.value = b;
+    c1.border = c2.border = xlBorda();
+    c1.alignment = { vertical: "top", wrapText: true };
+    c2.alignment = { vertical: "top", wrapText: true };
+    if (fundo) { c1.fill = xlFill(fundo); c1.font = { bold: true, color: { argb: cor || XL.branco } }; }
+    else c1.font = { bold: true, color: { argb: XL.navy } };
+    lr++;
+    return c1;
+  };
+  secao("Navegação (clique no botão para abrir a aba)");
+  const descAba = {
+    "Fornecedores externos": "Fornecedores externos ativos (portais, brokers, telecom, CRM).",
+    "Ferramentas internas": "Ferramentas e páginas internas ativas (a mesma ferramenta pode ter uma URL por operação).",
+    "Fornecedores arquivados": "Fornecedores inativos, em cinza. O escalonamento continua guardado.",
+    "Ferramentas arquivadas": "Ferramentas internas inativas, em cinza."
+  };
+  const navs = abas.map((a) => [a.nome, descAba[a.nome] + " (" + a.lista.length + " card" + (a.lista.length === 1 ? "" : "s") + ")"]);
+  navs.splice(2, 0, ["Escalonamento", "Contatos por fornecedor, em blocos: nível, canal, nome, contato e horário, com “◀ Voltar ao card”."]);
+  navs.forEach(([nome, desc]) => {
+    const c = linha("", desc, XL.navy);
+    c.value = xlLinkInterno(nome, "A1", "▶  " + nome);
+    c.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+    lm.getRow(lr - 1).height = 30;
+  });
+  lr++;
+  secao("Como navegar");
+  linha("◀ Voltar ao Leia-me", "Em todas as abas, a célula azul no canto superior esquerdo volta para esta página.");
+  linha("Ver escalonamento ▶", "Na última coluna dos cards, leva direto ao bloco do fornecedor na aba Escalonamento. “sem escalonamento” = nada cadastrado.");
+  linha("◀ Voltar ao card", "No título de cada bloco de escalonamento, volta para a linha do card.");
+  linha("E-mail / Telefone / Portal", "E-mails abrem o programa de e-mail; telefones usam tel: (discador/Teams, se configurado); portais abrem no navegador.");
+  lr++;
+  secao("Legenda de cores");
+  linha("Individual", "Acesso pessoal do analista: usuário e senha saem em branco.", XL.ind, XL.navy);
+  Object.keys(XL_STATUS).forEach((k) => linha(k, { "OK": "Senha dentro do ciclo de troca.", "Vencendo": "Faltam 7 dias ou menos para trocar.", "Vencido": "Ciclo de troca ultrapassado.", "Não expira": "Ciclo “Nunca”.", "Arquivado": "Card inativo (abas de arquivados)." }[k], XL_STATUS[k][0], XL_STATUS[k][1]));
+  [1, 2, 3, 4, 5].forEach((n) => linha("Nível " + n, n === 1 ? "Primeiro contato (ex.: portal ou service desk)." : n === 5 ? "Último nível (ex.: gerência)." : "Nível " + n + " de escalonamento.", XL_NIVEL[n][0], XL_NIVEL[n][1]));
+  lr++;
+  secao("Regras");
+  linha("Senhas", "Senhas individuais saem em branco. Só acessos da equipe levam usuário e senha.");
+  linha("Somente leitura", "Esta planilha é para consultar e imprimir. Para levar cards para outro aparelho, use “Excel para importar” ou o JSON.");
+
+  // Abas de cards
+  function abaCards(a) {
+    const ws = wb.addWorksheet(a.nome, { views: [{ state: "frozen", xSplit: 1, ySplit: 2 }], properties: { tabColor: { argb: a.arquivo ? "FF8C8C8C" : (/Fornecedores/.test(a.nome) ? XL.ext : XL.int) } } });
+    const cols = COLS.concat(a.arquivo ? [["Arquivado em", 13]] : []).concat([["Ver escalonamento", 20]]);
+    cols.forEach(([, w], i) => { ws.getColumn(i + 1).width = w; });
+    topo(ws, a.nome + (a.arquivo ? " (inativos)" : ""), cols.length);
+    const hr = ws.getRow(2);
+    cols.forEach(([h], i) => { hr.getCell(i + 1).value = h; });
+    xlCabecalho(hr, cols.length);
+    a.lista.forEach((it, i) => {
+      const ind = it.visibilidade === "Individual";
+      const st = statusPlan(it);
+      const vals = [it.titulo || it.aplicacao || "", it.aplicacao || "", it.cliente || "", ind ? "Individual" : "Equipe", it.url || "",
+        ind ? "" : (it.usuario || ""), ind ? "" : (it.senha || ""), valorPlan(it, "ciclo"), dataBR(it.ultima || ""), st, it.horario || "", it.obs || ""];
+      if (a.arquivo) vals.push(dataBR(it.arquivado_em || ""));
+      const row = ws.getRow(PRIMEIRA + i);
+      vals.forEach((v, j) => { row.getCell(j + 1).value = v; });
+      for (let j = 1; j <= cols.length; j++) {
+        const c = row.getCell(j);
+        c.border = xlBorda();
+        c.alignment = { vertical: "top", wrapText: true };
+        if (a.arquivo) { c.fill = xlFill(XL.cinza); c.font = { color: { argb: XL.cinzaTx } }; }
+        else if (i % 2) c.fill = xlFill(XL.zebra);
+      }
+      const cv = row.getCell(4);
+      cv.alignment = { horizontal: "center", vertical: "top" };
+      if (ind) { cv.fill = xlFill(XL.ind); cv.font = { bold: true, color: { argb: XL.navy } }; }
+      if (ind) { [6, 7].forEach((j) => { row.getCell(j).value = "(individual)"; row.getCell(j).font = { italic: true, color: { argb: "FF808080" } }; }); }
+      const cs = row.getCell(10);
+      const cor = XL_STATUS[st] || XL_STATUS["OK"];
+      cs.fill = xlFill(cor[0]); cs.font = { bold: true, color: { argb: cor[1] } }; cs.alignment = { horizontal: "center", vertical: "top" };
+      [8, 9].forEach((j) => { row.getCell(j).alignment = { horizontal: "center", vertical: "top" }; });
+      if (it.url) {
+        const cu = row.getCell(5);
+        cu.value = { text: it.url, hyperlink: xlUrl(it.url) };
+        cu.font = { color: { argb: XL.link }, underline: true };
+      }
+      const ce = row.getCell(cols.length);
+      ce.alignment = { horizontal: "center", vertical: "top" };
+      if (blocoDe[it.id]) {
+        ce.value = xlLinkInterno("Escalonamento", "A" + blocoDe[it.id], "Ver escalonamento ▶");
+        ce.font = { bold: true, color: { argb: XL.link }, underline: true };
+      } else {
+        ce.value = "sem escalonamento";
+        ce.font = { italic: true, color: { argb: "FF808080" } };
+      }
+    });
+    if (a.lista.length) ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: a.lista.length + 2, column: cols.length } };
+    else { ws.getCell("A3").value = "Nenhum card nesta aba."; ws.getCell("A3").font = { italic: true, color: { argb: "FF808080" } }; }
+  }
+  abas.filter((a) => !a.arquivo).forEach(abaCards);
+
+  // Escalonamento em blocos
+  const we = wb.addWorksheet("Escalonamento", { views: [{ state: "frozen", ySplit: 1 }], properties: { tabColor: { argb: XL.navy } } });
+  [10, 12, 26, 38, 18, 36].forEach((w, i) => { we.getColumn(i + 1).width = w; });
+  topo(we, "Escalonamento por fornecedor", 6);
+  we.getCell(IDX - 1, 1).value = comEsc.length ? "Índice (clique para ir ao bloco)" : "Nenhum card com escalonamento cadastrado.";
+  we.getCell(IDX - 1, 1).font = { bold: true, color: { argb: XL.navy } };
+  if (comEsc.length) {
+    const hi = we.getRow(IDX);
+    ["Níveis", "Aba", "Fornecedor / Título", "Aplicação · Cliente"].forEach((h, i) => { hi.getCell(i + 1).value = h; });
+    xlCabecalho(hi, 4);
+    hi.height = 22;
+  }
+  comEsc.forEach((e, i) => {
+    const row = we.getRow(IDX + 1 + i);
+    row.getCell(1).value = e.niveis.length;
+    row.getCell(2).value = e.aba;
+    row.getCell(3).value = xlLinkInterno("Escalonamento", "A" + e.linha, (e.it.titulo || e.it.aplicacao || "") + " ▶");
+    row.getCell(4).value = [e.it.aplicacao, e.it.cliente].filter(Boolean).join(" · ");
+    for (let j = 1; j <= 4; j++) { const c = row.getCell(j); c.border = xlBorda(); c.alignment = { vertical: "top", wrapText: true }; if (i % 2) c.fill = xlFill(XL.zebra); }
+    row.getCell(1).alignment = { horizontal: "center", vertical: "top" };
+    row.getCell(3).font = { bold: true, color: { argb: XL.link }, underline: true };
+  });
+  const SUBH = ["Nível", "Canal", "Nome", "Contato", "Horário", "Observação"];
+  comEsc.forEach((e) => {
+    const r0 = e.linha, it = e.it;
+    we.mergeCells(r0, 1, r0, 4);
+    const t = we.getCell(r0, 1);
+    t.value = [it.titulo || it.aplicacao, it.cliente].filter(Boolean).join("  ·  ") + (e.arquivo ? "  ·  ARQUIVADO" : "");
+    for (let k = 1; k <= 6; k++) { const c = we.getCell(r0, k); c.fill = xlFill(e.arquivo ? "FF595959" : XL.navy); c.border = xlBorda(); }
+    t.font = { bold: true, size: 12, color: { argb: XL.branco } };
+    t.alignment = { vertical: "middle" };
+    we.mergeCells(r0, 5, r0, 6);
+    const p = pos[it.id];
+    const b = we.getCell(r0, 5);
+    b.value = xlLinkInterno(p.aba, "A" + p.linha, "◀ Voltar ao card");
+    b.font = { bold: true, color: { argb: XL.branco }, underline: true };
+    b.alignment = { horizontal: "center", vertical: "middle" };
+    we.getRow(r0).height = 26;
+    we.mergeCells(r0 + 1, 1, r0 + 1, 6);
+    const info = we.getCell(r0 + 1, 1);
+    info.value = "Aba: " + p.aba + "   |   Horário de atendimento: " + (it.horario || "—") + "   |   URL: " + (it.url || "—");
+    info.font = { italic: true, color: { argb: XL.navy } };
+    info.fill = xlFill(XL.info);
+    info.alignment = { vertical: "top", wrapText: true };
+    const sh = we.getRow(r0 + 2);
+    SUBH.forEach((h, k) => {
+      const c = sh.getCell(k + 1);
+      c.value = h; c.fill = xlFill(XL.sub); c.font = { bold: true, color: { argb: XL.navy } }; c.border = xlBorda(); c.alignment = { horizontal: "center", vertical: "middle" };
+    });
+    e.niveis.forEach((nv, i) => {
+      const row = we.getRow(r0 + 3 + i);
+      [nv.nivel, canalRotulo(nv.canal), nv.nome || "", nv.valor || "", nv.horario || "", nv.obs || ""].forEach((v, k) => {
+        const c = row.getCell(k + 1);
+        c.value = v; c.border = xlBorda(); c.alignment = { vertical: "top", wrapText: true };
+        if (e.arquivo) c.fill = xlFill(XL.cinza);
+        else if (i % 2) c.fill = xlFill(XL.zebra);
+      });
+      const cn = row.getCell(1), cor = XL_NIVEL[Math.min(5, Math.max(1, nv.nivel))];
+      cn.fill = xlFill(cor[0]); cn.font = { bold: true, color: { argb: cor[1] } }; cn.alignment = { horizontal: "center", vertical: "top" };
+      row.getCell(2).alignment = { horizontal: "center", vertical: "top" };
+      const href = hrefEsc(nv);
+      if (href && nv.valor) {
+        const cc = row.getCell(4);
+        cc.value = { text: nv.valor, hyperlink: href };
+        cc.font = { color: { argb: XL.link }, underline: true };
+      }
+    });
+  });
+  // Ordem das abas: Leia-me, ativos, Escalonamento, arquivados
+  abas.filter((a) => a.arquivo).forEach(abaCards);
+  // Impressão: paisagem, cabe na largura da página
+  wb.worksheets.forEach((ws) => { ws.pageSetup = { orientation: ws.name === "Leia-me" ? "portrait" : "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 } }; });
+  return wb;
+}
+
+async function exportarExcelImportar() {
+  try {
+    const ExcelJS = await carregarExcelJS();
+    await baixarWorkbook(montarPlanilhaImportar(ExcelJS), "caderno-acessos-importar-" + hoje() + ".xlsx");
+    toast("Excel para importar exportado (sem senhas individuais)");
+  } catch (e) {
+    aviso("Falha ao exportar", "Não foi possível gerar a planilha. Recarregue a página e tente de novo.");
+  }
+}
+async function exportarExcelConsulta() {
+  try {
+    const ExcelJS = await carregarExcelJS();
+    await baixarWorkbook(montarPlanilhaConsulta(ExcelJS), "caderno-acessos-consulta-" + hoje() + ".xlsx");
+    toast("Excel para consulta exportado (sem senhas individuais)");
+  } catch (e) {
+    aviso("Falha ao exportar", "Não foi possível gerar a planilha. Recarregue a página e tente de novo.");
+  }
+}
+
+/* ---------- Importar o formato do próprio Caderno (v1.5 "para importar" e Excel antigo do app) ---------- */
+const PLAN_MAPA = {
+  "id": "id", "titulo": "titulo", "aplicacao": "aplicacao", "cliente operacao": "cliente", "cliente": "cliente",
+  "categoria": "categoria", "visibilidade": "visibilidade", "url": "url", "usuario": "usuario", "senha": "senha",
+  "ciclo dias": "ciclo", "ciclo": "ciclo", "ultima troca": "ultima", "ultimatroca": "ultima", "horario": "horario",
+  "escalonamento resumo": "escalonamento", "escalonamento": "escalonamento", "observacao": "obs", "obs": "obs",
+  "arquivado em": "arquivado_em", "arquivado": "arquivado_em"
+};
+const PLAN_ESC_MAPA = { "id do card": "id", "nivel": "nivel", "canal": "canal", "valor": "valor", "contato": "valor", "nome": "nome", "horario": "horario", "obs": "obs", "observacao": "obs" };
+function mapaCabecalho(row, mapa) {
+  const col = {};
+  (row || []).forEach((h, i) => { const k = mapa[normHeader(h)]; if (k && col[k] == null) col[k] = i; });
+  return col;
+}
+function ehCabecalhoCards(col) { return col.titulo != null && (col.aplicacao != null || col.id != null); }
+function ehCabecalhoEsc(col) { return col.id != null && col.nivel != null; }
+function pad2(n) { return String(n).padStart(2, "0"); }
+function dataIso(v, XLSX) {
+  if (v == null || v === "") return "";
+  if (typeof v === "number" && XLSX && XLSX.SSF) {
+    const p = XLSX.SSF.parse_date_code(v);
+    if (p && p.y) return p.y + "-" + pad2(p.m) + "-" + pad2(p.d);
+  }
+  if (v instanceof Date && !isNaN(v)) return v.getFullYear() + "-" + pad2(v.getMonth() + 1) + "-" + pad2(v.getDate());
+  const s = String(v).trim();
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return m[1] + "-" + pad2(m[2]) + "-" + pad2(m[3]);
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return m[3] + "-" + pad2(m[2]) + "-" + pad2(m[1]);
+  return s;
+}
+function canalDeTexto(t) {
+  const n = normHeader(t);
+  if (/mail/.test(n)) return "email";
+  if (/tel|fone|phone|celular|whats/.test(n)) return "telefone";
+  if (/portal|ticket|chamado|site|url/.test(n)) return "portal";
+  return ["portal", "email", "telefone", "outro"].includes(String(t || "").trim()) ? String(t).trim() : "outro";
+}
+function cardsFormatoCaderno(workbook, XLSX) {
+  const usadas = new Set();
+  const cards = [];
+  const escPorId = {};
+  workbook.SheetNames.forEach((nomeAba) => {
+    const ws = workbook.Sheets[nomeAba];
+    if (!ws) return;
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: "" });
+    const txt = (row, i) => (i == null || !row || row[i] == null) ? "" : (row[i] instanceof Date ? dataIso(row[i]) : String(row[i]).trim());
+    let col = null, modo = null;
+    rows.forEach((row) => {
+      if (linhaVazia(row)) return;
+      const cc = mapaCabecalho(row, PLAN_MAPA);
+      if (ehCabecalhoCards(cc)) { col = cc; modo = "cards"; usadas.add(nomeAba); return; }
+      const ce = mapaCabecalho(row, PLAN_ESC_MAPA);
+      if (ehCabecalhoEsc(ce)) { col = ce; modo = "esc"; usadas.add(nomeAba); return; }
+      if (!col) return;
+      const preenchidas = row.filter((c) => c != null && String(c).trim() !== "").length;
+      if (modo === "esc") {
+        const id = txt(row, col.id);
+        if (!id) return;
+        const nv = limparNivelEsc({ nivel: txt(row, col.nivel), canal: canalDeTexto(txt(row, col.canal)), valor: txt(row, col.valor), nome: txt(row, col.nome), horario: txt(row, col.horario), obs: txt(row, col.obs) });
+        if (nv && (nv.valor || nv.nome || nv.obs)) (escPorId[id] = escPorId[id] || []).push(nv);
+        return;
+      }
+      if (preenchidas <= 1) return; // título de seção (ex.: Excel antigo do app)
+      const o = {};
+      Object.keys(col).forEach((k) => { o[k] = k === "ultima" || k === "arquivado_em" ? dataIso(row[col[k]], XLSX) : txt(row, col[k]); });
+      if (!o.titulo && !o.aplicacao) return;
+      ["usuario", "senha"].forEach((k) => { if (/^\(individual\)$/i.test(o[k] || "")) o[k] = ""; });
+      const nAba = normHeader(nomeAba);
+      const cat = normHeader(o.categoria);
+      const categoria = /extern/.test(cat) ? "Externo" : /intern/.test(cat) ? "Interno" : (/fornecedor|extern/.test(nAba) ? "Externo" : "Interno");
+      let ciclo = String(o.ciclo || "").trim();
+      if (!ciclo || /nunca|nao expira/.test(normHeader(ciclo))) ciclo = "Nunca";
+      else if (/^\d+(\.0+)?$/.test(ciclo)) ciclo = String(parseInt(ciclo, 10));
+      const arq = o.arquivado_em || (/arquiv|antig/.test(nAba) ? hoje() : "");
+      const card = {
+        id: o.id || idEstavel([o.titulo, o.aplicacao, o.cliente, "planilha"]),
+        titulo: o.titulo || o.aplicacao,
+        aplicacao: o.aplicacao || o.titulo,
+        cliente: o.cliente || "",
+        categoria: categoria,
+        visibilidade: /individual/i.test(o.visibilidade || "") ? "Individual" : "Equipe",
+        url: o.url || "",
+        usuario: o.usuario || "",
+        senha: o.senha || "",
+        ciclo: ciclo,
+        ultima: o.ultima || "",
+        horario: o.horario || "",
+        escalonamento: o.escalonamento || "",
+        escalonamentos: [],
+        obs: o.obs || "",
+        arquivado_em: arq || null
+      };
+      cards.push(card);
+    });
+  });
+  cards.forEach((c) => {
+    const nv = escPorId[c.id];
+    if (nv && nv.length) {
+      c.escalonamentos = nv.sort((a, b) => a.nivel - b.nivel);
+      if (!c.escalonamento) c.escalonamento = resumoEscalonamentos(c.escalonamentos);
+    } else if (c.escalonamento) {
+      c.escalonamentos = parseEscalonamentoTexto(c.escalonamento);
+    }
+  });
+  return { cards: cards, abasUsadas: usadas };
+}
+
+/* ---------- Importar planilha de suporte/brokers (formato v1.4) ---------- */
 function normHeader(h) {
   return String(h || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
@@ -948,10 +1380,10 @@ function sheetTemVermelho(sheet, XLSX) {
   // SheetJS community build may not keep fonts; we rely on sheet name "Antigos" + optional !rows styles if present.
   return false;
 }
-function cardsDePlanilha(workbook, XLSX) {
+function cardsDePlanilha(workbook, XLSX, pular) {
   const gerados = [];
   const vistos = new Set();
-  const ordem = workbook.SheetNames.slice().sort((a, b) => {
+  const ordem = workbook.SheetNames.filter((n) => !(pular && pular.has(n))).sort((a, b) => {
     const rank = (n) => ({ brokers: 0, suporte: 1, antigos: 2, outro: 3 })[classificarAba(n)] ?? 3;
     return rank(a) - rank(b);
   });
@@ -1019,6 +1451,11 @@ function cardsDePlanilha(workbook, XLSX) {
   });
   return gerados;
 }
+// Formato do Caderno (abas de cards + Escalonamento por ID) e, nas demais abas, o formato de suporte/brokers.
+function cardsDeWorkbook(wb, XLSX) {
+  const proprio = cardsFormatoCaderno(wb, XLSX);
+  return proprio.cards.concat(cardsDePlanilha(wb, XLSX, proprio.abasUsadas));
+}
 async function importarPlanilha(ev) {
   const f = ev.target.files && ev.target.files[0];
   if (!f) return;
@@ -1027,16 +1464,16 @@ async function importarPlanilha(ev) {
     const XLSX = await carregarXlsxLib();
     const buf = await f.arrayBuffer();
     const wb = XLSX.read(buf, { type: "array", cellStyles: true });
-    const lista = cardsDePlanilha(wb, XLSX);
+    const lista = cardsDeWorkbook(wb, XLSX);
     if (!lista.length) {
-      aviso("Nada importado", "Não encontrei abas/colunas reconhecíveis (Fornecedor, Aplicação, Contato…).");
+      aviso("Nada importado", "Não encontrei abas/colunas reconhecíveis (ID, Título, Aplicação… ou Fornecedor, Contato…).");
       return;
     }
     const res = mesclar(lista);
     save();
     aviso("Planilha importada", res.novos + " novo(s), " + res.atualizados + " atualizado(s). Senhas individuais já preenchidas neste aparelho não foram apagadas.");
   } catch (e) {
-    aviso("Falha na importação", "Não foi possível ler a planilha. Verifique se é .xlsx/.xls e se há internet na primeira vez (biblioteca SheetJS).");
+    aviso("Falha na importação", "Não foi possível ler a planilha. Verifique se o arquivo é .xlsx ou .xls.");
   } finally {
     ev.target.value = "";
   }
@@ -1097,14 +1534,19 @@ function renderEscEditor() {
       escDraft.splice(idx, 1);
       escDraft.forEach((x, i) => { if (!x.nivel) x.nivel = i + 1; });
       renderEscEditor();
-    }));
+    }, null, "Excluir este nível de escalonamento"));
 
-    row.appendChild(labN); row.appendChild(inpN);
-    row.appendChild(labC); row.appendChild(selC);
-    row.appendChild(labV); row.appendChild(inpV);
-    row.appendChild(labNome); row.appendChild(inpNome);
-    row.appendChild(labH); row.appendChild(inpH);
-    row.appendChild(labO); row.appendChild(inpO);
+    // Cada par rótulo+campo fica num .esc-campo: no celular vira "display:contents" (layout de 2 colunas como antes);
+    // em telas largas forma uma grade 2 por linha (Nível+Canal, Valor inteiro, Nome+Horário, Obs inteiro).
+    const campo = (lab, inp, cls) => { const d = el("div", "esc-campo" + (cls ? " " + cls : "")); d.appendChild(lab); d.appendChild(inp); return d; };
+    const uid = "esc" + idx + "-";
+    [[labN, inpN, "n"], [labC, selC, "c"], [labV, inpV, "v"], [labNome, inpNome, "nome"], [labH, inpH, "h"], [labO, inpO, "o"]].forEach(([l, i, k]) => { i.id = uid + k; l.setAttribute("id", uid + k + "-lab"); i.setAttribute("aria-labelledby", uid + k + "-lab"); });
+    row.appendChild(campo(labN, inpN, "esc-nivel-campo"));
+    row.appendChild(campo(labC, selC));
+    row.appendChild(campo(labV, inpV, "cheio"));
+    row.appendChild(campo(labNome, inpNome));
+    row.appendChild(campo(labH, inpH));
+    row.appendChild(campo(labO, inpO, "cheio"));
     row.appendChild(acoes);
     box.appendChild(row);
   });
@@ -1232,7 +1674,7 @@ document.addEventListener("keydown", (ev) => {
 });
 $("btnMenu").addEventListener("click", () => abrirSheet("drawer"));
 $("btnInfo").addEventListener("click", () => abrirSheet("sobre"));
-const ACOES = { novo: () => abrirFicha(null), exportar: exportarEquipe, backup: backupPessoal, importar: () => $("imp").click(), "importar-xls": escolherPlanilha, excel: exportarExcel, sair: sair, trocar: abrirTrocaSenha, tema: () => { const ks = Object.keys(TEMAS); definirTema(ks[(ks.indexOf(temaAtual()) + 1) % ks.length]); } };
+const ACOES = { novo: () => abrirFicha(null), exportar: exportarEquipe, backup: backupPessoal, importar: () => $("imp").click(), "importar-xls": escolherPlanilha, "excel-importar": exportarExcelImportar, "excel-consulta": exportarExcelConsulta, sair: sair, trocar: abrirTrocaSenha, tema: () => { const ks = Object.keys(TEMAS); definirTema(ks[(ks.indexOf(temaAtual()) + 1) % ks.length]); } };
 document.querySelectorAll(".dr-item").forEach((b) => b.addEventListener("click", () => { if (b.dataset.acao !== "tema") fecharSheet("drawer"); ACOES[b.dataset.acao](); }));
 $("selExcluir").addEventListener("click", () => excluir(selecionados()));
 $("selReativar").addEventListener("click", () => {
@@ -1247,7 +1689,7 @@ $("dNovo").addEventListener("click", () => abrirFicha(null));
 $("dExport").addEventListener("click", exportarEquipe);
 $("dImport").addEventListener("click", () => $("imp").click());
 if ($("dImportXls")) $("dImportXls").addEventListener("click", escolherPlanilha);
-$("dExcel").addEventListener("click", exportarExcel);
+ligarMenuExcel();
 $("imp").addEventListener("change", importarJson);
 if ($("impXls")) $("impXls").addEventListener("change", (ev) => { importarPlanilha(ev); });
 $("novo").addEventListener("click", () => abrirFicha(null));
@@ -1260,6 +1702,49 @@ document.querySelectorAll("#abas button").forEach((b) => {
   });
 });
 $("busca").addEventListener("input", render);
+/* ---------- Menu "Excel ▾" do topo ---------- */
+function ligarMenuExcel() {
+  const bt = $("dExcel"), menu = $("excelMenu");
+  if (!bt || !menu) return;
+  const itensMenu = () => Array.from(menu.querySelectorAll('[role="menuitem"]'));
+  const aberto = () => !menu.hidden;
+  function abrir(focarPrimeiro) {
+    menu.hidden = false;
+    bt.setAttribute("aria-expanded", "true");
+    bt.classList.add("on");
+    if (focarPrimeiro) setTimeout(() => { const l = itensMenu(); if (l[0]) l[0].focus(); }, 0);
+  }
+  function fechar(focarBotao) {
+    if (!aberto()) return;
+    menu.hidden = true;
+    bt.setAttribute("aria-expanded", "false");
+    bt.classList.remove("on");
+    if (focarBotao) bt.focus();
+  }
+  bt.addEventListener("click", (ev) => { ev.stopPropagation(); aberto() ? fechar(false) : abrir(ev.detail === 0); });
+  bt.addEventListener("keydown", (ev) => {
+    if (ev.key === "ArrowDown" || ev.key === "ArrowUp") { ev.preventDefault(); abrir(true); }
+  });
+  menu.addEventListener("keydown", (ev) => {
+    const l = itensMenu(), i = l.indexOf(document.activeElement);
+    if (ev.key === "ArrowDown") { ev.preventDefault(); l[(i + 1) % l.length].focus(); }
+    else if (ev.key === "ArrowUp") { ev.preventDefault(); l[(i - 1 + l.length) % l.length].focus(); }
+    else if (ev.key === "Home") { ev.preventDefault(); l[0].focus(); }
+    else if (ev.key === "End") { ev.preventDefault(); l[l.length - 1].focus(); }
+    else if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); fechar(true); }
+    else if (ev.key === "Tab") fechar(false);
+  });
+  menu.addEventListener("click", (ev) => {
+    const it = ev.target.closest('[role="menuitem"]');
+    if (!it) return;
+    fechar(true);
+    if (it.dataset.excel === "importar") exportarExcelImportar();
+    else if (it.dataset.excel === "consulta") exportarExcelConsulta();
+  });
+  document.addEventListener("click", (ev) => { if (!ev.target.closest("#excelDrop")) fechar(false); });
+  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && aberto()) fechar(true); }, true);
+  window.addEventListener("resize", () => fechar(false));
+}
 function sair() {
   sessionStorage.removeItem("caderno-acessos-sessao");
   location.reload();

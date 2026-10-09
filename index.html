@@ -31,20 +31,27 @@
 </section>
 <div id="app">
 <header class="topo">
-  <button type="button" class="ico-btn so-mobile" id="btnMenu" aria-label="Menu" data-ic="menu"></button>
+  <button type="button" class="ico-btn so-mobile" id="btnMenu" aria-label="Menu" title="Menu" data-ic="menu"></button>
   <div class="marca">
     <img src="icons/icon-192.png" alt="" class="logo so-desktop" width="32" height="32">
     <h1>Caderno de Acessos</h1>
     <span class="tag-off so-desktop">offline</span>
   </div>
   <div class="topo-acoes so-desktop">
-    <button type="button" class="tb-btn pri" id="dNovo"><span data-ic="plus"></span>Novo</button>
-    <button type="button" class="tb-btn" id="dExport">Exportar JSON</button>
-    <button type="button" class="tb-btn" id="dImport">Importar JSON</button>
-    <button type="button" class="tb-btn" id="dImportXls">Importar planilha</button>
-    <button type="button" class="tb-btn link" id="dExcel">Excel Interno/<br>Externo</button>
+    <button type="button" class="tb-btn pri" id="dNovo" title="Criar um novo acesso"><span data-ic="plus"></span>Novo</button>
+    <button type="button" class="tb-btn" id="dExport" title="Baixar o JSON da equipe (sem senhas individuais)">Exportar JSON</button>
+    <button type="button" class="tb-btn" id="dImport" title="Juntar os cards de um arquivo JSON">Importar JSON</button>
+    <button type="button" class="tb-btn" id="dImportXls" title="Importar cards de uma planilha Excel (.xlsx)">Importar planilha</button>
+    <div class="tb-drop" id="excelDrop">
+      <button type="button" class="tb-btn" id="dExcel" aria-haspopup="menu" aria-expanded="false" aria-controls="excelMenu" title="Exportar os cards para Excel">Excel<span class="tb-seta" aria-hidden="true">▾</span></button>
+      <div class="tb-menu" id="excelMenu" role="menu" aria-labelledby="dExcel" hidden>
+        <button type="button" class="tb-mi" role="menuitem" data-excel="importar" title="Planilha simples em abas, pronta para subir em “Importar planilha”"><span class="tb-mi-ic" data-ic="table"></span><span class="tb-mi-txt"><strong>Excel para importar</strong><small>Formato simples para importar no app</small></span></button>
+        <button type="button" class="tb-mi" role="menuitem" data-excel="consulta" title="Planilha com botões de navegação e escalonamento em blocos, só para ler"><span class="tb-mi-ic" data-ic="book"></span><span class="tb-mi-txt"><strong>Excel para consulta</strong><small>Com navegação e escalonamento, somente leitura</small></span></button>
+        <p class="tb-menu-nota" role="note">Senhas individuais saem em branco.</p>
+      </div>
+    </div>
   </div>
-  <button type="button" class="ico-btn" id="btnInfo" aria-label="Sobre" data-ic="info"></button>
+  <button type="button" class="ico-btn" id="btnInfo" aria-label="Sobre" title="Sobre o Caderno" data-ic="info"></button>
 </header>
 <nav class="abas" id="abas">
   <button type="button" data-aba="equipe" class="on">Equipe</button>
@@ -58,19 +65,21 @@
   <input id="busca" type="search" placeholder="Buscar acessos..." aria-label="Buscar acessos">
 </div>
 <main id="lista"></main>
-<button class="fab so-mobile" id="novo" type="button" aria-label="Novo acesso" data-ic="plus"></button>
+<button class="fab so-mobile" id="novo" type="button" aria-label="Novo acesso" title="Novo acesso" data-ic="plus"></button>
 <input type="file" id="imp" accept=".json,application/json" hidden>
 <input type="file" id="impXls" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden>
 
 <div class="drawer" id="drawer" aria-hidden="true">
   <div class="drawer-panel">
     <div class="drawer-topo"><strong>Caderno de Acessos</strong><button type="button" class="ico-btn escuro" data-fecha="drawer" aria-label="Fechar" data-ic="x"></button></div>
-    <button type="button" class="dr-item" data-acao="novo"><span data-ic="plus"></span>Novo acesso</button>
-    <button type="button" class="dr-item" data-acao="exportar"><span data-ic="download"></span>Exportar JSON (equipe)</button>
-    <button type="button" class="dr-item" data-acao="backup"><span data-ic="lock"></span>Backup pessoal (inclui minhas senhas)</button>
-    <button type="button" class="dr-item" data-acao="importar"><span data-ic="upload"></span>Importar JSON</button>
-    <button type="button" class="dr-item" data-acao="importar-xls"><span data-ic="table"></span>Importar planilha Excel</button>
-    <button type="button" class="dr-item" data-acao="excel"><span data-ic="table"></span>Excel Interno/Externo</button>
+    <button type="button" class="dr-item" data-acao="novo" title="Criar um novo acesso"><span data-ic="plus"></span>Novo acesso</button>
+    <button type="button" class="dr-item" data-acao="exportar" title="Baixar o JSON da equipe (sem senhas individuais)"><span data-ic="download"></span>Exportar JSON (equipe)</button>
+    <button type="button" class="dr-item" data-acao="backup" title="Arquivo completo com as suas senhas, só para você"><span data-ic="lock"></span>Backup pessoal (inclui minhas senhas)</button>
+    <button type="button" class="dr-item" data-acao="importar" title="Juntar os cards de um arquivo JSON"><span data-ic="upload"></span>Importar JSON</button>
+    <button type="button" class="dr-item" data-acao="importar-xls" title="Importar cards de uma planilha Excel (.xlsx)"><span data-ic="table"></span>Importar planilha Excel</button>
+    <button type="button" class="dr-item dr-sub" data-acao="excel-importar" title="Planilha simples em abas, pronta para subir em “Importar planilha”"><span data-ic="table"></span><span class="dr-txt">Excel para importar<small>Formato simples para importar no app</small></span></button>
+    <button type="button" class="dr-item dr-sub" data-acao="excel-consulta" title="Planilha com botões de navegação e escalonamento em blocos, só para ler"><span data-ic="book"></span><span class="dr-txt">Excel para consulta<small>Com navegação e escalonamento, somente leitura</small></span></button>
+    <p class="dr-nota">Senhas individuais saem em branco.</p>
     <button type="button" class="dr-item" data-acao="tema"><span data-ic="palette"></span>Tema: <span class="dr-tema">Claro</span></button>
     <button type="button" class="dr-item" data-acao="trocar"><span data-ic="lock"></span>Trocar senha</button>
     <button type="button" class="dr-item" data-acao="sair"><span data-ic="logout"></span>Sair (bloquear)</button>
@@ -114,7 +123,7 @@
         <div class="esc-edit" id="escEdit">
           <div class="esc-edit-topo">
             <strong>Escalonamento</strong>
-            <button type="button" class="btn pequeno" id="escAdd">+ Nível</button>
+            <button type="button" class="btn pequeno" id="escAdd" title="Adicionar um nível de contato">+ Nível</button>
           </div>
           <div id="escLista" class="esc-lista"></div>
           <p class="hint esc-hint">Níveis de contato (portal, e-mail, telefone). Dá para adicionar, editar ou excluir.</p>
@@ -126,8 +135,8 @@
       <p class="erro-form" id="erroForm" role="alert"></p>
     </div>
     <div class="panel-rodape">
-      <button type="button" class="btn" id="atualizarSenha"><span data-ic="refresh"></span>Atualizar senha</button>
-      <button type="submit" class="btn pri" id="salvar">Salvar</button>
+      <button type="button" class="btn" id="atualizarSenha" title="Salvar e marcar a senha como trocada hoje"><span data-ic="refresh"></span>Atualizar senha</button>
+      <button type="submit" class="btn pri" id="salvar" title="Salvar as alterações do acesso">Salvar</button>
     </div>
   </form>
 </div>
