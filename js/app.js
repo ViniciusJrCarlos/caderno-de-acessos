@@ -980,15 +980,31 @@ function montarPlanilhaConsulta(ExcelJS) {
   const abas = abasPlanilha();
   const COLS = [["Título", 30], ["Aplicação", 22], ["Cliente / operação", 24], ["Visibilidade", 12], ["URL", 38], ["Usuário", 18], ["Senha", 14], ["Ciclo", 9], ["Última troca", 13], ["Status", 12], ["Horário", 18], ["Observação", 34]];
   const PRIMEIRA = 3; // linha 1 = barra, linha 2 = cabeçalho
-  // Posições: card -> (aba, linha); bloco de escalonamento -> linha na aba Escalonamento
+  const ESC_ATIVOS = "Escalonamento", ESC_ARQ = "Escalonamento arquivados";
+  const colLetra = (n) => { let t = ""; while (n > 0) { const m = (n - 1) % 26; t = String.fromCharCode(65 + m) + t; n = Math.floor((n - 1) / 26); } return t; };
+  // Posições: card -> (aba, linha, nº de colunas) para o "◀ Voltar ao card" marcar a linha inteira
   const pos = {};
-  abas.forEach((a) => a.lista.forEach((it, i) => { pos[it.id] = { aba: a.nome, linha: PRIMEIRA + i }; }));
+  abas.forEach((a) => {
+    const ncols = COLS.length + (a.arquivo ? 1 : 0) + 1;
+    a.lista.forEach((it, i) => { pos[it.id] = { aba: a.nome, linha: PRIMEIRA + i, ref: "A" + (PRIMEIRA + i) + ":" + colLetra(ncols) + (PRIMEIRA + i) }; });
+  });
+  // Escalonamento separado: ativos na aba "Escalonamento", arquivados (fornecedores e ferramentas) em "Escalonamento arquivados"
   const comEsc = [];
   abas.forEach((a) => a.lista.forEach((it) => { const nv = niveisDe(it); if (nv.length) comEsc.push({ it: it, aba: a.nome, arquivo: a.arquivo, niveis: nv }); }));
+  const escAtivos = comEsc.filter((e) => !e.arquivo), escArq = comEsc.filter((e) => e.arquivo);
   const IDX = 4; // cabeçalho do índice
-  let r = IDX + 1 + comEsc.length + 2;
-  comEsc.forEach((e) => { e.linha = r; r += 3 + e.niveis.length + 1; });
-  const blocoDe = Object.fromEntries(comEsc.map((e) => [e.it.id, e.linha]));
+  const ESC_NCOLS = 6;
+  const blocoDe = {};
+  [[ESC_ATIVOS, escAtivos], [ESC_ARQ, escArq]].forEach(([nomeAba, grupo]) => {
+    let r = IDX + 1 + grupo.length + 2;
+    grupo.forEach((e) => {
+      e.linha = r;
+      e.abaEsc = nomeAba;
+      e.ref = "A" + r + ":" + colLetra(ESC_NCOLS) + (r + 2 + e.niveis.length); // bloco inteiro (título até o último nível)
+      blocoDe[e.it.id] = { aba: nomeAba, ref: e.ref };
+      r += 3 + e.niveis.length + 1;
+    });
+  });
 
   function topo(ws, titulo, ncols) {
     const c = ws.getCell("A1");
@@ -1033,7 +1049,8 @@ function montarPlanilhaConsulta(ExcelJS) {
     "Ferramentas arquivadas": "Ferramentas internas inativas, em cinza."
   };
   const navs = abas.map((a) => [a.nome, descAba[a.nome] + " (" + a.lista.length + " card" + (a.lista.length === 1 ? "" : "s") + ")"]);
-  navs.splice(2, 0, ["Escalonamento", "Contatos por fornecedor, em blocos: nível, canal, nome, contato e horário, com “◀ Voltar ao card”."]);
+  navs.splice(2, 0, [ESC_ATIVOS, "Contatos dos fornecedores e ferramentas ATIVOS, em blocos: nível, canal, nome, contato e horário, com índice no topo e “◀ Voltar ao card”."]);
+  if (escArq.length) navs.splice(3, 0, [ESC_ARQ, "Contatos dos fornecedores e ferramentas ARQUIVADOS (em cinza), separados dos ativos, com índice próprio no topo."]);
   navs.forEach(([nome, desc]) => {
     const c = linha("", desc, XL.navy);
     c.value = xlLinkInterno(nome, "A1", "▶  " + nome);
@@ -1043,8 +1060,9 @@ function montarPlanilhaConsulta(ExcelJS) {
   lr++;
   secao("Como navegar");
   linha("◀ Voltar ao Leia-me", "Em todas as abas, a célula azul no canto superior esquerdo volta para esta página.");
-  linha("Ver escalonamento ▶", "Na última coluna dos cards, leva direto ao bloco do fornecedor na aba Escalonamento. “sem escalonamento” = nada cadastrado.");
-  linha("◀ Voltar ao card", "No título de cada bloco de escalonamento, volta para a linha do card.");
+  linha("Ver escalonamento ▶", "Na última coluna dos cards, leva direto ao bloco do fornecedor e já deixa a área inteira selecionada. Cards ativos vão para a aba Escalonamento; cards arquivados vão para “Escalonamento arquivados”" + (escArq.length ? "" : " (nesta exportação nenhum arquivado tem escalonamento, então essa aba não foi gerada)") + ". “sem escalonamento” = nada cadastrado.");
+  linha("Índice", "Cada aba de escalonamento começa com um índice clicável dos fornecedores dela.");
+  linha("◀ Voltar ao card", "No título de cada bloco de escalonamento, volta para a linha do card (na aba de origem) e marca a linha.");
   linha("E-mail / Telefone / Portal", "E-mails abrem o programa de e-mail; telefones usam tel: (discador/Teams, se configurado); portais abrem no navegador.");
   lr++;
   secao("Legenda de cores");
@@ -1096,7 +1114,7 @@ function montarPlanilhaConsulta(ExcelJS) {
       const ce = row.getCell(cols.length);
       ce.alignment = { horizontal: "center", vertical: "top" };
       if (blocoDe[it.id]) {
-        ce.value = xlLinkInterno("Escalonamento", "A" + blocoDe[it.id], "Ver escalonamento ▶");
+        ce.value = xlLinkInterno(blocoDe[it.id].aba, blocoDe[it.id].ref, "Ver escalonamento ▶");
         ce.font = { bold: true, color: { argb: XL.link }, underline: true };
       } else {
         ce.value = "sem escalonamento";
@@ -1108,11 +1126,12 @@ function montarPlanilhaConsulta(ExcelJS) {
   }
   abas.filter((a) => !a.arquivo).forEach(abaCards);
 
-  // Escalonamento em blocos
-  const we = wb.addWorksheet("Escalonamento", { views: [{ state: "frozen", ySplit: 1 }], properties: { tabColor: { argb: XL.navy } } });
+  // Escalonamento em blocos (uma aba para ativos, outra para arquivados)
+  function abaEscalonamento(nomeAba, comEsc, arquivada) {
+  const we = wb.addWorksheet(nomeAba, { views: [{ state: "frozen", ySplit: 1 }], properties: { tabColor: { argb: arquivada ? "FF8C8C8C" : XL.navy } } });
   [10, 12, 26, 38, 18, 36].forEach((w, i) => { we.getColumn(i + 1).width = w; });
-  topo(we, "Escalonamento por fornecedor", 6);
-  we.getCell(IDX - 1, 1).value = comEsc.length ? "Índice (clique para ir ao bloco)" : "Nenhum card com escalonamento cadastrado.";
+  topo(we, arquivada ? "Escalonamento dos arquivados (fornecedores e ferramentas inativos)" : "Escalonamento por fornecedor (ativos)", 6);
+  we.getCell(IDX - 1, 1).value = comEsc.length ? "Índice (clique para ir ao bloco)" : "Nenhum card ativo com escalonamento cadastrado.";
   we.getCell(IDX - 1, 1).font = { bold: true, color: { argb: XL.navy } };
   if (comEsc.length) {
     const hi = we.getRow(IDX);
@@ -1124,9 +1143,9 @@ function montarPlanilhaConsulta(ExcelJS) {
     const row = we.getRow(IDX + 1 + i);
     row.getCell(1).value = e.niveis.length;
     row.getCell(2).value = e.aba;
-    row.getCell(3).value = xlLinkInterno("Escalonamento", "A" + e.linha, (e.it.titulo || e.it.aplicacao || "") + " ▶");
+    row.getCell(3).value = xlLinkInterno(nomeAba, e.ref, (e.it.titulo || e.it.aplicacao || "") + " ▶");
     row.getCell(4).value = [e.it.aplicacao, e.it.cliente].filter(Boolean).join(" · ");
-    for (let j = 1; j <= 4; j++) { const c = row.getCell(j); c.border = xlBorda(); c.alignment = { vertical: "top", wrapText: true }; if (i % 2) c.fill = xlFill(XL.zebra); }
+    for (let j = 1; j <= 4; j++) { const c = row.getCell(j); c.border = xlBorda(); c.alignment = { vertical: "top", wrapText: true }; if (arquivada) c.fill = xlFill(XL.cinza); else if (i % 2) c.fill = xlFill(XL.zebra); }
     row.getCell(1).alignment = { horizontal: "center", vertical: "top" };
     row.getCell(3).font = { bold: true, color: { argb: XL.link }, underline: true };
   });
@@ -1142,7 +1161,7 @@ function montarPlanilhaConsulta(ExcelJS) {
     we.mergeCells(r0, 5, r0, 6);
     const p = pos[it.id];
     const b = we.getCell(r0, 5);
-    b.value = xlLinkInterno(p.aba, "A" + p.linha, "◀ Voltar ao card");
+    b.value = xlLinkInterno(p.aba, p.ref, "◀ Voltar ao card");
     b.font = { bold: true, color: { argb: XL.branco }, underline: true };
     b.alignment = { horizontal: "center", vertical: "middle" };
     we.getRow(r0).height = 26;
@@ -1150,7 +1169,7 @@ function montarPlanilhaConsulta(ExcelJS) {
     const info = we.getCell(r0 + 1, 1);
     info.value = "Aba: " + p.aba + "   |   Horário de atendimento: " + (it.horario || "—") + "   |   URL: " + (it.url || "—");
     info.font = { italic: true, color: { argb: XL.navy } };
-    info.fill = xlFill(XL.info);
+    info.fill = xlFill(e.arquivo ? "FFEDEDED" : XL.info);
     info.alignment = { vertical: "top", wrapText: true };
     const sh = we.getRow(r0 + 2);
     SUBH.forEach((h, k) => {
@@ -1176,6 +1195,9 @@ function montarPlanilhaConsulta(ExcelJS) {
       }
     });
   });
+  }
+  abaEscalonamento(ESC_ATIVOS, escAtivos, false);
+  if (escArq.length) abaEscalonamento(ESC_ARQ, escArq, true);
   // Ordem das abas: Leia-me, ativos, Escalonamento, arquivados
   abas.filter((a) => a.arquivo).forEach(abaCards);
   // Impressão: paisagem, cabe na largura da página
