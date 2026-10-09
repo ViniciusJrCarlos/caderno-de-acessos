@@ -1,4 +1,4 @@
-const CACHE = "caderno-web-v18";
+const CACHE = "caderno-web-v19";
 const FILES = ["./", "./index.html", "./css/app.css", "./js/app.js", "./manifest.webmanifest", "./favicon.ico", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-maskable-192.png", "./icons/icon-maskable-512.png", "./icons/apple-touch-icon.png", "./js/vendor/xlsx.full.min.js", "./js/vendor/exceljs.min.js"];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)));
