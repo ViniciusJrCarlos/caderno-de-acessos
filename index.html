@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#1B365D">
-<script>(function(){try{var t=localStorage.getItem("caderno-tema");var c={claro:"#1B365D",escuro:"#0B1626",suave:"#2C4766"};if(!c[t])t="claro";document.documentElement.setAttribute("data-tema",t);document.querySelector('meta[name="theme-color"]').setAttribute("content",c[t]);}catch(e){}})();</script>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<script src="js/tema-init.js"></script>
 <title>Caderno de Acessos</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="favicon.ico" sizes="any">
@@ -25,7 +26,7 @@
     </span>
     <button type="submit" id="loginBtn">Abrir caderno</button>
     <p id="loginErro" class="login-erro" role="alert"></p>
-    <p class="login-rodape" id="loginRodape">Caderno de Acessos v1.7 · © Todos os direitos reservados · Desenv. WebDev</p>
+    <p class="login-rodape" id="loginRodape">Caderno de Acessos v1.8 · © Todos os direitos reservados · Desenv. WebDev</p>
     <p class="login-instalar" id="loginInstalarWrap" hidden><button type="button" class="link-instalar" id="btnInstalarApp">Instalar app</button></p>
   </form>
 </section>
@@ -58,6 +59,7 @@
   <button type="button" data-aba="meu">Meus</button>
   <button type="button" data-aba="vencendo">Vencendo <span class="cont" id="contVenc"></span></button>
   <button type="button" data-aba="arquivo">Arquivo</button>
+  <button type="button" data-aba="gerador">Gerador</button>
   <button type="button" data-aba="mais">Mais</button>
 </nav>
 <div class="busca-wrap" id="buscaWrap">
@@ -111,7 +113,7 @@
       <label>URL<input id="fUrl" type="url" placeholder="https://portal.exemplo.example" inputmode="url"></label>
       <label>Usuário<input id="fUsuario" placeholder="seuusuario@exemplo.example" autocomplete="off"></label>
       <label>Senha
-        <span class="senha-campo"><input id="fSenha" type="password" autocomplete="new-password"><button type="button" class="olho" id="fOlho" aria-label="Mostrar senha" data-ic="eye"></button></span>
+        <span class="senha-campo com-gerar"><input id="fSenha" type="password" autocomplete="new-password"><button type="button" class="gerar-in" id="fGerar" title="Gerar senha com as opções do Gerador" aria-label="Gerar senha">Gerar</button><button type="button" class="olho" id="fOlho" aria-label="Mostrar senha" data-ic="eye"></button></span>
       </label>
       <label>Ciclo (dias)
         <select id="fCiclo"><option>30</option><option>60</option><option>90</option><option>Nunca</option></select>
@@ -145,7 +147,7 @@
   <div class="panel pequeno">
     <div class="panel-topo"><h3>Sobre</h3><button type="button" class="ico-btn escuro" data-fecha="sobre" aria-label="Fechar" data-ic="x"></button></div>
     <div class="panel-corpo">
-      <p class="meta">Caderno de Acessos v1.7 · © Todos os direitos reservados · Desenv. WebDev</p>
+      <p class="meta">Caderno de Acessos v1.8 · © Todos os direitos reservados · Desenv. WebDev</p>
       <p class="meta">Funciona offline. Os cards ficam salvos só neste navegador, sem banco de dados.</p>
       <p class="meta">Acessos <strong>Individuais</strong>: usuário e senha nunca vão no "Exportar JSON" da equipe nem no Excel. Para levar as suas senhas para outro aparelho, use "Backup pessoal".</p>
     </div>
@@ -180,6 +182,7 @@
     <label>Confirmar nova
       <span class="senha-campo"><input id="tsConf" type="password" autocomplete="new-password" placeholder="Repita a nova senha"><button type="button" class="olho" data-alvo="tsConf" aria-label="Mostrar senha" data-ic="eye"></button></span>
     </label>
+    <p class="aviso-forte" id="tsAviso" hidden>Por segurança, troque a senha padrão antes de continuar. A senha padrão deixa de funcionar neste aparelho.</p>
     <p class="hint" id="tsRegras">A nova senha precisa ter: no mínimo 8 caracteres, 1 letra maiúscula, 1 número e 1 caractere especial.</p>
     <p class="erro-form" id="tsErro" role="alert"></p>
     <div class="dlg-botoes">

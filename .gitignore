@@ -1,0 +1,12 @@
+# Backups e exportações (podem conter senhas)
+*.json
+!package.json
+# Segredos / ambiente
+.env
+.env.*
+# Planilhas reais nunca vão para o repositório
+/private-planilha/
+*.real.xlsx
+# Sistema
+.DS_Store
+Thumbs.db

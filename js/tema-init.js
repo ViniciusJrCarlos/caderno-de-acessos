@@ -1,0 +1,1 @@
+(function(){try{var t=localStorage.getItem("caderno-tema");var c={claro:"#1B365D",escuro:"#0B1626",suave:"#2C4766"};if(!c[t])t="claro";document.documentElement.setAttribute("data-tema",t);document.querySelector('meta[name="theme-color"]').setAttribute("content",c[t]);}catch(e){}})();
