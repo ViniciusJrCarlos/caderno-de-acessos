@@ -391,3 +391,19 @@ body.selecionando .toast { bottom:130px; }
 body.travado.troca-obrig .login { display:none; }
 body.travado.troca-obrig #app { display:block; visibility:hidden; }
 body.travado.troca-obrig #dlgSenha { visibility:visible; }
+
+/* v1.9: arquivo da equipe */
+.sync-btn { background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25); color:var(--on-brand); border-radius:10px; display:inline-flex; align-items:center; gap:8px; padding:5px 10px; margin-left:auto; cursor:pointer; text-align:left; }
+.sync-btn:hover { background:rgba(255,255,255,.2); }
+.sync-btn[hidden] { display:none; }
+.sync-btn .sync-txt { display:flex; flex-direction:column; line-height:1.15; }
+.sync-btn strong { font-size:13px; }
+.sync-btn small { font-size:11px; opacity:.85; }
+.sync-btn.pendente { border-color:#F79009; box-shadow:0 0 0 2px rgba(247,144,9,.35); }
+.sync-btn + .ico-btn { margin-left:0; }
+.sync-nome { display:flex; gap:8px; flex-wrap:wrap; width:100%; }
+.sync-nome input { flex:1 1 180px; padding:9px 12px; border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--text); font-size:15px; }
+.historico .hist-lista { list-style:none; margin:8px 0 0; padding:0; display:flex; flex-direction:column; gap:6px; max-height:260px; overflow:auto; }
+.historico .hist-lista li { font-size:14px; color:var(--text); display:flex; gap:10px; }
+.historico .hist-quando { color:var(--muted); font-size:12px; min-width:72px; padding-top:2px; }
+@media (max-width:520px) { .sync-btn .sync-txt small { display:none; } }

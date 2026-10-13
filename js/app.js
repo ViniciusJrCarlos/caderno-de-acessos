@@ -105,10 +105,13 @@ function load() {
     mudou = true;
   });
   if (mudou) localStorage.setItem(KEY, JSON.stringify(itens));
+  if (window.CadernoSync && !syncMeta().marcas) carimbarMudancas();
 }
 function save() {
+  if (window.CadernoSync) carimbarMudancas();
   localStorage.setItem(KEY, JSON.stringify(itens));
   render();
+  if (window.CadernoSync) agendarSync();
 }
 
 /* ---------- Ícones SVG inline (funcionam offline) ---------- */
@@ -892,6 +895,215 @@ function renderGerador(box) {
   box.appendChild(c);
   desenhar(); atualizar();
 }
+
+/* ---------- Arquivo da equipe (sincronização via pasta do OneDrive) ---------- */
+const AUTOR_KEY = "caderno-acessos-autor";
+const SYNC_META_KEY = "caderno-acessos-sync-meta";
+const REMOVIDOS_KEY = "caderno-acessos-removidos";
+const HIST_KEY = "caderno-acessos-historico";
+const SYNC_ARQUIVO = "caderno-equipe.json";
+const syncAdaptador = window.CadernoSync ? window.CadernoSync.AdaptadorArquivo() : null; // trocável por um backend no futuro
+const syncEstado = { suportado: !!(syncAdaptador && syncAdaptador.suportado()), vinculado: false, nome: "", pendente: false, rodando: false, denovo: false };
+function adaptador() { return window.__syncAdaptadorTeste || syncAdaptador; }
+function autor() { return (localStorage.getItem(AUTOR_KEY) || "").trim(); }
+function lerJSON(k, pad) { try { const v = JSON.parse(localStorage.getItem(k) || "null"); return v == null ? pad : v; } catch (e) { return pad; } }
+function syncMeta() { return lerJSON(SYNC_META_KEY, { ultimaSync: "", marcas: null }); }
+function gravarMeta(m) { localStorage.setItem(SYNC_META_KEY, JSON.stringify(m)); }
+function removidosLocais() { return lerJSON(REMOVIDOS_KEY, []); }
+/* Mesma regra do JSON da equipe: só cards de Equipe; Individuais nunca saem. */
+function compartilhado(it) { return !!it && it.visibilidade !== "Individual"; }
+function itemParaEquipe(it) { return semSegredoIndividual(it); }
+function marcaDe(it) { return window.CadernoSync ? CadernoSync.semMeta(it) : JSON.stringify(it); }
+/* Chamada a cada save(): carimba updatedAt/updatedBy nos cards de equipe alterados e cria tombstones das exclusões. */
+function carimbarMudancas() {
+  const meta = syncMeta();
+  const novas = {};
+  itens.filter(compartilhado).forEach((it) => { novas[it.id] = marcaDe(it); });
+  if (!meta.marcas) { meta.marcas = novas; gravarMeta(meta); return false; }
+  const agora = new Date().toISOString(); const quem = autor();
+  let mudou = false;
+  itens.filter(compartilhado).forEach((it) => {
+    if (meta.marcas[it.id] !== novas[it.id]) { it.updatedAt = agora; it.updatedBy = quem; mudou = true; }
+  });
+  let rem = removidosLocais();
+  Object.keys(meta.marcas).forEach((id) => {
+    if (!(id in novas)) {
+      const antigo = itens.find((x) => x.id === id);
+      rem = rem.filter((t) => t.id !== id);
+      rem.push({ id: id, deletedAt: agora, deletedBy: quem, titulo: antigo ? nomeDe(antigo) : "" });
+      mudou = true;
+    }
+  });
+  const antes = rem.length;
+  rem = rem.filter((t) => !(t.id in novas) || CadernoSync.ts(t.deletedAt) >= CadernoSync.ts((itens.find((x) => x.id === t.id) || {}).updatedAt));
+  if (rem.length !== antes) mudou = true;
+  localStorage.setItem(REMOVIDOS_KEY, JSON.stringify(rem));
+  itens.filter(compartilhado).forEach((it) => { novas[it.id] = marcaDe(it); });
+  meta.marcas = novas; gravarMeta(meta);
+  return mudou;
+}
+function dataHoraBR(iso) {
+  const d = new Date(iso); if (isNaN(d)) return "";
+  const p = (n) => String(n).padStart(2, "0");
+  return p(d.getDate()) + "/" + p(d.getMonth() + 1) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+}
+function horaBR(iso) { const d = new Date(iso); return isNaN(d) ? "" : String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
+function textoMudanca(m) {
+  const nome = nomeDe(m.item);
+  const acao = { novo: "adicionado", atualizado: "atualizado", removido: "excluído" }[m.tipo] || "alterado";
+  return "Fornecedor " + nome + " " + acao + (m.por ? " por " + m.por : "") + (m.em && CadernoSync.ts(m.em) ? " em " + dataHoraBR(m.em) : "");
+}
+function registrarHistorico(textos) {
+  if (!textos.length) return;
+  const h = lerJSON(HIST_KEY, []);
+  const agora = new Date().toISOString();
+  textos.forEach((t) => h.unshift({ em: agora, texto: t }));
+  localStorage.setItem(HIST_KEY, JSON.stringify(h.slice(0, 60)));
+}
+async function atualizarEstadoSync() {
+  const a = adaptador();
+  syncEstado.suportado = !!(a && a.suportado());
+  syncEstado.vinculado = syncEstado.suportado ? await a.vinculado() : false;
+  syncEstado.nome = syncEstado.vinculado ? await a.nome() : "";
+  desenharBotaoSync();
+}
+function desenharBotaoSync() {
+  const b = $("btnSync"); if (!b) return;
+  b.hidden = !syncEstado.vinculado;
+  const ult = syncMeta().ultimaSync;
+  $("syncInfo").textContent = syncEstado.rodando ? "Sincronizando…" : syncEstado.pendente ? "Clique para sincronizar" : ult ? "Última sincronização " + horaBR(ult) : "Ainda não sincronizado";
+  b.classList.toggle("pendente", syncEstado.pendente);
+  b.title = syncEstado.nome ? "Sincronizar com " + syncEstado.nome : "Sincronizar";
+}
+let syncTimer = null;
+function agendarSync() {
+  if (!syncEstado.vinculado) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => sincronizar(false), 600);
+}
+/* Lê o arquivo, mescla card a card e grava de volta (ler → mesclar → gravar). */
+async function sincronizar(interativo) {
+  const a = adaptador();
+  if (!a || !syncEstado.vinculado || document.body.classList.contains("travado")) return false;
+  if (syncEstado.rodando) { syncEstado.denovo = true; return false; }
+  syncEstado.rodando = true; desenharBotaoSync();
+  try {
+    if (!(await a.permissao(!!interativo))) {
+      syncEstado.pendente = true;
+      if (interativo) toast("Sem permissão para o arquivo da equipe. Tente de novo e clique em “Permitir”.");
+      return false;
+    }
+    let remoto = await a.ler();
+    if (remoto && !CadernoSync.docValido(remoto)) { syncEstado.pendente = true; toast("O arquivo vinculado não é um arquivo da equipe do Caderno."); return false; }
+    carimbarMudancas();
+    const meta = syncMeta();
+    const r = CadernoSync.mesclar({ itens: itens.filter(compartilhado).map(itemParaEquipe), removidos: removidosLocais() }, remoto, meta.ultimaSync, chaveCard);
+    // aplica no aparelho: Individuais ficam intactos; cards de equipe passam a ser os do merge
+    const porId = new Map(r.itens.map((it) => [it.id, it]));
+    const locaisPorId = new Map(itens.map((it) => [it.id, it]));
+    const novaLista = [];
+    itens.forEach((it) => {
+      if (!compartilhado(it)) { if (!porId.has(it.id)) novaLista.push(it); return; }
+      if (porId.has(it.id)) { novaLista.push(porId.get(it.id)); porId.delete(it.id); }
+    });
+    porId.forEach((it) => { const l = locaisPorId.get(it.id); novaLista.push(l && !compartilhado(l) ? l : it); });
+    itens = novaLista;
+    localStorage.setItem(KEY, JSON.stringify(itens));
+    localStorage.setItem(REMOVIDOS_KEY, JSON.stringify(r.removidos));
+    const marcas = {}; itens.filter(compartilhado).forEach((it) => { marcas[it.id] = marcaDe(it); });
+    if (r.remotoPrecisa || !remoto) await a.gravar(CadernoSync.montarDoc(itens.map(itemParaEquipe), r.removidos, autor(), compartilhado));
+    gravarMeta({ ultimaSync: new Date().toISOString(), marcas: marcas });
+    syncEstado.pendente = false;
+    const textos = r.mudancasRemotas.map(textoMudanca);
+    r.conflitos.forEach((c) => textos.push("Conflito em " + nomeDe(c.remoto) + ": você e " + (c.remoto.updatedBy || "outra pessoa") + " alteraram desde a última sincronização. Ficou a versão mais recente" + (CadernoSync.ts(c.remoto.updatedAt) >= CadernoSync.ts(c.local.updatedAt) ? " (de " + (c.remoto.updatedBy || "outra pessoa") + ")." : " (a sua).")));
+    registrarHistorico(textos);
+    if (r.localMudou) render(); else if (aba === "mais") render();
+    if (r.conflitos.length) toast(textos[textos.length - 1]);
+    else if (textos.length === 1) toast(textos[0]);
+    else if (textos.length > 1) toast(textos.length + " alterações da equipe recebidas (veja o Histórico em Mais)");
+    else if (interativo) toast("Arquivo da equipe sincronizado");
+    return true;
+  } catch (e) {
+    syncEstado.pendente = true;
+    if (e && e.name === "NotFoundError") toast("Arquivo da equipe não encontrado. Vincule de novo em Mais.");
+    else toast("Não foi possível sincronizar agora (o arquivo pode estar em uso pelo OneDrive). Tente de novo.");
+    return false;
+  } finally {
+    syncEstado.rodando = false; desenharBotaoSync();
+    if (syncEstado.denovo) { syncEstado.denovo = false; agendarSync(); }
+  }
+}
+function exigirNome() {
+  if (autor()) return true;
+  toast("Informe seu nome antes (ele aparece nas alterações para a equipe)");
+  const i = $("syncNome"); if (i) i.focus();
+  return false;
+}
+async function criarArquivoEquipe() {
+  if (!exigirNome()) return;
+  try {
+    await adaptador().criar(SYNC_ARQUIVO);
+    // primeiro arquivo: carimba os cards de equipe ainda sem data
+    const agora = new Date().toISOString();
+    itens.filter(compartilhado).forEach((it) => { if (!it.updatedAt) { it.updatedAt = agora; it.updatedBy = autor(); } });
+    localStorage.setItem(KEY, JSON.stringify(itens));
+    const meta = syncMeta(); meta.ultimaSync = ""; gravarMeta(meta);
+    await adaptador().gravar(CadernoSync.montarDoc(itens.map(itemParaEquipe), removidosLocais(), autor(), compartilhado));
+    await atualizarEstadoSync();
+    await sincronizar(true);
+    toast("Arquivo da equipe criado. Avise a equipe para usar “Usar arquivo existente”.");
+  } catch (e) { if (!e || e.name !== "AbortError") toast("Não foi possível criar o arquivo."); }
+  if (aba === "mais") render();
+}
+async function usarArquivoEquipe() {
+  if (!exigirNome()) return;
+  try {
+    await adaptador().abrir();
+    const meta = syncMeta(); meta.ultimaSync = ""; gravarMeta(meta);
+    await atualizarEstadoSync();
+    await sincronizar(true);
+  } catch (e) { if (!e || e.name !== "AbortError") toast("Não foi possível abrir o arquivo."); }
+  if (aba === "mais") render();
+}
+async function desvincularArquivo() {
+  const ok = await dialogo({ titulo: "Desvincular o arquivo da equipe?", texto: "Os cards continuam neste aparelho. O arquivo na pasta não é apagado.", ok: "Desvincular", cancelar: "Cancelar" });
+  if (!ok) return;
+  await adaptador().desvincular();
+  syncEstado.pendente = false;
+  await atualizarEstadoSync();
+  render();
+  toast("Arquivo desvinculado");
+}
+function blocoArquivoEquipe(box, bloco) {
+  if (!syncEstado.suportado) {
+    bloco("Arquivo da equipe", "Este navegador não permite usar um arquivo da pasta sincronizada (comum no celular e no Firefox). Continue usando Exportar/Importar JSON normalmente.", []);
+    return;
+  }
+  const nome = el("input"); nome.type = "text"; nome.id = "syncNome"; nome.placeholder = "Seu nome"; nome.value = autor(); nome.maxLength = 40; nome.autocomplete = "name";
+  const salvarNome = btn("btn", "check", "Salvar nome", () => {
+    const v = nome.value.trim(); if (!v) { toast("Digite seu nome"); return; }
+    localStorage.setItem(AUTOR_KEY, v); toast("Nome salvo"); render();
+  });
+  const linhaNome = el("div", "sync-nome"); linhaNome.appendChild(nome); linhaNome.appendChild(salvarNome);
+  const botoes = syncEstado.vinculado
+    ? [btn("btn pri", "refresh", "Sincronizar agora", () => sincronizar(true)), btn("btn", "x", "Desvincular", desvincularArquivo)]
+    : [btn("btn pri", "download", "Criar arquivo da equipe", criarArquivoEquipe), btn("btn", "upload", "Usar arquivo existente", usarArquivoEquipe)];
+  const ult = syncMeta().ultimaSync;
+  bloco("Arquivo da equipe", syncEstado.vinculado
+    ? "Vinculado a: " + syncEstado.nome + (ult ? " · Última sincronização " + dataHoraBR(ult) : "") + ". Só cards de Equipe vão para o arquivo; cards Individuais e suas senhas nunca saem deste aparelho."
+    : "Use um arquivo na pasta do OneDrive (ex.: json-caderno-acessos) para a equipe trabalhar junto. Uma pessoa cria o arquivo; as outras usam o arquivo existente. Só cards de Equipe vão para o arquivo.",
+    [linhaNome].concat(botoes));
+  const h = lerJSON(HIST_KEY, []);
+  const c = el("article", "card painel-mais historico");
+  c.appendChild(el("h3", "", "Histórico"));
+  if (!h.length) c.appendChild(el("p", "meta", "Nenhuma alteração da equipe recebida ainda."));
+  else {
+    const ul = el("ul", "hist-lista");
+    h.slice(0, 20).forEach((x) => { const li = el("li"); li.appendChild(el("span", "hist-quando", dataHoraBR(x.em))); li.appendChild(el("span", "", x.texto)); ul.appendChild(li); });
+    c.appendChild(ul);
+  }
+  box.appendChild(c);
+}
 function renderMais(box) {
   const bloco = (titulo, texto, botoes) => {
     const c = el("article", "card painel-mais");
@@ -911,6 +1123,7 @@ function renderMais(box) {
     return b;
   });
   bloco("Tema", "Aparência só deste aparelho. Vale também para a tela de login.", bt);
+  blocoArquivoEquipe(box, bloco);
   bloco("Compartilhar com a equipe", "Gera o JSON para os outros analistas. Cards Individuais vão sem usuário e sem senha (só título, aplicação, cliente, URL etc.).",
     [btn("btn pri", "download", "Exportar JSON", exportarEquipe)]);
   bloco("Backup pessoal (inclui minhas senhas)", "Arquivo completo, com os usuários e senhas dos seus acessos Individuais. Use só para levar para outro aparelho seu. Não compartilhe.",
@@ -1865,6 +2078,8 @@ document.addEventListener("keydown", (ev) => {
 });
 $("btnMenu").addEventListener("click", () => abrirSheet("drawer"));
 $("btnInfo").addEventListener("click", () => abrirSheet("sobre"));
+$("btnSync").addEventListener("click", () => sincronizar(true));
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && syncEstado.vinculado) sincronizar(false); });
 const ACOES = { novo: () => abrirFicha(null), exportar: exportarEquipe, backup: backupPessoal, importar: () => $("imp").click(), "importar-xls": escolherPlanilha, "excel-importar": exportarExcelImportar, "excel-consulta": exportarExcelConsulta, sair: sair, trocar: abrirTrocaSenha, tema: () => { const ks = Object.keys(TEMAS); definirTema(ks[(ks.indexOf(temaAtual()) + 1) % ks.length]); } };
 document.querySelectorAll(".dr-item").forEach((b) => b.addEventListener("click", () => { if (b.dataset.acao !== "tema") fecharSheet("drawer"); ACOES[b.dataset.acao](); }));
 $("selExcluir").addEventListener("click", () => excluir(selecionados()));
@@ -2053,6 +2268,7 @@ function entrar() {
   if (typeof marcarAtividade === "function") marcarAtividade(true);
   load();
   render();
+  if (window.CadernoSync) atualizarEstadoSync().then(() => sincronizar(false));
 }
 function exigirTrocaSenha() {
   trocaObrigatoria = true;
