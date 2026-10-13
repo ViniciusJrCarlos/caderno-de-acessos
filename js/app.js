@@ -342,11 +342,36 @@ function definirTema(t) {
 }
 function copiar(texto, rotuloMsg) {
   if (!texto) { toast("Nada para copiar"); return; }
-  const ok = () => toast((rotuloMsg || "Senha") + " copiada");
+  const rot = rotuloMsg || "Senha";
+  const ok = () => {
+    if (rot === "Senha") { agendarLimparClipboard(texto); toast("Senha copiada · a área de transferência será limpa em " + (LIMPAR_CLIP_MS / 1000) + " s"); }
+    else toast(rot + " copiada");
+  };
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(texto).then(ok).catch(() => fallbackCopiar(texto) ? ok() : toast("Não foi possível copiar"));
   } else if (fallbackCopiar(texto)) ok();
   else toast("Não foi possível copiar");
+}
+const OCULTAR_MS = 10000;
+const LIMPAR_CLIP_MS = 30000;
+let clipTimer = null;
+function agendarLimparClipboard(valor) {
+  clearTimeout(clipTimer);
+  clipTimer = setTimeout(() => limparClipboard(valor), LIMPAR_CLIP_MS);
+}
+async function limparClipboard(valor) {
+  clipTimer = null;
+  const cb = navigator.clipboard;
+  try {
+    if (cb && cb.readText) {
+      const atual = await cb.readText();
+      if (atual !== valor) return; // usuário já copiou outra coisa
+    }
+  } catch (e) { /* leitura não permitida: limpa mesmo assim */ }
+  try {
+    if (cb && cb.writeText) { await cb.writeText(""); return; }
+  } catch (e) { /* sem foco/permissão */ }
+  fallbackCopiar(" ");
 }
 function fallbackCopiar(texto) {
   const ta = document.createElement("textarea");
@@ -357,9 +382,18 @@ function fallbackCopiar(texto) {
   ta.remove();
   return ok;
 }
+/* Só http/https (bloqueia javascript:, data: etc. vindos de JSON/Excel importado) */
+function urlSegura(url) {
+  const v = String(url || "").trim();
+  if (!v) return "";
+  if (/^https?:\/\//i.test(v)) return v;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(v) && !/^[^:\/]+:\d+(\/|$)/.test(v)) return "";
+  return "https://" + v;
+}
 function abrirUrl(url) {
   if (!url) { toast("Card sem URL"); return; }
-  const u = /^[a-z]+:\/\//i.test(url) ? url : "https://" + url;
+  const u = urlSegura(url);
+  if (!u) { toast("URL inválida (use http:// ou https://)"); return; }
   window.open(u, "_blank", "noopener");
 }
 function diasRestantes(it) {
@@ -499,7 +533,7 @@ function hrefEsc(nivel) {
   if (!v) return "";
   if (nivel.canal === "email" || /^[\w.+-]+@[\w.-]+\.\w+$/.test(v)) return "mailto:" + v;
   if (nivel.canal === "telefone" || /^[\d\s()+.-]{8,}$/.test(v)) return "tel:" + v.replace(/[^\d+]/g, "");
-  if (nivel.canal === "portal" || /^https?:\/\//i.test(v) || /\./.test(v)) return /^[a-z]+:\/\//i.test(v) ? v : "https://" + v;
+  if (nivel.canal === "portal" || /^https?:\/\//i.test(v) || /\./.test(v)) return urlSegura(v);
   return "";
 }
 
@@ -578,6 +612,8 @@ function linhaSecreta(rotulo, valor, card, tipo) {
       olho.innerHTML = svg(ver ? "eyeOff" : "eye", 18);
       olho.setAttribute("aria-label", (ver ? "Ocultar " : "Mostrar ") + rotulo.toLowerCase());
       olho.title = olho.getAttribute("aria-label");
+      clearTimeout(alternar._t);
+      if (ver) alternar._t = setTimeout(() => { if (val.classList.contains("aberto")) alternar(false); }, OCULTAR_MS);
     }
     row.appendChild(olho);
     card._alternadores = (card._alternadores || []).concat([alternar]);
@@ -631,7 +667,8 @@ function cardDe(it) {
   lu.appendChild(el("span", "linha-rot", "URL"));
   if (it.url) {
     const a = el("a", "linha-val url", it.url.replace(/^https?:\/\//, ""));
-    a.href = /^[a-z]+:\/\//i.test(it.url) ? it.url : "https://" + it.url;
+    const hu = urlSegura(it.url);
+    if (hu) a.href = hu;
     a.target = "_blank"; a.rel = "noopener";
     lu.appendChild(a);
     lu.appendChild(btn("olho", "external", "", () => abrirUrl(it.url), "Abrir URL"));
@@ -699,6 +736,11 @@ function cardDe(it) {
     bMostrar.querySelector("span").textContent = abrir ? "Ocultar" : "Mostrar";
     bMostrar.title = abrir ? "Ocultar usuário e senha" : "Mostrar usuário e senha";
     bMostrar.querySelector("svg").outerHTML = svg(abrir ? "eyeOff" : "eye", 18);
+    clearTimeout(c._ocultarT);
+    if (abrir) {
+      c._ocultarT = setTimeout(() => { if (c.classList.contains("revelado")) bMostrar.click(); }, OCULTAR_MS);
+      toast("A senha será ocultada em " + (OCULTAR_MS / 1000) + " s");
+    }
   }, null, "Mostrar usuário e senha");
   if (!it.senha && !it.usuario) bMostrar.disabled = true;
   acoes.appendChild(bMostrar);
@@ -745,7 +787,7 @@ function renderMais(box) {
     const b = btn("btn tema-op" + (k === tema ? " on" : ""), null, TEMAS[k].nome, () => definirTema(k));
     b.dataset.tema = k;
     b.setAttribute("aria-pressed", k === tema ? "true" : "false");
-    b.insertAdjacentHTML("afterbegin", '<span class="amostra amostra-' + k + '"></span>');
+    b.insertAdjacentHTML("afterbegin", '<span class="amostra amostra-' + String(k).replace(/[^\w-]/g, "") + '"></span>');
     return b;
   });
   bloco("Tema", "Aparência só deste aparelho. Vale também para a tela de login.", bt);
@@ -759,6 +801,13 @@ function renderMais(box) {
   bloco("Planilha Excel", "“Excel para importar”: formato simples em abas (externos, internos, arquivados e escalonamento), para subir em “Importar planilha”. “Excel para consulta”: com navegação e escalonamento em blocos, somente leitura. Senhas individuais saem em branco.",
     [btn("btn", "table", "Excel para importar", exportarExcelImportar, null, "Formato simples para importar no app"),
      btn("btn", "book", "Excel para consulta", exportarExcelConsulta, null, "Com navegação e escalonamento, somente leitura")]);
+  const minAtual = minutosBloqueio();
+  const bb = BLOQ_OPCOES.map((n) => {
+    const b = btn("btn tema-op" + (n === minAtual ? " on" : ""), null, n ? n + " min" : "Nunca", () => definirBloqueio(n));
+    b.setAttribute("aria-pressed", n === minAtual ? "true" : "false");
+    return b;
+  });
+  bloco("Bloqueio automático", "Volta para a tela de login depois de um tempo sem uso. Vale só para este aparelho.", bb);
   bloco("Senha deste aparelho", "Altera a senha de acesso salva só neste navegador. Outros aparelhos continuam com a senha padrão até alguém trocar lá também.",
     [btn("btn", "lock", "Trocar senha", abrirTrocaSenha)]);
   bloco("Offline e instalação", "Abra o link no Chrome uma vez com internet (fora da VPN) e use “Instalar app”. Depois funciona sem internet; quando houver internet, a versão nova chega sozinha.",
@@ -1771,6 +1820,54 @@ function sair() {
   sessionStorage.removeItem("caderno-acessos-sessao");
   location.reload();
 }
+
+/* ---------- Bloqueio automático por inatividade ---------- */
+const BLOQ_KEY = "caderno-acessos-bloqueio-min";
+const BLOQ_OPCOES = [1, 5, 10, 15, 30, 0]; // 0 = Nunca
+const ATIVIDADE_KEY = "caderno-acessos-ultima-atividade";
+function minutosBloqueio() {
+  const v = localStorage.getItem(BLOQ_KEY);
+  if (v == null) return 5;
+  const n = parseInt(v, 10);
+  return BLOQ_OPCOES.includes(n) ? n : 5;
+}
+function definirBloqueio(n) {
+  localStorage.setItem(BLOQ_KEY, String(n));
+  marcarAtividade(true);
+  toast(n ? "Bloqueio automático: " + n + " min" : "Bloqueio automático desativado");
+  if (aba === "mais") render();
+}
+let ultimaAtividade = Date.now();
+function marcarAtividade(forcar) {
+  const agora = Date.now();
+  if (!forcar && agora - ultimaAtividade < 1000) return;
+  ultimaAtividade = agora;
+  try { sessionStorage.setItem(ATIVIDADE_KEY, String(agora)); } catch (e) {}
+}
+function verificarInatividade() {
+  if (document.body.classList.contains("travado")) return;
+  const min = minutosBloqueio();
+  if (!min) return;
+  if (Date.now() - ultimaAtividade >= min * 60000) {
+    try { sessionStorage.setItem("caderno-acessos-bloqueado-auto", "1"); } catch (e) {}
+    sair();
+  }
+}
+(function iniciarBloqueioAuto() {
+  const salvo = parseInt(sessionStorage.getItem(ATIVIDADE_KEY) || "", 10);
+  if (salvo) ultimaAtividade = salvo;
+  verificarInatividade();
+  ["pointerdown", "keydown", "touchstart", "wheel", "scroll", "input"].forEach((ev) =>
+    document.addEventListener(ev, () => marcarAtividade(), { passive: true, capture: true }));
+  setInterval(verificarInatividade, 15000);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") verificarInatividade(); });
+  window.addEventListener("focus", verificarInatividade);
+  window.addEventListener("pageshow", verificarInatividade);
+  if (sessionStorage.getItem("caderno-acessos-bloqueado-auto")) {
+    sessionStorage.removeItem("caderno-acessos-bloqueado-auto");
+    setTimeout(() => toast("Bloqueado por inatividade. Entre novamente."), 300);
+  }
+})();
 aplicarTema(temaAtual());
 aplicarIcones();
 if ("serviceWorker" in navigator) {
@@ -1822,6 +1919,7 @@ function tokenSessao() { return loginAtivo().hash.slice(0, 16); }
 function abrirSessao() { sessionStorage.setItem(SESSAO, tokenSessao()); }
 function entrar() {
   document.body.classList.remove("travado");
+  if (typeof marcarAtividade === "function") marcarAtividade(true);
   load();
   render();
 }
