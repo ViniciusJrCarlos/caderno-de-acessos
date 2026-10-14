@@ -407,3 +407,16 @@ body.travado.troca-obrig #dlgSenha { visibility:visible; }
 .historico .hist-lista li { font-size:14px; color:var(--text); display:flex; gap:10px; }
 .historico .hist-quando { color:var(--muted); font-size:12px; min-width:72px; padding-top:2px; }
 @media (max-width:520px) { .sync-btn .sync-txt small { display:none; } }
+
+/* v1.9.3: Novidades */
+#dlgNovidades.on { align-items:center; justify-content:center; padding:20px; z-index:14; }
+.nv-box { max-height:min(92vh, 640px); overflow:auto; }
+.nv-box .nv-d { color:var(--muted); font-size:13px; margin-bottom:12px; }
+.nv-box ul, .nv-l ul { margin:0 0 10px; padding-left:20px; line-height:1.5; font-size:14px; color:var(--text2); }
+.nv-f { background:var(--info-bg); color:var(--info); border-radius:8px; padding:8px 10px; font-size:13px; margin-bottom:12px; }
+.nv-box .nv-ok { width:100%; padding:12px; font-size:15px; }
+.nv-l { border-top:1px solid var(--line2); padding-top:10px; margin-top:10px; }
+.nv-l:first-of-type { border:0; margin-top:0; }
+.nv-v { font-weight:700; color:var(--head); font-size:14px; }
+.nv-v small { color:var(--muted); font-weight:400; }
+.nv-novo { background:var(--teal); color:#fff; font-size:11px; padding:1px 7px; border-radius:99px; margin-left:6px; }

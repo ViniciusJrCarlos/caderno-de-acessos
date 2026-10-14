@@ -1221,6 +1221,7 @@ function renderMais(box) {
     b.insertAdjacentHTML("afterbegin", '<span class="amostra amostra-' + String(k).replace(/[^\w-]/g, "") + '"></span>');
     return b;
   });
+  blocoNovidades(box);
   bloco("Tema", "Aparência só deste aparelho. Vale também para a tela de login.", bt);
   blocoArquivoEquipe(box, bloco);
   bloco("Compartilhar com a equipe", "Gera o JSON para os outros analistas. Cards Individuais vão sem usuário e sem senha (só título, aplicação, cliente, URL etc.).",
@@ -1244,6 +1245,56 @@ function renderMais(box) {
     [btn("btn", "lock", "Trocar senha", abrirTrocaSenha)]);
   bloco("Offline e instalação", "Abra o link no Chrome uma vez com internet (fora da VPN) e use “Instalar app”. Depois funciona sem internet; quando houver internet, a versão nova chega sozinha.",
     [btn("btn", "logout", "Sair (bloquear)", sair)]);
+}
+
+/* ---------- v1.9.3: Novidades (texto vai junto com o app; mais recente primeiro) ---------- */
+const APP_VERSAO = "1.9.3";
+const NOVIDADES_VISTA = "caderno-novidades-vista";
+const NOVIDADES = [
+  { v: "1.9.3", data: "14/10/2026", itens: ["Agora, sempre que o app for atualizado, aparece esta tela uma vez com as novidades.", "Em Mais, a lista “Últimas novidades” guarda o que mudou nas versões recentes."] },
+  { v: "1.9.2", data: "14/10/2026", itens: ["Novos analistas começam com apenas 1 card de exemplo, que pode ser apagado.", "A exportação e importação do Excel usam só arquivos do próprio app, sem depender da internet."] },
+  { v: "1.9.1", data: "14/10/2026", itens: ["Corrige as cópias duplicadas que apareciam na sincronização.", "Agora você vincula a pasta inteira da equipe, e não um arquivo só.", "Novo “Log de erros” em Mais para ver falhas de sincronização."], fazer: "Vincule a pasta da equipe uma vez, em Mais › Arquivo da equipe." }
+];
+function novidadesItens(n, box) {
+  const ul = el("ul", "");
+  n.itens.forEach((t) => ul.appendChild(el("li", "", t)));
+  box.appendChild(ul);
+  if (n.fazer) {
+    const f = el("div", "nv-f");
+    f.appendChild(el("b", "", "O que fazer: "));
+    f.appendChild(document.createTextNode(n.fazer));
+    box.appendChild(f);
+  }
+}
+function blocoNovidades(box) {
+  const c = el("article", "card painel-mais nv-lista");
+  c.appendChild(el("h3", "", "Últimas novidades"));
+  NOVIDADES.slice(0, 3).forEach((n, i) => {
+    const d = el("div", "nv-l");
+    const t = el("div", "nv-v", "v" + n.v + " ");
+    t.appendChild(el("small", "", "· " + n.data));
+    if (i === 0) t.appendChild(el("span", "nv-novo", "novo"));
+    d.appendChild(t);
+    novidadesItens(n, d);
+    c.appendChild(d);
+  });
+  box.appendChild(c);
+}
+function mostrarNovidadesSePendente() {
+  let vista = null;
+  try { vista = localStorage.getItem(NOVIDADES_VISTA); } catch (e) {}
+  if (vista === APP_VERSAO) return;
+  if (trocaObrigatoria || document.body.classList.contains("travado")) return;
+  if ($("dlgInstalar").classList.contains("on") || $("dlgSenha").classList.contains("on")) return;
+  const n = NOVIDADES[0];
+  $("nvTitulo").textContent = "Novidades da v" + n.v;
+  $("nvData").textContent = n.data;
+  const corpo = $("nvCorpo");
+  corpo.textContent = "";
+  novidadesItens(n, corpo);
+  try { localStorage.setItem(NOVIDADES_VISTA, APP_VERSAO); } catch (e) {}
+  abrirSheet("dlgNovidades");
+  setTimeout(() => $("nvEntendi").focus(), 40);
 }
 
 /* ---------- Exportar / importar ---------- */
@@ -2367,6 +2418,7 @@ function entrar() {
   load();
   render();
   if (window.CadernoSync) atualizarEstadoSync().then(() => { sincronizar(false); sugerirPasta(); });
+  setTimeout(mostrarNovidadesSePendente, 500);
 }
 function exigirTrocaSenha() {
   trocaObrigatoria = true;
@@ -2467,6 +2519,7 @@ $("dlgSenha").addEventListener("click", (ev) => { if (ev.target === $("dlgSenha"
 document.querySelectorAll(".olho[data-alvo]").forEach(ligarOlho);
 aplicarIcones(document.getElementById("login"));
 aplicarIcones(document.getElementById("dlgSenha"));
+$("nvEntendi").addEventListener("click", () => fecharSheet("dlgNovidades"));
 if (sessionStorage.getItem(SESSAO) === tokenSessao()) entrar();
 else document.getElementById("loginSenha").focus();
 
@@ -2516,6 +2569,7 @@ function fecharInstalar(marcar) {
   fecharSheet("dlgInstalar");
   mostrarTelaInstalar(1);
   atualizarLinkInstalar();
+  if (!document.body.classList.contains("travado")) setTimeout(mostrarNovidadesSePendente, 300);
 }
 function abrirInstalar(forcar) {
   if (appJaInstalado()) { atualizarLinkInstalar(); return; }

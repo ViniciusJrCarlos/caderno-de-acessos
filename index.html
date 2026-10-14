@@ -26,7 +26,7 @@
     </span>
     <button type="submit" id="loginBtn">Abrir caderno</button>
     <p id="loginErro" class="login-erro" role="alert"></p>
-    <p class="login-rodape" id="loginRodape">Caderno de Acessos v1.9.2 · © Todos os direitos reservados · Desenv. WebDev</p>
+    <p class="login-rodape" id="loginRodape">Caderno de Acessos v1.9.3 · © Todos os direitos reservados · Desenv. WebDev</p>
     <p class="login-instalar" id="loginInstalarWrap" hidden><button type="button" class="link-instalar" id="btnInstalarApp">Instalar app</button></p>
   </form>
 </section>
@@ -148,7 +148,7 @@
   <div class="panel pequeno">
     <div class="panel-topo"><h3>Sobre</h3><button type="button" class="ico-btn escuro" data-fecha="sobre" aria-label="Fechar" data-ic="x"></button></div>
     <div class="panel-corpo">
-      <p class="meta">Caderno de Acessos v1.9.2 · © Todos os direitos reservados · Desenv. WebDev</p>
+      <p class="meta">Caderno de Acessos v1.9.3 · © Todos os direitos reservados · Desenv. WebDev</p>
       <p class="meta">Funciona offline. Os cards ficam salvos só neste navegador, sem banco de dados.</p>
       <p class="meta">Acessos <strong>Individuais</strong>: usuário e senha nunca vão no "Exportar JSON" da equipe nem no Excel. Para levar as suas senhas para outro aparelho, use "Backup pessoal".</p>
     </div>
@@ -191,6 +191,14 @@
       <button type="submit" class="btn pri" id="tsSalvar">Salvar</button>
     </div>
   </form>
+</div>
+<div class="sheet dlg-wrap" id="dlgNovidades" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="nvTitulo">
+  <div class="dlg nv-box">
+    <h3 id="nvTitulo">Novidades</h3>
+    <div class="nv-d" id="nvData"></div>
+    <div id="nvCorpo"></div>
+    <button type="button" class="btn pri nv-ok" id="nvEntendi">Entendi</button>
+  </div>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </div>
