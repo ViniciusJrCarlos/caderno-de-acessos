@@ -902,9 +902,15 @@ const SYNC_META_KEY = "caderno-acessos-sync-meta";
 const REMOVIDOS_KEY = "caderno-acessos-removidos";
 const HIST_KEY = "caderno-acessos-historico";
 const SYNC_ARQUIVO = "caderno-equipe.json";
-const syncAdaptador = window.CadernoSync ? window.CadernoSync.AdaptadorArquivo() : null; // trocável por um backend no futuro
-const syncEstado = { suportado: !!(syncAdaptador && syncAdaptador.suportado()), vinculado: false, nome: "", pendente: false, rodando: false, denovo: false };
-function adaptador() { return window.__syncAdaptadorTeste || syncAdaptador; }
+const LOGERR_KEY = "caderno-acessos-log-erros";
+const MIGRAR_KEY = "caderno-acessos-aviso-pasta";
+// Adaptadores trocáveis (no futuro, um servidor pode entrar no lugar)
+const syncPasta = window.CadernoSync ? CadernoSync.AdaptadorPasta() : null;
+const syncArquivo = window.CadernoSync ? CadernoSync.AdaptadorArquivo() : null;
+const syncFila = window.CadernoSync ? CadernoSync.Fila() : null;
+const syncEstado = { suportado: false, pastaSuportada: false, vinculado: false, modo: "", nome: "", pendente: false, rodando: false, agendado: false, acoes: [] };
+let syncAtivo = null;
+function adaptador() { return window.__syncAdaptadorTeste || syncAtivo; }
 function autor() { return (localStorage.getItem(AUTOR_KEY) || "").trim(); }
 function lerJSON(k, pad) { try { const v = JSON.parse(localStorage.getItem(k) || "null"); return v == null ? pad : v; } catch (e) { return pad; } }
 function syncMeta() { return lerJSON(SYNC_META_KEY, { ultimaSync: "", marcas: null }); }
@@ -923,14 +929,20 @@ function carimbarMudancas() {
   const agora = new Date().toISOString(); const quem = autor();
   let mudou = false;
   itens.filter(compartilhado).forEach((it) => {
-    if (meta.marcas[it.id] !== novas[it.id]) { it.updatedAt = agora; it.updatedBy = quem; mudou = true; }
+    if (meta.marcas[it.id] !== novas[it.id]) {
+      const antes = meta.marcas[it.id] ? JSON.parse(meta.marcas[it.id]) : null;
+      registrarAcao(!antes ? "novo card" : (!antes.arquivado_em && it.arquivado_em) ? "arquivar" : (antes.arquivado_em && !it.arquivado_em) ? "reativar" : antes.senha !== it.senha ? "atualizar senha" : "salvar", nomeDe(it));
+      it.updatedAt = agora; it.updatedBy = quem; mudou = true;
+    }
   });
   let rem = removidosLocais();
   Object.keys(meta.marcas).forEach((id) => {
     if (!(id in novas)) {
       const antigo = itens.find((x) => x.id === id);
       rem = rem.filter((t) => t.id !== id);
-      rem.push({ id: id, deletedAt: agora, deletedBy: quem, titulo: antigo ? nomeDe(antigo) : "" });
+      let titulo = antigo ? nomeDe(antigo) : ""; try { if (!titulo) titulo = nomeDe(JSON.parse(meta.marcas[id])); } catch (e) {}
+      registrarAcao("excluir", titulo);
+      rem.push({ id: id, deletedAt: agora, deletedBy: quem, titulo: titulo });
       mudou = true;
     }
   });
@@ -960,10 +972,36 @@ function registrarHistorico(textos) {
   textos.forEach((t) => h.unshift({ em: agora, texto: t }));
   localStorage.setItem(HIST_KEY, JSON.stringify(h.slice(0, 60)));
 }
+function registrarAcao(acao, card) { syncEstado.acoes.push({ acao: acao, card: card }); if (syncEstado.acoes.length > 20) syncEstado.acoes.shift(); }
+function descreverErro(e) {
+  const n = e && e.name;
+  if (n === "NotAllowedError" || n === "SecurityError") return "Sem permissão para a pasta/arquivo da equipe. Clique em Sincronizar e escolha “Permitir”.";
+  if (n === "NotFoundError") return "O arquivo da equipe não foi encontrado (pasta movida ou renomeada). Vincule de novo em Mais.";
+  if (n === "VerificacaoFalhou") return "Outra pessoa gravou ao mesmo tempo. Tentei de novo e não consegui; clique em Sincronizar em instantes.";
+  if (n === "SyntaxError") return "O arquivo da equipe está incompleto (o OneDrive ainda está baixando). Aguarde e clique em Sincronizar.";
+  if (n === "NotReadableError" || n === "NoModificationAllowedError" || n === "InvalidStateError" || n === "InvalidModificationError") return "O arquivo da equipe está em uso pelo OneDrive. Aguarde alguns segundos e clique em Sincronizar.";
+  return "Não foi possível sincronizar agora" + (e && e.message ? " (" + e.message + ")" : "") + ".";
+}
+/* Log de erros: no aparelho (Mais → Log de erros) e, com a pasta vinculada, em caderno-equipe-log.csv. Nunca inclui senhas. */
+async function registrarErro(acao, card, e, a) {
+  const campos = [new Date().toISOString(), autor() || "(sem nome)", acao, card || "", ((e && e.name) || "Erro") + ": " + String((e && e.message) || "").slice(0, 200)];
+  const l = lerJSON(LOGERR_KEY, []); l.unshift(campos); localStorage.setItem(LOGERR_KEY, JSON.stringify(l.slice(0, 100)));
+  const linha = [new Date().toLocaleString("pt-BR")].concat(campos.slice(1));
+  try { if (a && a.registrarLog) await CadernoSync.comRetentativa(() => a.registrarLog(linha), { tentativas: 3, atrasos: [400, 900] }); } catch (x) { /* log em arquivo é melhor esforço */ }
+}
+async function escolherAdaptador() {
+  if (window.__syncAdaptadorTeste) return window.__syncAdaptadorTeste;
+  if (syncPasta && syncPasta.suportado() && await syncPasta.vinculado()) return syncPasta;
+  if (syncArquivo && syncArquivo.suportado() && await syncArquivo.vinculado()) return syncArquivo;
+  return null;
+}
 async function atualizarEstadoSync() {
+  syncEstado.pastaSuportada = !!(syncPasta && syncPasta.suportado()) || !!(window.__syncAdaptadorTeste && window.__syncAdaptadorTeste.modo === "pasta");
+  syncEstado.suportado = syncEstado.pastaSuportada || !!(syncArquivo && syncArquivo.suportado()) || !!window.__syncAdaptadorTeste;
+  syncAtivo = await escolherAdaptador();
   const a = adaptador();
-  syncEstado.suportado = !!(a && a.suportado());
-  syncEstado.vinculado = syncEstado.suportado ? await a.vinculado() : false;
+  syncEstado.vinculado = !!(a && await a.vinculado());
+  syncEstado.modo = syncEstado.vinculado ? a.modo : "";
   syncEstado.nome = syncEstado.vinculado ? await a.nome() : "";
   desenharBotaoSync();
 }
@@ -976,62 +1014,101 @@ function desenharBotaoSync() {
   b.title = syncEstado.nome ? "Sincronizar com " + syncEstado.nome : "Sincronizar";
 }
 let syncTimer = null;
+/* Várias gravações seguidas viram uma só (espera 1,5 s sem novas alterações). */
 function agendarSync() {
   if (!syncEstado.vinculado) return;
   clearTimeout(syncTimer);
-  syncTimer = setTimeout(() => sincronizar(false), 600);
+  syncTimer = setTimeout(() => sincronizar(false), 1500);
 }
-/* Lê o arquivo, mescla card a card e grava de volta (ler → mesclar → gravar). */
-async function sincronizar(interativo) {
+/* Tudo passa pela fila: nunca duas sincronizações ao mesmo tempo nesta aba. Pedidos repetidos enquanto uma roda viram um só. */
+function sincronizar(interativo) {
+  if (!window.CadernoSync) return Promise.resolve(false);
+  if (syncEstado.agendado && !interativo) return syncEstado.agendado;
+  const p = syncFila.rodar(() => { syncEstado.agendado = null; return sincronizarAgora(interativo); });
+  syncEstado.agendado = p;
+  return p;
+}
+async function sincronizarAgora(interativo) {
   const a = adaptador();
   if (!a || !syncEstado.vinculado || document.body.classList.contains("travado")) return false;
-  if (syncEstado.rodando) { syncEstado.denovo = true; return false; }
   syncEstado.rodando = true; desenharBotaoSync();
+  const acoes = syncEstado.acoes.splice(0);
   try {
     if (!(await a.permissao(!!interativo))) {
-      syncEstado.pendente = true;
-      if (interativo) toast("Sem permissão para o arquivo da equipe. Tente de novo e clique em “Permitir”.");
+      syncEstado.pendente = true; syncEstado.acoes = acoes.concat(syncEstado.acoes);
+      if (interativo) toast("Sem permissão para a pasta da equipe. Clique em Sincronizar e escolha “Permitir”.");
       return false;
     }
-    let remoto = await a.ler();
-    if (remoto && !CadernoSync.docValido(remoto)) { syncEstado.pendente = true; toast("O arquivo vinculado não é um arquivo da equipe do Caderno."); return false; }
-    carimbarMudancas();
-    const meta = syncMeta();
-    const r = CadernoSync.mesclar({ itens: itens.filter(compartilhado).map(itemParaEquipe), removidos: removidosLocais() }, remoto, meta.ultimaSync, chaveCard);
-    // aplica no aparelho: Individuais ficam intactos; cards de equipe passam a ser os do merge
-    const porId = new Map(r.itens.map((it) => [it.id, it]));
-    const locaisPorId = new Map(itens.map((it) => [it.id, it]));
-    const novaLista = [];
-    itens.forEach((it) => {
-      if (!compartilhado(it)) { if (!porId.has(it.id)) novaLista.push(it); return; }
-      if (porId.has(it.id)) { novaLista.push(porId.get(it.id)); porId.delete(it.id); }
-    });
-    porId.forEach((it) => { const l = locaisPorId.get(it.id); novaLista.push(l && !compartilhado(l) ? l : it); });
-    itens = novaLista;
-    localStorage.setItem(KEY, JSON.stringify(itens));
-    localStorage.setItem(REMOVIDOS_KEY, JSON.stringify(r.removidos));
-    const marcas = {}; itens.filter(compartilhado).forEach((it) => { marcas[it.id] = marcaDe(it); });
-    if (r.remotoPrecisa || !remoto) await a.gravar(CadernoSync.montarDoc(itens.map(itemParaEquipe), r.removidos, autor(), compartilhado));
-    gravarMeta({ ultimaSync: new Date().toISOString(), marcas: marcas });
+    let copiasMescladas = [];
+    let resultado = null;
+    // ler → mesclar (principal + cópias de conflito) → gravar → reler para verificar. Repete se o arquivo estiver ocupado.
+    await CadernoSync.comRetentativa(async () => {
+      const remoto = await a.ler();
+      if (remoto && !CadernoSync.docValido(remoto)) { const e = new Error("O arquivo vinculado não é um arquivo da equipe do Caderno."); e.name = "ArquivoInvalido"; throw e; }
+      const copias = (await a.lerCopias()).filter((c) => c.doc && CadernoSync.docValido(c.doc));
+      carimbarMudancas();
+      const meta = syncMeta();
+      let base = { itens: itens.filter(compartilhado).map(itemParaEquipe), removidos: removidosLocais() };
+      let r = CadernoSync.mesclar(base, remoto, meta.ultimaSync, chaveCard);
+      const mud = r.mudancasRemotas.slice(), conf = r.conflitos.slice();
+      let localMudou = r.localMudou, precisa = r.remotoPrecisa || !remoto;
+      copias.forEach((c) => {
+        const r2 = CadernoSync.mesclar({ itens: r.itens, removidos: r.removidos }, c.doc, meta.ultimaSync, chaveCard);
+        r2.mudancasRemotas.forEach((m) => mud.push(m)); r2.conflitos.forEach((x) => conf.push(x));
+        localMudou = localMudou || r2.localMudou; precisa = true; r = r2;
+      });
+      if (precisa) await a.gravar(CadernoSync.montarDoc(r.itens, r.removidos, autor(), compartilhado));
+      resultado = { r: r, mud: mud, conf: conf, localMudou: localMudou };
+      copiasMescladas = copias.map((c) => c.nome);
+    }, { aoFalhar: () => { syncEstado.pendente = true; desenharBotaoSync(); } });
+    aplicarResultado(resultado.r);
+    // só apaga as cópias depois da gravação verificada do arquivo principal
+    for (const nome of copiasMescladas) {
+      try { await CadernoSync.comRetentativa(() => a.apagarCopia(nome), { tentativas: 3, atrasos: [500, 1500] }); registrarHistorico(["Cópia de conflito " + nome + " juntada ao arquivo da equipe e apagada"]); }
+      catch (e) { await registrarErro("apagar cópia de conflito", nome, e, a); }
+    }
     syncEstado.pendente = false;
-    const textos = r.mudancasRemotas.map(textoMudanca);
-    r.conflitos.forEach((c) => textos.push("Conflito em " + nomeDe(c.remoto) + ": você e " + (c.remoto.updatedBy || "outra pessoa") + " alteraram desde a última sincronização. Ficou a versão mais recente" + (CadernoSync.ts(c.remoto.updatedAt) >= CadernoSync.ts(c.local.updatedAt) ? " (de " + (c.remoto.updatedBy || "outra pessoa") + ")." : " (a sua).")));
+    const textos = resultado.mud.map(textoMudanca);
+    resultado.conf.forEach((c) => textos.push("Conflito em " + nomeDe(c.remoto) + ": você e " + (c.remoto.updatedBy || "outra pessoa") + " alteraram desde a última sincronização. Ficou a versão mais recente" + (CadernoSync.ts(c.remoto.updatedAt) >= CadernoSync.ts(c.local.updatedAt) ? " (de " + (c.remoto.updatedBy || "outra pessoa") + ")." : " (a sua).")));
     registrarHistorico(textos);
-    if (r.localMudou) render(); else if (aba === "mais") render();
-    if (r.conflitos.length) toast(textos[textos.length - 1]);
+    if (resultado.localMudou || copiasMescladas.length || aba === "mais") render();
+    if (resultado.conf.length) toast(textos[textos.length - 1]);
+    else if (copiasMescladas.length) toast(copiasMescladas.length + (copiasMescladas.length === 1 ? " cópia de conflito do OneDrive juntada" : " cópias de conflito do OneDrive juntadas") + " ao arquivo da equipe");
     else if (textos.length === 1) toast(textos[0]);
     else if (textos.length > 1) toast(textos.length + " alterações da equipe recebidas (veja o Histórico em Mais)");
     else if (interativo) toast("Arquivo da equipe sincronizado");
     return true;
   } catch (e) {
     syncEstado.pendente = true;
-    if (e && e.name === "NotFoundError") toast("Arquivo da equipe não encontrado. Vincule de novo em Mais.");
-    else toast("Não foi possível sincronizar agora (o arquivo pode estar em uso pelo OneDrive). Tente de novo.");
+    syncEstado.acoes = acoes.concat(syncEstado.acoes);
+    const msg = e && e.name === "ArquivoInvalido" ? e.message : descreverErro(e);
+    const ult = acoes[acoes.length - 1];
+    await registrarErro(ult ? ult.acao : "sincronizar", acoes.map((x) => x.card).filter(Boolean).slice(-5).join(", "), e, a);
+    toast(msg + " Suas alterações estão salvas neste aparelho.");
     return false;
   } finally {
     syncEstado.rodando = false; desenharBotaoSync();
-    if (syncEstado.denovo) { syncEstado.denovo = false; agendarSync(); }
   }
+}
+function aplicarResultado(r0) {
+  // Alterações feitas enquanto o arquivo era gravado não se perdem: mescla de novo o que está na tela com o que foi gravado.
+  carimbarMudancas();
+  const r = CadernoSync.mesclar({ itens: itens.filter(compartilhado).map(itemParaEquipe), removidos: removidosLocais() }, { tipo: CadernoSync.TIPO, itens: r0.itens, removidos: r0.removidos }, "", chaveCard);
+  if (r.remotoPrecisa && syncMeta().ultimaSync) setTimeout(agendarSync, 0);
+  // Individuais ficam intactos; cards de equipe passam a ser os do merge
+  const porId = new Map(r.itens.map((it) => [it.id, it]));
+  const locaisPorId = new Map(itens.map((it) => [it.id, it]));
+  const novaLista = [];
+  itens.forEach((it) => {
+    if (!compartilhado(it)) { if (!porId.has(it.id)) novaLista.push(it); return; }
+    if (porId.has(it.id)) { novaLista.push(porId.get(it.id)); porId.delete(it.id); }
+  });
+  porId.forEach((it) => { const l = locaisPorId.get(it.id); novaLista.push(l && !compartilhado(l) ? l : it); });
+  itens = novaLista;
+  localStorage.setItem(KEY, JSON.stringify(itens));
+  localStorage.setItem(REMOVIDOS_KEY, JSON.stringify(r.removidos));
+  const marcas = {}; itens.filter(compartilhado).forEach((it) => { marcas[it.id] = marcaDe(it); });
+  gravarMeta({ ultimaSync: new Date().toISOString(), marcas: marcas });
 }
 function exigirNome() {
   if (autor()) return true;
@@ -1039,26 +1116,40 @@ function exigirNome() {
   const i = $("syncNome"); if (i) i.focus();
   return false;
 }
+function carimbarSemData() {
+  const agora = new Date().toISOString();
+  itens.filter(compartilhado).forEach((it) => { if (!it.updatedAt) { it.updatedAt = agora; it.updatedBy = autor(); } });
+  localStorage.setItem(KEY, JSON.stringify(itens));
+  const meta = syncMeta(); meta.ultimaSync = ""; gravarMeta(meta);
+}
+async function vincularPasta() {
+  if (!exigirNome()) return;
+  try {
+    const a = window.__syncAdaptadorTeste || syncPasta;
+    await a.vincular();
+    if (!window.__syncAdaptadorTeste && syncArquivo && await syncArquivo.vinculado()) await syncArquivo.desvincular(); // migra do modo arquivo
+    localStorage.setItem(MIGRAR_KEY, "1");
+    carimbarSemData();
+    await atualizarEstadoSync();
+    const ok = await sincronizar(true);
+    if (ok) toast("Pasta da equipe vinculada: " + syncEstado.nome);
+  } catch (e) { if (!e || e.name !== "AbortError") toast("Não foi possível vincular a pasta (" + ((e && e.name) || "erro") + ")."); }
+  if (aba === "mais") render();
+}
 async function criarArquivoEquipe() {
   if (!exigirNome()) return;
   try {
-    await adaptador().criar(SYNC_ARQUIVO);
-    // primeiro arquivo: carimba os cards de equipe ainda sem data
-    const agora = new Date().toISOString();
-    itens.filter(compartilhado).forEach((it) => { if (!it.updatedAt) { it.updatedAt = agora; it.updatedBy = autor(); } });
-    localStorage.setItem(KEY, JSON.stringify(itens));
-    const meta = syncMeta(); meta.ultimaSync = ""; gravarMeta(meta);
-    await adaptador().gravar(CadernoSync.montarDoc(itens.map(itemParaEquipe), removidosLocais(), autor(), compartilhado));
+    await syncArquivo.criar(SYNC_ARQUIVO);
+    carimbarSemData();
     await atualizarEstadoSync();
     await sincronizar(true);
-    toast("Arquivo da equipe criado. Avise a equipe para usar “Usar arquivo existente”.");
   } catch (e) { if (!e || e.name !== "AbortError") toast("Não foi possível criar o arquivo."); }
   if (aba === "mais") render();
 }
 async function usarArquivoEquipe() {
   if (!exigirNome()) return;
   try {
-    await adaptador().abrir();
+    await syncArquivo.abrir();
     const meta = syncMeta(); meta.ultimaSync = ""; gravarMeta(meta);
     await atualizarEstadoSync();
     await sincronizar(true);
@@ -1066,17 +1157,24 @@ async function usarArquivoEquipe() {
   if (aba === "mais") render();
 }
 async function desvincularArquivo() {
-  const ok = await dialogo({ titulo: "Desvincular o arquivo da equipe?", texto: "Os cards continuam neste aparelho. O arquivo na pasta não é apagado.", ok: "Desvincular", cancelar: "Cancelar" });
+  const ok = await dialogo({ titulo: "Desvincular a pasta/arquivo da equipe?", texto: "Os cards continuam neste aparelho. Nada é apagado na pasta.", ok: "Desvincular", cancelar: "Cancelar" });
   if (!ok) return;
-  await adaptador().desvincular();
+  const a = adaptador(); if (a) await a.desvincular();
   syncEstado.pendente = false;
   await atualizarEstadoSync();
   render();
-  toast("Arquivo desvinculado");
+  toast("Desvinculado");
+}
+/* v1.9 → v1.9.1: quem só tinha o ARQUIVO vinculado recebe, uma vez, o convite para vincular a PASTA. */
+async function sugerirPasta() {
+  if (!syncEstado.vinculado || syncEstado.modo !== "arquivo" || !syncEstado.pastaSuportada || localStorage.getItem(MIGRAR_KEY)) return;
+  localStorage.setItem(MIGRAR_KEY, "1");
+  const ok = await dialogo({ titulo: "Vincular a pasta da equipe", texto: "Para evitar as cópias de conflito do OneDrive (caderno-equipe-NOMEDOPC.json), vincule a PASTA json-caderno-acessos em vez de só o arquivo. O Caderno passa a juntar essas cópias sozinho e a gravar um log de erros na pasta.", ok: "Vincular a pasta", cancelar: "Agora não" });
+  if (ok) vincularPasta();
 }
 function blocoArquivoEquipe(box, bloco) {
   if (!syncEstado.suportado) {
-    bloco("Arquivo da equipe", "Este navegador não permite usar um arquivo da pasta sincronizada (comum no celular e no Firefox). Continue usando Exportar/Importar JSON normalmente.", []);
+    bloco("Arquivo da equipe", "Este navegador não permite usar a pasta sincronizada (comum no celular e no Firefox). Continue usando Exportar/Importar JSON normalmente.", []);
     return;
   }
   const nome = el("input"); nome.type = "text"; nome.id = "syncNome"; nome.placeholder = "Seu nome"; nome.value = autor(); nome.maxLength = 40; nome.autocomplete = "name";
@@ -1085,13 +1183,22 @@ function blocoArquivoEquipe(box, bloco) {
     localStorage.setItem(AUTOR_KEY, v); toast("Nome salvo"); render();
   });
   const linhaNome = el("div", "sync-nome"); linhaNome.appendChild(nome); linhaNome.appendChild(salvarNome);
-  const botoes = syncEstado.vinculado
-    ? [btn("btn pri", "refresh", "Sincronizar agora", () => sincronizar(true)), btn("btn", "x", "Desvincular", desvincularArquivo)]
-    : [btn("btn pri", "download", "Criar arquivo da equipe", criarArquivoEquipe), btn("btn", "upload", "Usar arquivo existente", usarArquivoEquipe)];
+  let botoes;
+  if (syncEstado.vinculado) {
+    botoes = [btn("btn pri", "refresh", "Sincronizar agora", () => sincronizar(true))];
+    if (syncEstado.modo === "arquivo" && syncEstado.pastaSuportada) botoes.push(btn("btn", "folder", "Vincular a pasta da equipe", vincularPasta));
+    botoes.push(btn("btn", "x", "Desvincular", desvincularArquivo));
+  } else if (syncEstado.pastaSuportada) {
+    botoes = [btn("btn pri", "folder", "Vincular a pasta da equipe", vincularPasta)];
+  } else {
+    botoes = [btn("btn pri", "download", "Criar arquivo da equipe", criarArquivoEquipe), btn("btn", "upload", "Usar arquivo existente", usarArquivoEquipe)];
+  }
   const ult = syncMeta().ultimaSync;
   bloco("Arquivo da equipe", syncEstado.vinculado
-    ? "Vinculado a: " + syncEstado.nome + (ult ? " · Última sincronização " + dataHoraBR(ult) : "") + ". Só cards de Equipe vão para o arquivo; cards Individuais e suas senhas nunca saem deste aparelho."
-    : "Use um arquivo na pasta do OneDrive (ex.: json-caderno-acessos) para a equipe trabalhar junto. Uma pessoa cria o arquivo; as outras usam o arquivo existente. Só cards de Equipe vão para o arquivo.",
+    ? (syncEstado.modo === "pasta" ? "Pasta vinculada: " : "Arquivo vinculado: ") + syncEstado.nome + (ult ? " · Última sincronização " + dataHoraBR(ult) : "") + "." + (syncEstado.modo === "arquivo" && syncEstado.pastaSuportada ? " Recomendado: vincule a pasta para juntar as cópias de conflito do OneDrive." : "") + " Só cards de Equipe vão para o arquivo; cards Individuais e suas senhas nunca saem deste aparelho."
+    : syncEstado.pastaSuportada
+      ? "Escolha a pasta do OneDrive da equipe (json-caderno-acessos). O Caderno usa o arquivo caderno-equipe.json (cria se não existir), junta as cópias de conflito do OneDrive e grava um log de erros na pasta. Só cards de Equipe vão para o arquivo."
+      : "Use um arquivo na pasta do OneDrive (ex.: json-caderno-acessos). Uma pessoa cria o arquivo; as outras usam o arquivo existente. Só cards de Equipe vão para o arquivo.",
     [linhaNome].concat(botoes));
   const h = lerJSON(HIST_KEY, []);
   const c = el("article", "card painel-mais historico");
@@ -1103,6 +1210,20 @@ function blocoArquivoEquipe(box, bloco) {
     c.appendChild(ul);
   }
   box.appendChild(c);
+  const le = lerJSON(LOGERR_KEY, []);
+  const c2 = el("article", "card painel-mais historico log-erros");
+  c2.appendChild(el("h3", "", "Log de erros"));
+  if (!le.length) c2.appendChild(el("p", "meta", "Nenhum erro de sincronização registrado neste aparelho."));
+  else {
+    c2.appendChild(el("p", "meta", syncEstado.modo === "pasta" ? "Também gravado em caderno-equipe-log.csv na pasta da equipe. Não inclui senhas." : "Não inclui senhas."));
+    const ul = el("ul", "hist-lista");
+    le.slice(0, 20).forEach((x) => { const li = el("li"); li.appendChild(el("span", "hist-quando", dataHoraBR(x[0]))); li.appendChild(el("span", "", x[1] + " · " + x[2] + (x[3] ? " · " + x[3] : "") + " — " + x[4])); ul.appendChild(li); });
+    c2.appendChild(ul);
+    const row = el("div", "acoes-mais");
+    row.appendChild(btn("btn", "trash", "Limpar log deste aparelho", () => { localStorage.removeItem(LOGERR_KEY); render(); }));
+    c2.appendChild(row);
+  }
+  box.appendChild(c2);
 }
 function renderMais(box) {
   const bloco = (titulo, texto, botoes) => {
@@ -2268,7 +2389,7 @@ function entrar() {
   if (typeof marcarAtividade === "function") marcarAtividade(true);
   load();
   render();
-  if (window.CadernoSync) atualizarEstadoSync().then(() => sincronizar(false));
+  if (window.CadernoSync) atualizarEstadoSync().then(() => { sincronizar(false); sugerirPasta(); });
 }
 function exigirTrocaSenha() {
   trocaObrigatoria = true;

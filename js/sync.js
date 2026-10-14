@@ -82,8 +82,60 @@
     return { itens: saida, removidos: [...tomb.values()], mudancasRemotas: mudancas.filter((m) => m.remoto), conflitos: conflitos, localMudou: localMudou, remotoPrecisa: remotoPrecisa };
   }
 
-  /* ---------- Adaptador: arquivo em pasta sincronizada (File System Access API) ---------- */
-  const DB = "caderno-acessos-sync", STORE = "handles", CH = "arquivo-equipe";
+  /* ---------- Retentativas (arquivo travado pelo OneDrive, leitura no meio da sincronização etc.) ---------- */
+  const RETENTAVEIS = ["NotReadableError", "InvalidStateError", "NoModificationAllowedError", "InvalidModificationError", "AbortError", "SyntaxError", "VerificacaoFalhou", "TimeoutError", "UnknownError", "QuotaExceededError"];
+  function retentavel(e) { return !!e && (RETENTAVEIS.indexOf(e.name) >= 0 || /lock|busy|in use|being used/i.test(String(e.message || ""))); }
+  function esperar(ms) { return new Promise((ok) => setTimeout(ok, ms)); }
+  /* Até 5 tentativas em ~10 s (0,5 / 1 / 2 / 3 / 4 s + variação aleatória). */
+  async function comRetentativa(fn, opcoes) {
+    const o = Object.assign({ tentativas: 5, atrasos: [500, 1000, 2000, 3000, 4000], aoFalhar: null }, opcoes || {});
+    let ultimo;
+    for (let i = 0; i < o.tentativas; i++) {
+      try { return await fn(i); } catch (e) {
+        ultimo = e;
+        if (!retentavel(e) || i === o.tentativas - 1) break;
+        if (o.aoFalhar) o.aoFalhar(e, i);
+        await esperar((o.atrasos[i] || 4000) + Math.floor(Math.random() * 250));
+      }
+    }
+    throw ultimo;
+  }
+  function erroVerificacao() { const e = new Error("O arquivo mudou durante a gravação (outra pessoa gravou ao mesmo tempo)."); e.name = "VerificacaoFalhou"; return e; }
+
+  /* Fila: uma operação de cada vez nesta aba (nunca duas gravações simultâneas). */
+  function Fila() {
+    let cauda = Promise.resolve();
+    return { rodar(fn) { const p = cauda.then(fn, fn); cauda = p.catch(() => {}); return p; } };
+  }
+
+  /* Cópias de conflito do OneDrive: caderno-equipe-<PC>.json, caderno-equipe-<PC>-2.json ... */
+  const PRINCIPAL = "caderno-equipe.json";
+  const LOG = "caderno-equipe-log.csv";
+  function ehCopiaConflito(nome) { return /^caderno-equipe-.+\.json$/i.test(nome) && nome.toLowerCase() !== PRINCIPAL; }
+
+  async function lerTexto(fh) { const f = await fh.getFile(); return await f.text(); }
+  function parseDoc(txt) { if (!txt || !txt.trim()) return null; return JSON.parse(txt); }
+  async function gravarTexto(fh, txt) { const w = await fh.createWritable(); try { await w.write(txt); await w.close(); } catch (e) { try { await w.abort(); } catch (x) {} throw e; } }
+  async function gravarVerificado(fh, doc) {
+    doc.gravacao = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    await gravarTexto(fh, JSON.stringify(doc, null, 2));
+    const volta = parseDoc(await lerTexto(fh));
+    if (!volta || volta.gravacao !== doc.gravacao) throw erroVerificacao();
+  }
+  function csv(v) { const t = String(v == null ? "" : v).replace(/[\r\n]+/g, " "); return /[";,]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }
+  async function anexarLog(fh, campos) {
+    const linha = campos.map(csv).join(";") + "\r\n";
+    const f = await fh.getFile();
+    const w = await fh.createWritable({ keepExistingData: true });
+    try {
+      if (f.size === 0) await w.write("\ufeffdata_hora;analista;acao;card;erro\r\n" + linha);
+      else { await w.seek(f.size); await w.write(linha); }
+      await w.close();
+    } catch (e) { try { await w.abort(); } catch (x) {} throw e; }
+  }
+
+  /* ---------- IndexedDB para guardar o handle vinculado ---------- */
+  const DB = "caderno-acessos-sync", STORE = "handles";
   function idb(modo, fn) {
     return new Promise((ok, erro) => {
       const req = indexedDB.open(DB, 1);
@@ -95,33 +147,70 @@
       };
     });
   }
+  async function permissaoDe(h, pedir) {
+    if (!h) return false;
+    const o = { mode: "readwrite" };
+    if (!h.queryPermission || (await h.queryPermission(o)) === "granted") return true;
+    if (!pedir || !h.requestPermission) return false;
+    return (await h.requestPermission(o)) === "granted";
+  }
+
+  /* ---------- Adaptador: PASTA da equipe (preferido; enxerga as cópias de conflito e grava o log) ----------
+   * Interface comum dos adaptadores (um servidor pode implementar a mesma no futuro):
+   *   modo, suportado(), vinculado(), nome(), permissao(pedir), ler(), lerCopias(), apagarCopia(nome),
+   *   gravar(doc) [verifica relendo], registrarLog(campos), vincular(), criar(), abrir(), desvincular()
+   */
+  function AdaptadorPasta() {
+    let dir = null;
+    const a = {
+      modo: "pasta",
+      suportado: () => typeof g.showDirectoryPicker === "function" && !!g.indexedDB,
+      async carregar() { if (!dir && a.suportado()) { try { dir = await idb("readonly", (s) => s.get("pasta-equipe")) || null; } catch (e) { dir = null; } } return dir; },
+      usarHandle(h) { dir = h; },
+      async vinculado() { return !!(await a.carregar()); },
+      async nome() { const d = await a.carregar(); return d ? d.name + "/" + PRINCIPAL : ""; },
+      async permissao(pedir) { return permissaoDe(await a.carregar(), pedir); },
+      async principal() { return (await a.carregar()).getFileHandle(PRINCIPAL, { create: true }); },
+      async ler() { return parseDoc(await lerTexto(await a.principal())); },
+      async lerCopias() {
+        const d = await a.carregar(); const out = [];
+        for await (const [nome, h] of d.entries()) {
+          if (h.kind !== "file" || !ehCopiaConflito(nome)) continue;
+          try { out.push({ nome: nome, doc: parseDoc(await lerTexto(h)) }); } catch (e) { out.push({ nome: nome, erro: e }); }
+        }
+        return out;
+      },
+      async apagarCopia(nome) { await (await a.carregar()).removeEntry(nome); },
+      async gravar(doc) { await gravarVerificado(await a.principal(), doc); },
+      async registrarLog(campos) { const d = await a.carregar(); await anexarLog(await d.getFileHandle(LOG, { create: true }), campos); },
+      async vincular() {
+        const h = await g.showDirectoryPicker({ id: "caderno-equipe", mode: "readwrite" });
+        dir = h; await idb("readwrite", (s) => s.put(h, "pasta-equipe")); return true;
+      },
+      async desvincular() { dir = null; try { await idb("readwrite", (s) => s.delete("pasta-equipe")); } catch (e) {} }
+    };
+    return a;
+  }
+
+  /* ---------- Adaptador: ARQUIVO único (navegadores sem seletor de pasta) ---------- */
   function AdaptadorArquivo() {
     let handle = null;
+    const CH = "arquivo-equipe";
     const tipos = [{ description: "Arquivo da equipe (JSON)", accept: { "application/json": [".json"] } }];
     const a = {
-      id: "arquivo",
+      modo: "arquivo",
       suportado: () => typeof g.showSaveFilePicker === "function" && typeof g.showOpenFilePicker === "function" && !!g.indexedDB,
       async carregar() { if (!handle && a.suportado()) { try { handle = await idb("readonly", (s) => s.get(CH)) || null; } catch (e) { handle = null; } } return handle; },
       async vinculado() { return !!(await a.carregar()); },
       async nome() { const h = await a.carregar(); return h ? h.name : ""; },
-      async permissao(pedir) {
-        const h = await a.carregar(); if (!h) return false;
-        const o = { mode: "readwrite" };
-        if (h.queryPermission && (await h.queryPermission(o)) === "granted") return true;
-        if (!pedir || !h.requestPermission) return false;
-        return (await h.requestPermission(o)) === "granted";
-      },
-      async ler() {
-        const h = await a.carregar(); const f = await h.getFile(); const txt = await f.text();
-        if (!txt.trim()) return null;
-        return JSON.parse(txt);
-      },
-      async gravar(doc) {
-        const h = await a.carregar(); const w = await h.createWritable();
-        await w.write(JSON.stringify(doc, null, 2)); await w.close();
-      },
+      async permissao(pedir) { return permissaoDe(await a.carregar(), pedir); },
+      async ler() { return parseDoc(await lerTexto(await a.carregar())); },
+      async lerCopias() { return []; },
+      async apagarCopia() {},
+      async gravar(doc) { await gravarVerificado(await a.carregar(), doc); },
+      async registrarLog() {},
       async criar(sugerido) {
-        const h = await g.showSaveFilePicker({ suggestedName: sugerido || "caderno-equipe.json", types: tipos, id: "caderno-equipe" });
+        const h = await g.showSaveFilePicker({ suggestedName: sugerido || PRINCIPAL, types: tipos, id: "caderno-equipe" });
         handle = h; await idb("readwrite", (s) => s.put(h, CH)); return true;
       },
       async abrir() {
@@ -133,5 +222,7 @@
     return a;
   }
 
-  g.CadernoSync = { TIPO: TIPO, montarDoc: montarDoc, docValido: docValido, mesclar: mesclar, AdaptadorArquivo: AdaptadorArquivo, ts: ts, semMeta: semMeta };
+  g.CadernoSync = { TIPO: TIPO, PRINCIPAL: PRINCIPAL, LOG: LOG, montarDoc: montarDoc, docValido: docValido, mesclar: mesclar, ts: ts, semMeta: semMeta,
+    comRetentativa: comRetentativa, retentavel: retentavel, Fila: Fila, ehCopiaConflito: ehCopiaConflito, gravarVerificado: gravarVerificado, anexarLog: anexarLog,
+    AdaptadorPasta: AdaptadorPasta, AdaptadorArquivo: AdaptadorArquivo };
 })(typeof window !== "undefined" ? window : globalThis);
