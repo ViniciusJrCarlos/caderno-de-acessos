@@ -31,35 +31,14 @@ function rotulo(it) {
 function exemplos() {
   // Dados 100% fictícios para demonstração (ids s1..s11).
   const c = (o) => Object.assign({ horario: "", escalonamento: "", escalonamentos: [], obs: "", arquivado_em: null }, o);
+  // v1.9.2: um único card de exemplo, "Individual" para nunca ir ao arquivo da equipe.
   return [
-    c({ id: "s1", titulo: "CRM Operação A", aplicacao: "CRM Fluxo", cliente: "Operação A", categoria: "Interno", visibilidade: "Equipe", url: "https://crm.fluxo.example/opa", usuario: "suporte.opa", senha: "exemplo123", ciclo: "90", ultima: addDias(hoje(), -10), horario: "24x7", escalonamento: "N2 Sistemas ramal 4010", obs: "Mesmo CRM, instância da Operação A" }),
-    c({ id: "s2", titulo: "CRM Operação B", aplicacao: "CRM Fluxo", cliente: "Operação B", categoria: "Interno", visibilidade: "Equipe", url: "https://crm.fluxo.example/opb", usuario: "suporte.opb", senha: "exemplo456", ciclo: "30", ultima: addDias(hoje(), -25), horario: "Seg–Sex 08–20", escalonamento: "N2 Sistemas ramal 4010", obs: "Mesmo CRM, instância da Operação B" }),
-    c({ id: "s3", titulo: "Chamados Operação A", aplicacao: "Central de Chamados Delta", cliente: "Operação A", categoria: "Interno", visibilidade: "Equipe", url: "https://chamados.delta.example/opa", usuario: "analista.opa", senha: "teste123", ciclo: "60", ultima: addDias(hoje(), -65), escalonamento: "Coordenação Suporte" }),
-    c({ id: "s4", titulo: "Chamados Operação B", aplicacao: "Central de Chamados Delta", cliente: "Operação B", categoria: "Interno", visibilidade: "Individual", url: "https://chamados.delta.example/opb", usuario: "meu.usuario", senha: "teste456", ciclo: "60", ultima: addDias(hoje(), -5), obs: "Login pessoal do analista" }),
-    c({ id: "s5", titulo: "VPN Corporativa", aplicacao: "VPN Ponte Segura", cliente: "Interno", categoria: "Interno", visibilidade: "Individual", url: "https://vpn.pontesegura.example", usuario: "meu.usuario", senha: "exemplo789", ciclo: "90", ultima: addDias(hoje(), -20) }),
-    c({ id: "s6", titulo: "Portal Fornecedor Alfa", aplicacao: "Alfa Suprimentos", cliente: "Alfa Suprimentos", categoria: "Externo", visibilidade: "Equipe", url: "https://portal.alfasuprimentos.example", usuario: "svc.alfa", senha: "fornecedor123", ciclo: "30", ultima: addDias(hoje(), -27), horario: "09–17",
-      escalonamento: "N1 portal · N2 Carla · N3 NOC",
+    c({ id: "s12", titulo: "Portal Exemplo (apague-me)", aplicacao: "Sistema Exemplo", cliente: "Empresa Fictícia", categoria: "Externo", visibilidade: "Individual", url: "https://portal.exemplo.example", usuario: "meu.usuario", senha: "exemplo123", ciclo: "90", ultima: addDias(hoje(), -10), horario: "Seg–Sex 08–18",
+      escalonamento: "N1 portal · N2 0800 000 0001",
       escalonamentos: [
-        { nivel: 1, canal: "portal", valor: "https://portal.alfasuprimentos.example/sd", nome: "Service Desk", horario: "09–17", obs: "Abrir chamado no portal" },
-        { nivel: 2, canal: "telefone", valor: "0800 000 0001", nome: "Carla Mendes", horario: "09–17", obs: "" },
-        { nivel: 3, canal: "email", valor: "noc@alfasuprimentos.example", nome: "NOC Alfa", horario: "24x7", obs: "" }
-      ] }),
-    c({ id: "s7", titulo: "Painel Nuvem Azul", aplicacao: "Nuvem Azul", cliente: "Nuvem Azul Tecnologia", categoria: "Externo", visibilidade: "Equipe", url: "https://painel.nuvemazul.example", usuario: "ops.nuvem", senha: "nuvem123", ciclo: "Nunca", ultima: addDias(hoje(), -120), horario: "Seg–Sex 08–18",
-      escalonamento: "N1 0800 000 0002 · N2 plantão",
-      escalonamentos: [
-        { nivel: 1, canal: "telefone", valor: "0800 000 0002", nome: "Suporte N1", horario: "Seg–Sex 08–18", obs: "" },
-        { nivel: 2, canal: "email", valor: "plantao@nuvemazul.example", nome: "Plantão", horario: "24x7", obs: "" }
-      ] }),
-    c({ id: "s8", titulo: "Gestor Ponto Certo", aplicacao: "Ponto Certo", cliente: "Ponto Certo Sistemas", categoria: "Externo", visibilidade: "Individual", url: "https://app.pontocerto.example", usuario: "meu.usuario", senha: "ponto123", ciclo: "90", ultima: addDias(hoje(), -95) }),
-    c({ id: "s9", titulo: "Telefonia Sinal Verde", aplicacao: "Sinal Verde Telecom", cliente: "Sinal Verde Telecom", categoria: "Externo", visibilidade: "Equipe", url: "https://admin.sinalverde.example", usuario: "suporte.sv", senha: "exemplo321", ciclo: "60", ultima: addDias(hoje(), -30), horario: "24x7",
-      escalonamento: "NOC fictício 0800 000 0003",
-      escalonamentos: [
-        { nivel: 1, canal: "portal", valor: "https://admin.sinalverde.example/tickets", nome: "Portal de chamados", horario: "24x7", obs: "" },
-        { nivel: 2, canal: "telefone", valor: "0800 000 0003", nome: "NOC Sinal Verde", horario: "24x7", obs: "" },
-        { nivel: 3, canal: "email", valor: "escalonamento@sinalverde.example", nome: "Escalonamento", horario: "24x7", obs: "" }
-      ] }),
-    c({ id: "s10", titulo: "Portal Beta Logística (antigo)", aplicacao: "Beta Logística", cliente: "Beta Logística", categoria: "Externo", visibilidade: "Equipe", url: "https://portal.betalogistica.example", usuario: "svc.beta", senha: "antigo123", ciclo: "30", ultima: addDias(hoje(), -200), obs: "Contrato encerrado, mantido só para histórico", arquivado_em: addDias(hoje(), -15) }),
-    c({ id: "s11", titulo: "VIN CRM", aplicacao: "VIN CRM", cliente: "VIN CRM", categoria: "Externo", visibilidade: "Equipe", url: "https://portal.vincrm.example", usuario: "svc.vincrm", senha: "exemplo789", ciclo: "60", ultima: hoje(), horario: "Seg–Sex 08–18", escalonamento: "Suporte fictício 0800 000 0011" })
+        { nivel: 1, canal: "portal", valor: "https://portal.exemplo.example/chamados", nome: "Service Desk", horario: "Seg–Sex 08–18", obs: "Abrir chamado no portal" },
+        { nivel: 2, canal: "telefone", valor: "0800 000 0001", nome: "Suporte N2", horario: "24x7", obs: "" }
+      ], obs: "Card fictício de exemplo. Pode apagar." })
   ];
 }
 function load() {
@@ -76,11 +55,10 @@ function load() {
   // Exemplos novos entram uma única vez em quem já tem cards (se apagar, não volta).
   let entregues = [];
   try { entregues = JSON.parse(localStorage.getItem(KEY + "_exemplos") || "[]"); } catch (e) { entregues = []; }
-  const presentes = new Set(itens.map((it) => it.id));
   let mudou = removeuAntigos;
   exemplos().forEach((it) => {
     if (!entregues.includes(it.id)) {
-      if (!presentes.has(it.id) && localStorage.getItem(KEY)) { itens.push(it); mudou = true; }
+      // v1.9.2: quem já usa o app não recebe o novo exemplo (só marca como entregue).
       entregues.push(it.id);
     }
   });
@@ -1364,8 +1342,7 @@ function carregarScript(src, global) {
   return libsCarregando[src];
 }
 function carregarXlsxLib() {
-  return carregarScript("js/vendor/xlsx.full.min.js", "XLSX")
-    .catch(() => carregarScript("https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js", "XLSX"));
+  return carregarScript("js/vendor/xlsx.full.min.js", "XLSX");
 }
 function carregarExcelJS() { return carregarScript("js/vendor/exceljs.min.js", "ExcelJS"); }
 
