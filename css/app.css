@@ -420,3 +420,26 @@ body.travado.troca-obrig #dlgSenha { visibility:visible; }
 .nv-v { font-weight:700; color:var(--head); font-size:14px; }
 .nv-v small { color:var(--muted); font-weight:400; }
 .nv-novo { background:var(--teal); color:#fff; font-size:11px; padding:1px 7px; border-radius:99px; margin-left:6px; }
+
+/* v1.9.4: Compartilhar meu card + Sobre */
+.dlg-mod { max-height:min(92vh, 680px); overflow:auto; }
+.dlg-mod p { margin:0 0 10px; }
+.dlg-mod .mod-ok { background:var(--info-bg); color:var(--info); border-radius:8px; padding:9px 11px; font-size:14px; }
+.dlg-mod .mod-no { background:#fdecec; color:#b42318; border-radius:8px; padding:9px 11px; font-size:14px; margin-bottom:16px; }
+.mod-item { display:flex; gap:10px; align-items:center; padding:10px 0; border-top:1px solid var(--line2); font-size:14px; color:var(--text); }
+.mod-item:last-of-type { margin-bottom:14px; }
+.mod-chk { cursor:pointer; }
+.mod-chk input { width:18px; height:18px; flex:none; accent-color:var(--teal); }
+.mod-txt { flex:1; min-width:0; word-break:break-word; }
+.mod-txt small { display:block; color:var(--muted); font-size:12.5px; margin-top:2px; }
+.mod-botoes { grid-template-columns:1fr; }
+.mod-linha { padding:8px 0; border-top:1px solid var(--line2); font-size:14px; color:var(--text); word-break:break-word; }
+.mod-linha b { display:block; font-size:12px; color:var(--muted); font-weight:600; }
+.mod-linha:last-of-type { margin-bottom:14px; }
+.mod-linha .vz, .vz { color:var(--muted); font-style:italic; }
+.mod-hint { background:#fff6dd; color:#8a5a00; border-radius:8px; padding:9px 11px; font-size:13px; margin:8px 0 0; display:grid; gap:4px; justify-items:start; }
+.mod-hint small { color:#8a5a00; opacity:.85; }
+.mod-share { width:calc(100% - 0px); margin-top:10px; justify-content:center; }
+.mod-compartilhado { margin-top:10px; font-size:12.5px; color:var(--info); background:var(--info-bg); border-radius:8px; padding:7px 10px; text-align:center; }
+.sobre-tit { margin:14px 0 4px; font-size:14px; color:var(--head); }
+.sobre-lista { margin:0 0 4px; padding-left:18px; color:var(--muted); font-size:14px; line-height:1.5; }

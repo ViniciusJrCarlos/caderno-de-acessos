@@ -26,7 +26,7 @@
     </span>
     <button type="submit" id="loginBtn">Abrir caderno</button>
     <p id="loginErro" class="login-erro" role="alert"></p>
-    <p class="login-rodape" id="loginRodape">Caderno de Acessos v1.9.3 · © Todos os direitos reservados · Desenv. WebDev</p>
+    <p class="login-rodape" id="loginRodape">Caderno de Acessos v1.9.4 · © Todos os direitos reservados · Desenv. WebDev</p>
     <p class="login-instalar" id="loginInstalarWrap" hidden><button type="button" class="link-instalar" id="btnInstalarApp">Instalar app</button></p>
   </form>
 </section>
@@ -148,9 +148,24 @@
   <div class="panel pequeno">
     <div class="panel-topo"><h3>Sobre</h3><button type="button" class="ico-btn escuro" data-fecha="sobre" aria-label="Fechar" data-ic="x"></button></div>
     <div class="panel-corpo">
-      <p class="meta">Caderno de Acessos v1.9.3 · © Todos os direitos reservados · Desenv. WebDev</p>
-      <p class="meta">Funciona offline. Os cards ficam salvos só neste navegador, sem banco de dados.</p>
-      <p class="meta">Acessos <strong>Individuais</strong>: usuário e senha nunca vão no "Exportar JSON" da equipe nem no Excel. Para levar as suas senhas para outro aparelho, use "Backup pessoal".</p>
+      <p class="meta">Caderno de Acessos v1.9.4 · © Todos os direitos reservados · Desenv. WebDev</p>
+      <h4 class="sobre-tit">Para que serve</h4>
+      <p class="meta">Caderno de uso interno da equipe de suporte para guardar acessos a sistemas e fornecedores: link, login, senha, ciclo de troca e escalonamento. Funciona offline e fica salvo neste navegador, sem banco de dados.</p>
+      <h4 class="sobre-tit">Como usar</h4>
+      <ul class="sobre-lista">
+        <li><strong>Equipe</strong>: cards compartilhados com todos pela pasta da equipe.</li>
+        <li><strong>Meus</strong>: cards Individuais. Login e senha ficam só neste aparelho.</li>
+        <li><strong>Compartilhar meu card</strong>: envia nome, link, sistema, escalonamento e observações para a equipe, nunca login e senha.</li>
+        <li>Para levar as suas senhas para outro aparelho seu, use "Backup pessoal".</li>
+      </ul>
+      <h4 class="sobre-tit">Regras de uso</h4>
+      <ul class="sobre-lista">
+        <li>Uso interno da equipe, só para trabalho.</li>
+        <li>Não envie o JSON (backup ou da equipe) por e-mail nem por chat.</li>
+        <li>Bloqueie o Windows sempre que sair da mesa.</li>
+        <li>Senhas Individuais são pessoais: não passe a sua para ninguém.</li>
+        <li>Os dados ficam só no seu aparelho e na pasta da equipe. O app não usa nenhum servidor externo.</li>
+      </ul>
     </div>
   </div>
 </div>
@@ -200,6 +215,8 @@
     <button type="button" class="btn pri nv-ok" id="nvEntendi">Entendi</button>
   </div>
 </div>
+<div class="sheet dlg-wrap" id="dlgMod" aria-hidden="true" role="dialog" aria-modal="true"><div class="dlg dlg-mod"></div></div>
+<div class="sheet dlg-wrap" id="dlgVer" aria-hidden="true" role="dialog" aria-modal="true"><div class="dlg dlg-mod"></div></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </div>
 

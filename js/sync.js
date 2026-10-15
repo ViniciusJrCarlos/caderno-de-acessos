@@ -1,4 +1,4 @@
-/* Caderno de Acessos — sincronização do arquivo da equipe (v1.9)
+/* Caderno de Acessos — sincronização do arquivo da equipe (v1.9; modelos v1.9.4)
  * Lógica de merge pura + adaptadores de armazenamento.
  * Interface de adaptador (para trocar no futuro por um servidor):
  *   { id, suportado(): bool, vinculado(): Promise<bool>, nome(): Promise<string>,
@@ -13,16 +13,40 @@
   function ts(v) { const n = Date.parse(v || ""); return isNaN(n) ? 0 : n; }
   function semMeta(it) { const c = Object.assign({}, it); delete c.updatedAt; delete c.updatedBy; return JSON.stringify(c, Object.keys(c).sort()); }
 
-  /* Documento do arquivo da equipe. "filtro" decide o que pode sair (só cards compartilhados). */
-  function montarDoc(itens, removidos, autor, filtro) {
+  /* v1.9.4: "Compartilhar meu card". Modelos ficam numa coleção separada ("modelos"), que versões antigas ignoram.
+   * Lista branca: só estes campos podem sair. Login e senha NUNCA. */
+  const CAMPOS_MODELO = ["id", "nome", "url", "sistema", "escalonamento", "escalonamentos", "obs", "sharedBy", "createdAt", "updatedAt", "updatedBy"];
+  const CAMPOS_NIVEL = ["nivel", "canal", "nome", "valor", "horario", "obs"];
+  function limparModelo(m) {
+    const o = {};
+    CAMPOS_MODELO.forEach((k) => {
+      if (m == null || m[k] == null) return;
+      if (k === "escalonamentos") {
+        if (!Array.isArray(m[k])) return;
+        o[k] = m[k].map((n) => { const x = {}; CAMPOS_NIVEL.forEach((c) => { if (n && n[c] != null) x[c] = n[c]; }); return x; });
+      } else o[k] = typeof m[k] === "string" || typeof m[k] === "number" ? m[k] : String(m[k]);
+    });
+    return o;
+  }
+  function limparTomb(t) { return { id: t.id, deletedAt: t.deletedAt, deletedBy: t.deletedBy || "", titulo: t.titulo || "" }; }
+
+  /* Documento do arquivo da equipe. "filtro" decide o que pode sair (só cards compartilhados).
+   * extras (opcional): { modelos, modelosRemovidos } — cards Individuais compartilhados como modelo, sem login/senha. */
+  function montarDoc(itens, removidos, autor, filtro, extras) {
     const agora = new Date().toISOString();
     const lim = Date.now() - RETER_TOMBSTONE_DIAS * 864e5;
-    return {
+    const d = {
       tipo: TIPO, versao: 1, atualizado_em: agora, atualizado_por: autor || "",
       itens: itens.filter(filtro).map((it) => Object.assign({}, it)),
       removidos: (removidos || []).filter((t) => ts(t.deletedAt) >= lim)
     };
+    if (extras) {
+      d.modelos = (extras.modelos || []).filter((m) => m && m.id).map(limparModelo);
+      d.modelosRemovidos = (extras.modelosRemovidos || []).filter((t) => t && t.id && ts(t.deletedAt) >= lim).map(limparTomb);
+    }
+    return d;
   }
+  function modelosDoDoc(d) { return d ? { tipo: TIPO, itens: Array.isArray(d.modelos) ? d.modelos.map(limparModelo) : [], removidos: Array.isArray(d.modelosRemovidos) ? d.modelosRemovidos : [] } : null; }
   function docValido(d) { return !!(d && d.tipo === TIPO && Array.isArray(d.itens)); }
 
   /* Merge por card: vence o updatedAt mais recente; exclusões via tombstones.
@@ -222,7 +246,7 @@
     return a;
   }
 
-  g.CadernoSync = { TIPO: TIPO, PRINCIPAL: PRINCIPAL, LOG: LOG, montarDoc: montarDoc, docValido: docValido, mesclar: mesclar, ts: ts, semMeta: semMeta,
+  g.CadernoSync = { TIPO: TIPO, limparModelo: limparModelo, modelosDoDoc: modelosDoDoc, CAMPOS_MODELO: CAMPOS_MODELO, PRINCIPAL: PRINCIPAL, LOG: LOG, montarDoc: montarDoc, docValido: docValido, mesclar: mesclar, ts: ts, semMeta: semMeta,
     comRetentativa: comRetentativa, retentavel: retentavel, Fila: Fila, ehCopiaConflito: ehCopiaConflito, gravarVerificado: gravarVerificado, anexarLog: anexarLog,
     AdaptadorPasta: AdaptadorPasta, AdaptadorArquivo: AdaptadorArquivo };
 })(typeof window !== "undefined" ? window : globalThis);

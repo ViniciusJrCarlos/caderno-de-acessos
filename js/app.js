@@ -117,6 +117,7 @@ const IC = {
   search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
   lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   logout: '<path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 17l5-5-5-5M15 12H3"/>',
+  share: '<circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4"/>',
   users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6.5 6.5 0 0 1 3.5 6"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
   building: '<rect x="4" y="3" width="16" height="18" rx="1"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2M10 21v-3h4v3"/>',
@@ -659,8 +660,15 @@ function cardDe(it) {
   linhas.appendChild(lu);
   const d = diasRestantes(it);
   let info = it.arquivado_em ? "Arquivado em " + it.arquivado_em : (it.ciclo === "Nunca" || !it.ciclo) ? "Ciclo: não expira" : "Ciclo " + it.ciclo + " dias · " + (d < 0 ? "vencido há " + Math.abs(d) + " dia(s)" : "vence em " + d + " dia(s)");
-  if (ind && !it.senha && !it.usuario) info += " · usuário/senha não compartilhados";
+  if (ind && !it.senha && !it.usuario && !it.modeloId) info += " · usuário/senha não compartilhados";
   linhas.appendChild(el("div", "card-info", info));
+  if (ind && it.modeloId && !it.usuario && !it.senha) {
+    const h = el("div", "mod-hint");
+    h.appendChild(el("strong", "", "✏️ Preencha seu login e senha"));
+    h.appendChild(el("small", "", "Adicionado do card compartilhado por " + (it.modeloPor || "alguém da equipe")));
+    h.appendChild(btn("btn pequeno", "edit", "Editar e preencher", () => abrirFicha(it)));
+    linhas.appendChild(h);
+  }
   c.appendChild(linhas);
 
   const niveis = niveisDe(it);
@@ -734,6 +742,10 @@ function cardDe(it) {
   if (!it.url) bAb.disabled = true;
   acoes.appendChild(bAb);
   c.appendChild(acoes);
+  if (ind && !it.arquivado_em && aba !== "arquivo") {
+    if (it.modeloDono) c.appendChild(el("div", "mod-compartilhado", "Compartilhado com a equipe (sem login e senha)"));
+    else c.appendChild(btn("btn mod-share", "share", "Compartilhar meu card", () => compartilharMeuCard(it), null, "Envia nome, link, sistema, escalonamento e observações para a equipe, sem login e senha"));
+  }
   return c;
 }
 function fecharMenus() { document.querySelectorAll(".menu-card").forEach((m) => m.remove()); }
@@ -745,6 +757,10 @@ function abrirMenuCard(it, ancora) {
   m.setAttribute("role", "menu");
   m.appendChild(btn("mi", "edit", "Editar", () => { fecharMenus(); abrirFicha(it); }, null, "Editar este acesso"));
   m.appendChild(btn("mi", "copy", "Copiar usuário", () => { fecharMenus(); copiar(it.usuario, "Usuário"); }));
+  if (it.visibilidade === "Individual" && !it.arquivado_em) {
+    if (it.modeloDono) m.appendChild(btn("mi", "x", "Parar de compartilhar", () => { fecharMenus(); pararCompartilhar(it); }));
+    else m.appendChild(btn("mi", "share", "Compartilhar meu card", () => { fecharMenus(); compartilharMeuCard(it); }));
+  }
   if (it.arquivado_em) {
     m.appendChild(btn("mi ok", "restore", "Reativar", () => { it.arquivado_em = null; save(); toast("Card reativado"); }));
     m.appendChild(btn("mi warn", "trash", "Excluir", () => { fecharMenus(); excluir([it]); }));
@@ -882,6 +898,10 @@ const HIST_KEY = "caderno-acessos-historico";
 const SYNC_ARQUIVO = "caderno-equipe.json";
 const LOGERR_KEY = "caderno-acessos-log-erros";
 const MIGRAR_KEY = "caderno-acessos-aviso-pasta";
+const MODELOS_KEY = "caderno-acessos-modelos";
+const MEUS_MODELOS_KEY = "caderno-acessos-meus-modelos";
+const MODELOS_DEC_KEY = "caderno-acessos-modelos-decisoes";
+let modelosPendentesEnvio = false;
 // Adaptadores trocáveis (no futuro, um servidor pode entrar no lugar)
 const syncPasta = window.CadernoSync ? CadernoSync.AdaptadorPasta() : null;
 const syncArquivo = window.CadernoSync ? CadernoSync.AdaptadorArquivo() : null;
@@ -930,6 +950,7 @@ function carimbarMudancas() {
   localStorage.setItem(REMOVIDOS_KEY, JSON.stringify(rem));
   itens.filter(compartilhado).forEach((it) => { novas[it.id] = marcaDe(it); });
   meta.marcas = novas; gravarMeta(meta);
+  if (atualizarMeusModelos()) mudou = true;
   return mudou;
 }
 function dataHoraBR(iso) {
@@ -1030,15 +1051,20 @@ async function sincronizarAgora(interativo) {
       let r = CadernoSync.mesclar(base, remoto, meta.ultimaSync, chaveCard);
       const mud = r.mudancasRemotas.slice(), conf = r.conflitos.slice();
       let localMudou = r.localMudou, precisa = r.remotoPrecisa || !remoto;
+      // v1.9.4: modelos (cards Individuais compartilhados, sem login/senha). O cache local repõe o que um app antigo (v1.9.3) tenha apagado ao gravar.
+      let rm = CadernoSync.mesclar(modelosLocais(), CadernoSync.modelosDoDoc(remoto) || { itens: [], removidos: [] }, "", null);
+      if (rm.remotoPrecisa) precisa = true;
       copias.forEach((c) => {
         const r2 = CadernoSync.mesclar({ itens: r.itens, removidos: r.removidos }, c.doc, meta.ultimaSync, chaveCard);
         r2.mudancasRemotas.forEach((m) => mud.push(m)); r2.conflitos.forEach((x) => conf.push(x));
         localMudou = localMudou || r2.localMudou; precisa = true; r = r2;
+        rm = CadernoSync.mesclar({ itens: rm.itens, removidos: rm.removidos }, CadernoSync.modelosDoDoc(c.doc), "", null);
       });
-      if (precisa) await a.gravar(CadernoSync.montarDoc(r.itens, r.removidos, autor(), compartilhado));
-      resultado = { r: r, mud: mud, conf: conf, localMudou: localMudou };
+      if (precisa) await a.gravar(CadernoSync.montarDoc(r.itens, r.removidos, autor(), compartilhado, { modelos: rm.itens, modelosRemovidos: rm.removidos }));
+      resultado = { r: r, mud: mud, conf: conf, localMudou: localMudou, rm: rm };
       copiasMescladas = copias.map((c) => c.nome);
     }, { aoFalhar: () => { syncEstado.pendente = true; desenharBotaoSync(); } });
+    gravarModelosLocais({ itens: resultado.rm.itens.map(CadernoSync.limparModelo), removidos: resultado.rm.removidos });
     aplicarResultado(resultado.r);
     // só apaga as cópias depois da gravação verificada do arquivo principal
     for (const nome of copiasMescladas) {
@@ -1055,6 +1081,7 @@ async function sincronizarAgora(interativo) {
     else if (textos.length === 1) toast(textos[0]);
     else if (textos.length > 1) toast(textos.length + " alterações da equipe recebidas (veja o Histórico em Mais)");
     else if (interativo) toast("Arquivo da equipe sincronizado");
+    setTimeout(() => verificarModelos(false), 0);
     return true;
   } catch (e) {
     syncEstado.pendente = true;
@@ -1072,7 +1099,8 @@ function aplicarResultado(r0) {
   // Alterações feitas enquanto o arquivo era gravado não se perdem: mescla de novo o que está na tela com o que foi gravado.
   carimbarMudancas();
   const r = CadernoSync.mesclar({ itens: itens.filter(compartilhado).map(itemParaEquipe), removidos: removidosLocais() }, { tipo: CadernoSync.TIPO, itens: r0.itens, removidos: r0.removidos }, "", chaveCard);
-  if (r.remotoPrecisa && syncMeta().ultimaSync) setTimeout(agendarSync, 0);
+  if ((r.remotoPrecisa || modelosPendentesEnvio) && syncMeta().ultimaSync) setTimeout(agendarSync, 0);
+  modelosPendentesEnvio = false;
   // Individuais ficam intactos; cards de equipe passam a ser os do merge
   const porId = new Map(r.itens.map((it) => [it.id, it]));
   const locaisPorId = new Map(itens.map((it) => [it.id, it]));
@@ -1087,6 +1115,232 @@ function aplicarResultado(r0) {
   localStorage.setItem(REMOVIDOS_KEY, JSON.stringify(r.removidos));
   const marcas = {}; itens.filter(compartilhado).forEach((it) => { marcas[it.id] = marcaDe(it); });
   gravarMeta({ ultimaSync: new Date().toISOString(), marcas: marcas });
+}
+/* ---------- v1.9.4: "Compartilhar meu card" (modelos sem login/senha) ---------- */
+// Cache local dos modelos da equipe: repõe o que um app antigo apague ao gravar o arquivo.
+function modelosLocais() { const m = lerJSON(MODELOS_KEY, null); return { itens: (m && m.itens) || [], removidos: (m && m.removidos) || [] }; }
+function gravarModelosLocais(m) { localStorage.setItem(MODELOS_KEY, JSON.stringify({ itens: m.itens, removidos: m.removidos })); }
+function meusModelos() { return lerJSON(MEUS_MODELOS_KEY, []); }
+function decisoesModelos() { return lerJSON(MODELOS_DEC_KEY, {}); }
+function gravarDecisoes(d) { localStorage.setItem(MODELOS_DEC_KEY, JSON.stringify(d)); }
+function modelosAtivos() { const m = modelosLocais(); const rem = new Set(m.removidos.map((t) => t.id)); return m.itens.filter((x) => !rem.has(x.id) || CadernoSync.ts(x.updatedAt) > CadernoSync.ts((m.removidos.find((t) => t.id === x.id) || {}).deletedAt)); }
+/* Só nome, link, sistema, escalonamento e observações. Nunca login nem senha. */
+function conteudoModelo(card) {
+  return CadernoSync.limparModelo({ nome: card.titulo || card.aplicacao || "", url: card.url || "", sistema: card.aplicacao || "", escalonamento: card.escalonamento || "",
+    escalonamentos: niveisDe(card).map((n) => ({ nivel: n.nivel, canal: n.canal, nome: n.nome, valor: n.valor, horario: n.horario, obs: n.obs })), obs: card.obs || "" });
+}
+function mesmoConteudo(a, b) { const k = ["nome", "url", "sistema", "escalonamento", "escalonamentos", "obs"]; return k.every((c) => JSON.stringify(a[c] == null ? "" : a[c]) === JSON.stringify(b[c] == null ? "" : b[c])); }
+/* Chamada em carimbarMudancas(): o dono atualiza o modelo quando edita o card; card excluído vira tombstone. */
+function atualizarMeusModelos() {
+  if (!window.CadernoSync) return false;
+  const meus = meusModelos(); if (!meus.length) return false;
+  const m = modelosLocais(); const agora = new Date().toISOString(); const quem = autor();
+  let mudou = false; const ficam = [];
+  meus.forEach((tid) => {
+    const card = itens.find((c) => c.modeloDono === tid);
+    const i = m.itens.findIndex((x) => x.id === tid);
+    if (!card || card.visibilidade !== "Individual") {
+      if (i >= 0) { m.removidos = m.removidos.filter((t) => t.id !== tid); m.removidos.push({ id: tid, deletedAt: agora, deletedBy: quem, titulo: m.itens[i].nome || "" }); m.itens.splice(i, 1); mudou = true; }
+      if (card) delete card.modeloDono;
+      return;
+    }
+    ficam.push(tid);
+    if (i < 0) return;
+    const novo = conteudoModelo(card);
+    if (!mesmoConteudo(novo, m.itens[i])) { m.itens[i] = Object.assign({}, m.itens[i], novo, { id: tid, updatedAt: agora, updatedBy: quem }); mudou = true; }
+  });
+  localStorage.setItem(MEUS_MODELOS_KEY, JSON.stringify(ficam));
+  if (mudou) { gravarModelosLocais(m); modelosPendentesEnvio = true; }
+  return mudou;
+}
+function normTxt(s) { return String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim(); }
+function normUrl(u) { return String(u || "").trim().toLowerCase().replace(/^[a-z]+:\/\//, "").replace(/^www\./, "").replace(/[/#?]+$/, ""); }
+/* Cards parecidos: mesmo nome ou mesmo link, entre os modelos da equipe e os cards da Equipe. */
+function parecidos(card, tidProprio) {
+  const n = normTxt(card.titulo || card.aplicacao), u = normUrl(card.url), out = [];
+  const motivo = (nome, url) => (n && normTxt(nome) === n ? "Mesmo nome" : "") + (u && normUrl(url) === u ? (n && normTxt(nome) === n ? " e mesmo link" : "Mesmo link") : "");
+  modelosAtivos().forEach((m) => { if (m.id === tidProprio) return; const r = motivo(m.nome, m.url); if (r) out.push({ tipo: "modelo", nome: m.nome, motivo: r, por: m.sharedBy, dados: m }); });
+  itens.filter((c) => compartilhado(c) && !c.arquivado_em).forEach((c) => { const r = motivo(c.titulo || c.aplicacao, c.url); if (r) out.push({ tipo: "equipe", nome: nomeDe(c), motivo: r, por: "", dados: Object.assign({ id: c.id }, conteudoModelo(c)) }); });
+  return out;
+}
+/* Janela própria (empilha sobre o diálogo padrão). */
+function janela(id, montar) {
+  return new Promise((ok) => {
+    const w = $(id); const box = w.querySelector(".dlg"); box.textContent = ""; box.className = "dlg dlg-mod";
+    let feito = false;
+    const fim = (v) => { if (feito) return; feito = true; w.removeEventListener("keydown", esc); fecharSheet(id); ok(v); };
+    const esc = (ev) => { if (ev.key === "Escape") { ev.stopPropagation(); fim(false); } };
+    w.addEventListener("keydown", esc);
+    montar(box, fim);
+    aplicarIcones(box);
+    abrirSheet(id);
+    setTimeout(() => { const f = box.querySelector(".btn.pri") || box.querySelector("button"); if (f) f.focus(); }, 40);
+  });
+}
+function botaoDlg(cls, texto, fn) { const b = el("button", "btn" + (cls ? " " + cls : ""), texto); b.type = "button"; b.addEventListener("click", fn); return b; }
+function verModelo(d, origem) {
+  return janela("dlgVer", (box, fim) => {
+    box.appendChild(el("h3", "", d.nome || "(sem nome)"));
+    box.appendChild(el("p", "meta", origem));
+    const lin = (r, v) => { const x = el("div", "mod-linha"); x.appendChild(el("b", "", r)); x.appendChild(el("span", v ? "" : "vz", v || "—")); box.appendChild(x); };
+    lin("Link", d.url); lin("Sistema", d.sistema);
+    lin("Escalonamento", (d.escalonamentos && d.escalonamentos.length) ? resumoEscalonamentos(d.escalonamentos) : d.escalonamento);
+    lin("Observações", d.obs);
+    const bb = el("div", "dlg-botoes"); bb.appendChild(botaoDlg("pri", "Voltar", () => fim(true))); box.appendChild(bb);
+  });
+}
+async function compartilharMeuCard(card) {
+  if (!card || card.visibilidade !== "Individual") return;
+  if (!syncEstado.vinculado) { toast("Para compartilhar, vincule a pasta da equipe em Mais › Arquivo da equipe."); return; }
+  if (!autor()) { toast("Salve seu nome em Mais › Arquivo da equipe antes de compartilhar."); return; }
+  const tid = card.modeloDono || ("m-" + card.id);
+  const par = parecidos(card, tid);
+  if (par.length) {
+    const seguir = await janela("dlgMod", (box, fim) => {
+      box.appendChild(el("h3", "", "⚠️ " + (par.length === 1 ? "Card parecido" : "Cards parecidos")));
+      box.appendChild(el("p", "", par.length === 1 ? "Já existe um card parecido:" : "Já existem " + par.length + " cards parecidos:"));
+      par.forEach((p) => {
+        const it = el("div", "mod-item");
+        const t = el("div", "mod-txt"); t.appendChild(el("strong", "", p.nome));
+        t.appendChild(el("small", "", p.motivo + (p.url || p.dados.url ? ": " + p.dados.url : "") + " · " + (p.tipo === "modelo" ? "compartilhado por " + (p.por || "alguém da equipe") : "card da Equipe")));
+        it.appendChild(t);
+        it.appendChild(botaoDlg("pequeno", "Ver modelo", () => verModelo(p.dados, p.tipo === "modelo" ? "Compartilhado por " + (p.por || "alguém da equipe") : "Card da Equipe")));
+        box.appendChild(it);
+      });
+      const bb = el("div", "dlg-botoes");
+      bb.appendChild(botaoDlg("", "Cancelar", () => fim(false)));
+      bb.appendChild(botaoDlg("pri", "Compartilhar mesmo assim", () => fim(true)));
+      box.appendChild(bb);
+    });
+    if (!seguir) return;
+  }
+  const ok = await janela("dlgMod", (box, fim) => {
+    box.appendChild(el("h3", "", "Compartilhar meu card?"));
+    const a = el("p", "mod-ok"); a.appendChild(el("b", "", "✅ Vai para a equipe: ")); a.appendChild(document.createTextNode("nome, link, sistema, escalonamento e observações.")); box.appendChild(a);
+    const b = el("p", "mod-no"); b.appendChild(el("b", "", "🔒 Não vai: ")); b.appendChild(document.createTextNode("login e senha.")); box.appendChild(b);
+    const bb = el("div", "dlg-botoes");
+    bb.appendChild(botaoDlg("", "Cancelar", () => fim(false)));
+    bb.appendChild(botaoDlg("pri", "Compartilhar", () => fim(true)));
+    box.appendChild(bb);
+  });
+  if (!ok) return;
+  const agora = new Date().toISOString();
+  const m = modelosLocais();
+  const antigo = m.itens.find((x) => x.id === tid);
+  const novo = Object.assign({ id: tid, sharedBy: autor(), createdAt: (antigo && antigo.createdAt) || agora }, conteudoModelo(card), { updatedAt: agora, updatedBy: autor() });
+  m.itens = m.itens.filter((x) => x.id !== tid).concat([CadernoSync.limparModelo(novo)]);
+  m.removidos = m.removidos.filter((t) => t.id !== tid);
+  gravarModelosLocais(m);
+  const meus = meusModelos(); if (meus.indexOf(tid) < 0) meus.push(tid); localStorage.setItem(MEUS_MODELOS_KEY, JSON.stringify(meus));
+  card.modeloDono = tid;
+  save();
+  await sincronizar(true);
+  toast("Card compartilhado com a equipe (sem login e senha)");
+}
+async function pararCompartilhar(card) {
+  const ok = await dialogo({ titulo: "Parar de compartilhar?", texto: "O modelo sai do arquivo da equipe. Quem já adicionou continua com o card dele.", ok: "Parar de compartilhar", cancelar: "Cancelar" });
+  if (!ok) return;
+  delete card.modeloDono; // atualizarMeusModelos() cria o tombstone
+  save();
+  toast("Card não é mais compartilhado");
+}
+function cardDoModelo(mod) { return itens.find((c) => c.modeloId === mod.id); }
+/* Modelos que ainda não decidi (nem adicionei, nem ignorei) e que não são meus. */
+function modelosNovos(incluirIgnorados) {
+  const meus = new Set(meusModelos()), dec = decisoesModelos();
+  return modelosAtivos().filter((m) => !meus.has(m.id) && !cardDoModelo(m) && !itens.some((c) => c.modeloDono === m.id) && (!dec[m.id] || (incluirIgnorados && dec[m.id].acao === "ignorado")));
+}
+function modelosComAtualizacao() {
+  const dec = decisoesModelos();
+  return modelosAtivos().map((m) => ({ m: m, c: cardDoModelo(m) })).filter((x) => x.c && CadernoSync.ts(x.m.updatedAt) > CadernoSync.ts(x.c.modeloVersao) &&
+    (!dec[x.m.id] || dec[x.m.id].atualizacaoIgnorada !== x.m.updatedAt) &&
+    (x.c.url || "") + JSON.stringify(niveisDe(x.c)) + (x.c.escalonamento || "") + (x.c.obs || "") !== (x.m.url || "") + JSON.stringify((x.m.escalonamentos || []).map(limparNivelEsc).filter(Boolean)) + (x.m.escalonamento || "") + (x.m.obs || ""));
+}
+function adicionarModelos(lista) {
+  lista.forEach((m) => {
+    itens.push({ id: Math.random().toString(16).slice(2, 10), titulo: m.nome || m.sistema || "", aplicacao: m.sistema || m.nome || "", cliente: "", categoria: "Interno", visibilidade: "Individual",
+      url: m.url || "", usuario: "", senha: "", ciclo: "90", ultima: hoje(), horario: "", escalonamento: m.escalonamento || "",
+      escalonamentos: (m.escalonamentos || []).map((n) => Object.assign({}, n)), obs: m.obs || "", modeloId: m.id, modeloVersao: m.updatedAt || "", modeloPor: m.sharedBy || "" });
+  });
+}
+let modelosAberto = false;
+async function verificarModelos(manual) {
+  if (!window.CadernoSync || modelosAberto || document.body.classList.contains("travado") || trocaObrigatoria) return;
+  if (!manual && document.querySelector(".sheet.on")) return;
+  modelosAberto = true;
+  try {
+    const novos = modelosNovos(!!manual);
+    if (novos.length) await receberModelos(novos);
+    const atu = modelosComAtualizacao();
+    if (atu.length) await atualizarModelosRecebidos(atu);
+    if (manual && !novos.length && !atu.length) toast("Nenhum card compartilhado novo");
+  } finally { modelosAberto = false; }
+}
+function listaMarcavel(box, lista, sub) {
+  const marc = new Map();
+  lista.forEach((x) => {
+    const lab = el("label", "mod-item mod-chk");
+    const cb = el("input"); cb.type = "checkbox"; cb.checked = true; marc.set(x, cb);
+    lab.appendChild(cb);
+    const t = el("span", "mod-txt"); t.appendChild(el("strong", "", x.nome || (x.m && x.m.nome) || "")); t.appendChild(el("small", "", sub(x)));
+    lab.appendChild(t); box.appendChild(lab);
+  });
+  return marc;
+}
+async function receberModelos(novos) {
+  const dec = decisoesModelos(); const agora = new Date().toISOString();
+  const r = await janela("dlgMod", (box, fim) => {
+    box.classList.add("mod-receber");
+    box.appendChild(el("h3", "", "📥 " + novos.length + (novos.length === 1 ? " card compartilhado pela equipe" : " cards compartilhados pela equipe")));
+    box.appendChild(el("p", "meta", "Login e senha vêm em branco: você preenche os seus."));
+    const marc = listaMarcavel(box, novos, (m) => "por " + (m.sharedBy || "alguém da equipe") + (m.sistema ? " · " + m.sistema : ""));
+    const bb = el("div", "dlg-botoes mod-botoes");
+    const bSel = botaoDlg("", "", () => fim({ add: novos.filter((m) => marc.get(m).checked) }));
+    const conta = () => { const n = novos.filter((m) => marc.get(m).checked).length; bSel.textContent = "Adicionar selecionados (" + n + ")"; bSel.disabled = !n; };
+    marc.forEach((cb) => cb.addEventListener("change", conta)); conta();
+    bb.appendChild(botaoDlg("pri", "Adicionar todos", () => fim({ add: novos.slice() })));
+    bb.appendChild(bSel);
+    bb.appendChild(botaoDlg("", "Ignorar", () => fim({ add: [] })));
+    box.appendChild(bb);
+  });
+  if (!r) return; // fechou sem escolher: pergunta de novo na próxima vez
+  novos.forEach((m) => { dec[m.id] = { acao: r.add.indexOf(m) >= 0 ? "adicionado" : "ignorado", em: agora }; });
+  gravarDecisoes(dec);
+  if (r.add.length) { adicionarModelos(r.add); save(); toast(r.add.length + (r.add.length === 1 ? " card adicionado em Meus. Preencha seu login e senha." : " cards adicionados em Meus. Preencha seu login e senha.")); }
+  else toast("Cards compartilhados ignorados. Você pode vê-los de novo em Mais.");
+}
+async function atualizarModelosRecebidos(lista) {
+  const dec = decisoesModelos();
+  const r = await janela("dlgMod", (box, fim) => {
+    box.appendChild(el("h3", "", lista.length === 1 ? "1 card compartilhado foi atualizado" : lista.length + " cards compartilhados foram atualizados"));
+    box.appendChild(el("p", "meta", "Atualiza link, escalonamento e observações. Seu login e sua senha continuam como estão."));
+    const marc = listaMarcavel(box, lista, (x) => "por " + (x.m.updatedBy || x.m.sharedBy || "alguém da equipe") + " · " + dataHoraBR(x.m.updatedAt));
+    const bb = el("div", "dlg-botoes");
+    bb.appendChild(botaoDlg("", "Agora não", () => fim({ sel: [] })));
+    bb.appendChild(botaoDlg("pri", "Atualizar selecionados", () => fim({ sel: lista.filter((x) => marc.get(x).checked) })));
+    box.appendChild(bb);
+  });
+  if (!r) return;
+  lista.forEach((x) => {
+    if (r.sel.indexOf(x) >= 0) {
+      Object.assign(x.c, { url: x.m.url || "", escalonamento: x.m.escalonamento || "", escalonamentos: (x.m.escalonamentos || []).map((n) => Object.assign({}, n)), obs: x.m.obs || "", modeloVersao: x.m.updatedAt });
+    } else { dec[x.m.id] = Object.assign({ acao: "adicionado" }, dec[x.m.id], { atualizacaoIgnorada: x.m.updatedAt }); }
+  });
+  gravarDecisoes(dec);
+  if (r.sel.length) { save(); toast(r.sel.length === 1 ? "Card atualizado (login e senha mantidos)" : r.sel.length + " cards atualizados (login e senha mantidos)"); }
+}
+function blocoModelos(box) {
+  if (!syncEstado.vinculado) return;
+  const ativos = modelosAtivos(), meus = new Set(meusModelos());
+  const daEquipe = ativos.filter((m) => !meus.has(m.id));
+  const disp = modelosNovos(true).length;
+  const c = el("article", "card painel-mais");
+  c.appendChild(el("h3", "", "Cards compartilhados"));
+  c.appendChild(el("p", "meta", "Você compartilha " + meus.size + " · a equipe compartilha " + daEquipe.length + (disp ? " · " + disp + " ainda não adicionado(s)" : "") + ". Use “Compartilhar meu card” num card Individual: vão nome, link, sistema, escalonamento e observações, nunca login e senha."));
+  const row = el("div", "acoes-mais");
+  row.appendChild(btn("btn", "users", "Ver cards compartilhados", () => verificarModelos(true)));
+  c.appendChild(row);
+  box.appendChild(c);
 }
 function exigirNome() {
   if (autor()) return true;
@@ -1224,6 +1478,7 @@ function renderMais(box) {
   blocoNovidades(box);
   bloco("Tema", "Aparência só deste aparelho. Vale também para a tela de login.", bt);
   blocoArquivoEquipe(box, bloco);
+  blocoModelos(box);
   bloco("Compartilhar com a equipe", "Gera o JSON para os outros analistas. Cards Individuais vão sem usuário e sem senha (só título, aplicação, cliente, URL etc.).",
     [btn("btn pri", "download", "Exportar JSON", exportarEquipe)]);
   bloco("Backup pessoal (inclui minhas senhas)", "Arquivo completo, com os usuários e senhas dos seus acessos Individuais. Use só para levar para outro aparelho seu. Não compartilhe.",
@@ -1247,13 +1502,15 @@ function renderMais(box) {
     [btn("btn", "logout", "Sair (bloquear)", sair)]);
 }
 
-/* ---------- v1.9.3: Novidades (texto vai junto com o app; mais recente primeiro) ---------- */
-const APP_VERSAO = "1.9.3";
+/* ---------- v1.9.3+: Novidades (texto vai junto com o app; mais recente primeiro) ---------- */
+const APP_VERSAO = "1.9.4";
 const NOVIDADES_VISTA = "caderno-novidades-vista";
 const NOVIDADES = [
+  { v: "1.9.4", data: "15/10/2026", itens: ["Novo botão “Compartilhar meu card”: envia link e escalonamento para a equipe, sem login e senha.", "Quem recebe escolhe adicionar ou ignorar e só preenche a própria senha.", "Sobre (i) com explicação do app e regras de uso."] },
   { v: "1.9.3", data: "14/10/2026", itens: ["Agora, sempre que o app for atualizado, aparece esta tela uma vez com as novidades.", "Em Mais, a lista “Últimas novidades” guarda o que mudou nas versões recentes."] },
   { v: "1.9.2", data: "14/10/2026", itens: ["Novos analistas começam com apenas 1 card de exemplo, que pode ser apagado.", "A exportação e importação do Excel usam só arquivos do próprio app, sem depender da internet."] },
-  { v: "1.9.1", data: "14/10/2026", itens: ["Corrige as cópias duplicadas que apareciam na sincronização.", "Agora você vincula a pasta inteira da equipe, e não um arquivo só.", "Novo “Log de erros” em Mais para ver falhas de sincronização."], fazer: "Vincule a pasta da equipe uma vez, em Mais › Arquivo da equipe." }
+  { v: "1.9.1", data: "14/10/2026", itens: ["Corrige as cópias duplicadas que apareciam na sincronização.", "Agora você vincula a pasta inteira da equipe, e não um arquivo só.", "Novo “Log de erros” em Mais para ver falhas de sincronização."], fazer: "Vincule a pasta da equipe uma vez, em Mais › Arquivo da equipe." },
+  { v: "1.9", data: "13/10/2026", itens: ["Os cards da Equipe passam a ser sincronizados entre os analistas por uma pasta compartilhada.", "Cards Individuais continuam só no seu aparelho."] }
 ];
 function novidadesItens(n, box) {
   const ul = el("ul", "");
@@ -1269,7 +1526,7 @@ function novidadesItens(n, box) {
 function blocoNovidades(box) {
   const c = el("article", "card painel-mais nv-lista");
   c.appendChild(el("h3", "", "Últimas novidades"));
-  NOVIDADES.slice(0, 3).forEach((n, i) => {
+  NOVIDADES.slice(0, 5).forEach((n, i) => {
     const d = el("div", "nv-l");
     const t = el("div", "nv-v", "v" + n.v + " ");
     t.appendChild(el("small", "", "· " + n.data));
@@ -2217,10 +2474,10 @@ $("fechar").addEventListener("click", () => fecharSheet("sheet"));
 function abrirSheet(id) { $(id).classList.add("on"); $(id).setAttribute("aria-hidden", "false"); document.body.classList.add("sem-scroll"); }
 function fecharSheet(id) { $(id).classList.remove("on"); $(id).setAttribute("aria-hidden", "true"); if (!document.querySelector(".sheet.on, .drawer.on")) document.body.classList.remove("sem-scroll"); }
 document.querySelectorAll("[data-fecha]").forEach((b) => b.addEventListener("click", () => fecharSheet(b.dataset.fecha)));
-document.querySelectorAll(".sheet:not(#dlg):not(#dlgSenha):not(#dlgInstalar), .drawer").forEach((s) => s.addEventListener("click", (ev) => { if (ev.target === s) fecharSheet(s.id); }));
+document.querySelectorAll(".sheet:not(#dlg):not(#dlgSenha):not(#dlgInstalar):not(#dlgMod):not(#dlgVer), .drawer").forEach((s) => s.addEventListener("click", (ev) => { if (ev.target === s) fecharSheet(s.id); }));
 document.addEventListener("keydown", (ev) => {
   if (ev.key !== "Escape") return;
-  const abertos = [...document.querySelectorAll(".sheet.on, .drawer.on")].filter((s) => !(trocaObrigatoria && s.id === "dlgSenha"));
+  const abertos = [...document.querySelectorAll(".sheet.on, .drawer.on")].filter((s) => !(trocaObrigatoria && s.id === "dlgSenha") && s.id !== "dlgMod" && s.id !== "dlgVer");
   abertos.forEach((s) => fecharSheet(s.id));
   fecharMenus();
   if (!abertos.length && selecao) sairSelecao();
