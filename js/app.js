@@ -87,6 +87,7 @@ function load() {
 }
 function save() {
   if (window.CadernoSync) carimbarMudancas();
+  registrarMeus();
   localStorage.setItem(KEY, JSON.stringify(itens));
   render();
   if (window.CadernoSync) agendarSync();
@@ -222,7 +223,7 @@ function dialogo(op) {
     function tecla(ev) { if (ev.key === "Escape") { ev.stopPropagation(); fim(false); } }
     ok.onclick = () => fim(true);
     cancel.onclick = () => fim(false);
-    box.onclick = (ev) => { if (ev.target === box) fim(false); };
+    box.onclick = (ev) => { if (cliqueNoFundo(ev, box)) fim(false); };
     document.addEventListener("keydown", tecla, true);
     abrirSheet("dlg");
     setTimeout(() => (op.cancelar === false ? ok : cancel).focus(), 30);
@@ -534,7 +535,7 @@ function visiveis() {
     if (aba === "mais" || aba === "gerador") return false;
     const blob = [it.titulo, it.aplicacao, it.cliente, it.usuario, it.url, it.categoria, it.visibilidade, it.escalonamento, resumoEscalonamentos(niveisDe(it))].join(" ").toLowerCase();
     return !q || blob.indexOf(q) >= 0;
-  }).sort((a, b) => (a.aplicacao || a.titulo || "").localeCompare(b.aplicacao || b.titulo || "") || (a.cliente || "").localeCompare(b.cliente || "") || (a.titulo || "").localeCompare(b.titulo || ""));
+  }).sort((a, b) => String(a.aplicacao || a.titulo || "").localeCompare(String(b.aplicacao || b.titulo || "")) || String(a.cliente || "").localeCompare(String(b.cliente || "")) || String(a.titulo || "").localeCompare(String(b.titulo || "")));
 }
 function render() {
   const box = document.getElementById("lista");
@@ -921,7 +922,7 @@ function gravarMeta(m) { localStorage.setItem(SYNC_META_KEY, JSON.stringify(m));
 function removidosLocais() { return lerJSON(REMOVIDOS_KEY, []); }
 /* Mesma regra do JSON da equipe: só cards de Equipe; Individuais nunca saem. */
 function compartilhado(it) { return !!it && it.visibilidade !== "Individual"; }
-function itemParaEquipe(it) { return semSegredoIndividual(it); }
+function itemParaEquipe(it) { const c = semSegredoIndividual(it); const n = window.CadernoSync && CadernoSync.normalizarCard ? CadernoSync.normalizarCard(c) : c; return n && n.id ? n : c; }
 function marcaDe(it) { return window.CadernoSync ? CadernoSync.semMeta(it) : JSON.stringify(it); }
 /* Chamada a cada save(): carimba updatedAt/updatedBy nos cards de equipe alterados e cria tombstones das exclusões. */
 function carimbarMudancas() {
@@ -935,6 +936,7 @@ function carimbarMudancas() {
     if (meta.marcas[it.id] !== novas[it.id]) {
       const antes = meta.marcas[it.id] ? JSON.parse(meta.marcas[it.id]) : null;
       registrarAcao(!antes ? "novo card" : (!antes.arquivado_em && it.arquivado_em) ? "arquivar" : (antes.arquivado_em && !it.arquivado_em) ? "reativar" : antes.senha !== it.senha ? "atualizar senha" : "salvar", nomeDe(it));
+      histAcao(tipoMudanca(antes, it), it, "Equipe", "c-" + it.id + "-" + agora, agora);
       it.updatedAt = agora; it.updatedBy = quem; mudou = true;
     }
   });
@@ -945,6 +947,7 @@ function carimbarMudancas() {
       rem = rem.filter((t) => t.id !== id);
       let titulo = antigo ? nomeDe(antigo) : ""; try { if (!titulo) titulo = nomeDe(JSON.parse(meta.marcas[id])); } catch (e) {}
       registrarAcao("excluir", titulo);
+      histAcao("excluido", { titulo: titulo }, "Equipe", "x-" + id + "-" + agora, agora);
       rem.push({ id: id, deletedAt: agora, deletedBy: quem, titulo: titulo });
       mudou = true;
     }
@@ -974,7 +977,68 @@ function registrarHistorico(textos) {
   const h = lerJSON(HIST_KEY, []);
   const agora = new Date().toISOString();
   textos.forEach((t) => h.unshift({ em: agora, texto: t }));
-  localStorage.setItem(HIST_KEY, JSON.stringify(h.slice(0, 60)));
+  localStorage.setItem(HIST_KEY, JSON.stringify(h.slice(0, 60))); // formato antigo mantido (volta para a v1.9.6)
+}
+/* ---------- v1.9.7: Histórico estruturado { id, tipo, card, quem, quando, escopo } ----------
+ * Ações da Equipe viajam no arquivo da equipe (cifrado quando protegido), juntadas pelo id, últimas 100.
+ * Ações dos cards Meus ficam só neste aparelho. Nunca guarda senhas, só o nome do card e o tipo da ação. */
+const HIST2_KEY = "caderno-acessos-historico-v2";
+const APARELHO_KEY = "caderno-acessos-aparelho";
+const PRIMEIRO_KEY = "caderno-acessos-primeiro-acesso";
+let histLote = null; // importação: um registro só, em vez de um por card
+function idAparelho() {
+  let v = localStorage.getItem(APARELHO_KEY);
+  if (!v) { v = Date.now().toString(36) + Math.random().toString(36).slice(2, 8); localStorage.setItem(APARELHO_KEY, v); }
+  return v;
+}
+function lerHist() { return window.CadernoSync ? CadernoSync.limparHistorico(lerJSON(HIST2_KEY, [])) : []; }
+function gravarHist(l) { localStorage.setItem(HIST2_KEY, JSON.stringify(window.CadernoSync ? CadernoSync.mesclarHistorico([l], 100) : l.slice(0, 100))); }
+function addHist(e) {
+  const o = Object.assign({ id: "h-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), card: "", quem: autor(), quando: new Date().toISOString(), escopo: "Equipe" }, e);
+  const l = lerHist().filter((x) => x.id !== o.id); l.unshift(o); gravarHist(l);
+}
+function tipoMudanca(antes, it) {
+  if (!antes) return "adicionado";
+  if (!antes.arquivado_em && it.arquivado_em) return "arquivado";
+  if (antes.arquivado_em && !it.arquivado_em) return "reativado";
+  if ((antes.senha || "") !== (it.senha || "")) return "senha";
+  if (!antes.modeloDono && it.modeloDono) return "compartilhado";
+  if (antes.modeloDono && !it.modeloDono) return "parou";
+  return "editado";
+}
+function histAcao(tipo, it, escopo, id, quando) {
+  if (histLote) { histLote.n++; return; }
+  addHist({ id: id, tipo: tipo, card: String(nomeDe(it || {}) || "").slice(0, 200), escopo: escopo, quando: quando || new Date().toISOString() });
+}
+/* Cards Meus (Individuais): compara com a última foto em memória a cada save(). */
+let fotoMeus = null;
+function fotoIndividuais() { const m = new Map(); itens.filter((x) => !compartilhado(x)).forEach((x) => m.set(x.id, JSON.stringify(x))); return m; }
+function registrarMeus() {
+  const nova = fotoIndividuais();
+  if (fotoMeus) {
+    const agora = new Date().toISOString();
+    nova.forEach((j, id) => {
+      const a = fotoMeus.get(id); if (a === j) return;
+      const antes = a ? JSON.parse(a) : null, it = JSON.parse(j);
+      histAcao(tipoMudanca(antes, it), it, "Meu", "i-" + id + "-" + agora, agora);
+    });
+    fotoMeus.forEach((j, id) => { if (!nova.has(id) && !itens.some((x) => x.id === id)) histAcao("excluido", JSON.parse(j), "Meu", "ix-" + id + "-" + agora, agora); });
+  }
+  fotoMeus = nova;
+}
+/* Entradas vindas da sincronização (mudanças de outros analistas). Mesmo id da entrada criada por quem fez: não duplica. */
+function histDeMudanca(m) {
+  const it = m.item || {};
+  const tipo = m.tipo === "novo" ? "adicionado" : m.tipo === "removido" ? "excluido" : "editado";
+  return { id: (m.tipo === "removido" ? "x-" : "c-") + it.id + "-" + (m.em || ""), tipo: tipo, card: String(nomeDe(it)).slice(0, 200), quem: m.por || "", quando: m.em || new Date().toISOString(), escopo: "Equipe" };
+}
+/* Migração única do histórico antigo (só texto) para o novo formato. */
+function migrarHistorico() {
+  if (localStorage.getItem(HIST2_KEY) != null) return;
+  const velho = lerJSON(HIST_KEY, []);
+  const l = (Array.isArray(velho) ? velho : []).filter((x) => x && x.texto).map((x, i) => ({ id: "v-" + i + "-" + String(x.em || ""), tipo: "texto", texto: String(x.texto).slice(0, 300), card: "", quem: "", quando: String(x.em || ""), escopo: "Equipe", local: true }));
+  gravarHist(l);
+  if (syncMeta().ultimaSync) localStorage.setItem(PRIMEIRO_KEY, "migrado"); // quem já usava não ganha "Primeiro acesso" falso
 }
 function registrarAcao(acao, card) { syncEstado.acoes.push({ acao: acao, card: card }); if (syncEstado.acoes.length > 20) syncEstado.acoes.shift(); }
 function descreverErro(e) {
@@ -1043,19 +1107,24 @@ async function sincronizarAgora(interativo) {
       if (interativo) toast("Sem permissão para a pasta da equipe. Clique em Sincronizar e escolha “Permitir”.");
       return false;
     }
-    let copiasMescladas = [], copiasFechadas = [];
+    let copiasMescladas = [], copiasFechadas = [], invalidos = [];
     let resultado = null;
     // ler → mesclar (principal + cópias de conflito) → gravar → reler para verificar. Repete se o arquivo estiver ocupado.
     await CadernoSync.comRetentativa(async () => {
       const bruto = await a.ler();
-      const remoto = await abrirDocEquipe(bruto, false); // v1.9.5: decifra se protegido (pede a senha da equipe uma vez por aparelho)
-      if (remoto && !CadernoSync.docValido(remoto)) { const e = new Error("O arquivo vinculado não é um arquivo da equipe do Caderno."); e.name = "ArquivoInvalido"; throw e; }
+      const remoto0 = await abrirDocEquipe(bruto, false); // v1.9.5: decifra se protegido (pede a senha da equipe uma vez por aparelho)
+      if (remoto0 && !CadernoSync.docValido(remoto0)) { const e = new Error("O arquivo vinculado não é um arquivo da equipe do Caderno."); e.name = "ArquivoInvalido"; throw e; }
+      // v1.9.7: cada card do arquivo é conferido e limpo; o que estiver estragado é ignorado e vai para o log (não trava o app)
+      invalidos = [];
+      const lr = remoto0 ? CadernoSync.limparDoc(remoto0) : { doc: null, invalidos: [] };
+      const remoto = lr.doc; lr.invalidos.forEach((x) => invalidos.push({ origem: SYNC_ARQUIVO, x: x }));
       const copias = [];
       for (const c of await a.lerCopias()) {
         if (!c.doc) continue;
-        try { const d = await abrirDocEquipe(c.doc, true); if (CadernoSync.docValido(d)) copias.push({ nome: c.nome, doc: d }); }
+        try { const d = await abrirDocEquipe(c.doc, true); if (CadernoSync.docValido(d)) { const lc = CadernoSync.limparDoc(d); lc.invalidos.forEach((x) => invalidos.push({ origem: c.nome, x: x })); copias.push({ nome: c.nome, doc: lc.doc }); } }
         catch (e) { copiasFechadas.push(c.nome); } // cópia cifrada com uma senha que este aparelho não conhece: fica na pasta
       }
+      if (!localStorage.getItem(PRIMEIRO_KEY) && autor()) addHist({ id: "pa-" + idAparelho(), tipo: "primeiro", card: "", escopo: "Equipe" });
       carimbarMudancas();
       const meta = syncMeta();
       let base = { itens: itens.filter(compartilhado).map(itemParaEquipe), removidos: removidosLocais() };
@@ -1072,23 +1141,32 @@ async function sincronizarAgora(interativo) {
         rm = CadernoSync.mesclar({ itens: rm.itens, removidos: rm.removidos }, CadernoSync.modelosDoDoc(c.doc), "", null);
       });
       copiasFechadas = copiasFechadas.filter((n, i, l) => l.indexOf(n) === i);
-      if (precisa) await a.gravar(await fecharDocEquipe(CadernoSync.montarDoc(r.itens, r.removidos, autor(), compartilhado, { modelos: rm.itens, modelosRemovidos: rm.removidos }), bruto));
-      resultado = { r: r, mud: mud, conf: conf, localMudou: localMudou, rm: rm };
+      // v1.9.7: histórico da Equipe viaja no arquivo; primeiro o que veio do arquivo (vence pelo id), depois o deste aparelho e o deduzido das mudanças
+      const histLocal = lerHist();
+      const histEq = CadernoSync.mesclarHistorico([remoto ? remoto.historico : [], ...copias.map((c) => c.doc.historico), histLocal.filter((e) => e.escopo === "Equipe" && !e.local), mud.map(histDeMudanca)], CadernoSync.HIST_MAX);
+      const idsRem = new Set(((remoto && remoto.historico) || []).map((e) => e.id));
+      if (histEq.some((e) => !idsRem.has(e.id))) precisa = true;
+      if (precisa) await a.gravar(await fecharDocEquipe(CadernoSync.montarDoc(r.itens, r.removidos, autor(), compartilhado, { modelos: rm.itens, modelosRemovidos: rm.removidos, historico: histEq }), bruto));
+      resultado = { r: r, mud: mud, conf: conf, localMudou: localMudou, rm: rm, histEq: histEq };
       copiasMescladas = copias.map((c) => c.nome);
     }, { aoFalhar: () => { syncEstado.pendente = true; desenharBotaoSync(); } });
     await concluirSenhaPendente(a);
+    gravarHist(CadernoSync.mesclarHistorico([resultado.histEq, lerHist()], 100));
+    if (!localStorage.getItem(PRIMEIRO_KEY) && autor()) localStorage.setItem(PRIMEIRO_KEY, new Date().toISOString());
+    for (const v of invalidos.slice(0, 20)) await registrarErro("ignorar card inválido", (v.x.titulo ? v.x.titulo + " " : "") + "(posição " + (v.x.pos + 1) + " em " + v.origem + ")", { name: "CardInvalido", message: "card com formato errado foi ignorado e não foi aplicado" }, a);
     for (const nome of copiasFechadas) await registrarErro("juntar cópia de conflito", nome, { name: "SenhaEquipe", message: "cópia protegida com outra senha da equipe; ficou na pasta" }, a);
     gravarModelosLocais({ itens: resultado.rm.itens.map(CadernoSync.limparModelo), removidos: resultado.rm.removidos });
     aplicarResultado(resultado.r);
     // só apaga as cópias depois da gravação verificada do arquivo principal
     for (const nome of copiasMescladas) {
-      try { await CadernoSync.comRetentativa(() => a.apagarCopia(nome), { tentativas: 3, atrasos: [500, 1500] }); registrarHistorico(["Cópia de conflito " + nome + " juntada ao arquivo da equipe e apagada"]); }
+      try { await CadernoSync.comRetentativa(() => a.apagarCopia(nome), { tentativas: 3, atrasos: [500, 1500] }); registrarHistorico(["Cópia de conflito " + nome + " juntada ao arquivo da equipe e apagada"]); addHist({ tipo: "copia", card: nome, quem: "", escopo: "Equipe", local: true }); }
       catch (e) { await registrarErro("apagar cópia de conflito", nome, e, a); }
     }
     syncEstado.pendente = false;
     const textos = resultado.mud.map(textoMudanca);
     resultado.conf.forEach((c) => textos.push("Conflito em " + nomeDe(c.remoto) + ": você e " + (c.remoto.updatedBy || "outra pessoa") + " alteraram desde a última sincronização. Ficou a versão mais recente" + (CadernoSync.ts(c.remoto.updatedAt) >= CadernoSync.ts(c.local.updatedAt) ? " (de " + (c.remoto.updatedBy || "outra pessoa") + ")." : " (a sua).")));
     registrarHistorico(textos);
+    resultado.conf.forEach((c, i) => addHist({ tipo: "conflito", card: String(nomeDe(c.remoto)).slice(0, 200), quem: c.remoto.updatedBy || "", escopo: "Equipe", local: true, texto: textos[resultado.mud.length + i] }));
     renderAposSync(); // v1.9.6: sempre redesenha (os objetos dos cards da Equipe foram trocados)
     if (resultado.conf.length) toast(textos[textos.length - 1]);
     else if (copiasMescladas.length) toast(copiasMescladas.length + (copiasMescladas.length === 1 ? " cópia de conflito do OneDrive juntada" : " cópias de conflito do OneDrive juntadas") + " ao arquivo da equipe");
@@ -1150,6 +1228,7 @@ function aplicarResultado(r0) {
   localStorage.setItem(REMOVIDOS_KEY, JSON.stringify(r.removidos));
   const marcas = {}; itens.filter(compartilhado).forEach((it) => { marcas[it.id] = marcaDe(it); });
   gravarMeta({ ultimaSync: new Date().toISOString(), marcas: marcas });
+  fotoMeus = fotoIndividuais();
 }
 /* ---------- v1.9.5: senha da equipe no arquivo caderno-equipe.json (ver js/cripto-equipe.js) ---------- */
 const SE_KEY = "caderno-acessos-senha-equipe";        // { atual: salt, por, em, acao } — nunca a senha
@@ -1206,6 +1285,7 @@ async function concluirSenhaPendente(a) {
   localStorage.setItem(SE_KEY, JSON.stringify({ atual: p.salt, por: p.info.por, em: p.info.em, acao: p.info.acao }));
   const txt = (p.info.acao === "ativada" ? "Arquivo da equipe protegido com senha da equipe por " : "Senha da equipe trocada por ") + p.info.por + " em " + dataHoraBR(p.info.em);
   registrarHistorico([txt]);
+  try { addHist({ id: "se-" + p.salt, tipo: p.info.acao === "ativada" ? "se-ativada" : "se-trocada", card: "Arquivo da equipe", quem: p.info.por, quando: p.info.em, escopo: "Equipe" }); if (aba === "mais") render(); } catch (e) {}
   try { if (a && a.registrarLog) await a.registrarLog([new Date().toLocaleString("pt-BR"), p.info.por, p.info.acao === "ativada" ? "senha da equipe ativada" : "senha da equipe trocada", "", ""]); } catch (e) {}
 }
 function textoSenhaEquipe() {
@@ -1287,6 +1367,7 @@ async function pedirSenhaEquipe(env) {
         await CadernoCripto.guardarChave(env.kdf.salt, { chave: chave, iter: env.kdf.iter, verif: env.verif });
         if (chaveLoginSessao) await guardarOlho(s.value, env.kdf.salt, chaveLoginSessao);
         localStorage.setItem(SE_KEY, JSON.stringify({ atual: env.kdf.salt, por: env.senha_por || "", em: env.senha_em || "", acao: env.senha_acao || "" }));
+        if (env.senha_por) addHist({ id: "se-" + env.kdf.salt, tipo: env.senha_acao === "ativada" ? "se-ativada" : "se-trocada", card: "Arquivo da equipe", quem: env.senha_por, quando: env.senha_em || new Date().toISOString(), escopo: "Equipe" });
         if (env.senha_por) registrarHistorico([(env.senha_acao === "ativada" ? "Arquivo da equipe protegido com senha da equipe por " : "Senha da equipe trocada por ") + env.senha_por + (env.senha_em ? " em " + dataHoraBR(env.senha_em) : "")]);
         s.value = ""; fim(true);
       } catch (e) { er.textContent = e && e.name === "SenhaEquipeIncorreta" ? "Senha da equipe incorreta. Confira com o gestor." : "Não foi possível conferir a senha (" + ((e && e.name) || "erro") + ")."; s.select(); }
@@ -1647,16 +1728,7 @@ function blocoArquivoEquipe(box, bloco) {
       ? "Escolha a pasta do OneDrive da equipe (json-caderno-acessos). O Caderno usa o arquivo caderno-equipe.json (cria se não existir), junta as cópias de conflito do OneDrive e grava um log de erros na pasta. Só cards de Equipe vão para o arquivo."
       : "Use um arquivo na pasta do OneDrive (ex.: json-caderno-acessos). Uma pessoa cria o arquivo; as outras usam o arquivo existente. Só cards de Equipe vão para o arquivo.",
     [linhaNome].concat(botoes));
-  const h = lerJSON(HIST_KEY, []);
-  const c = el("article", "card painel-mais historico");
-  c.appendChild(el("h3", "", "Histórico"));
-  if (!h.length) c.appendChild(el("p", "meta", "Nenhuma alteração da equipe recebida ainda."));
-  else {
-    const ul = el("ul", "hist-lista");
-    h.slice(0, 20).forEach((x) => { const li = el("li"); li.appendChild(el("span", "hist-quando", dataHoraBR(x.em))); li.appendChild(el("span", "", x.texto)); ul.appendChild(li); });
-    c.appendChild(ul);
-  }
-  box.appendChild(c);
+  blocoHistorico(box);
   const le = lerJSON(LOGERR_KEY, []);
   const c2 = el("article", "card painel-mais historico log-erros");
   c2.appendChild(el("h3", "", "Log de erros"));
@@ -1671,6 +1743,47 @@ function blocoArquivoEquipe(box, bloco) {
     c2.appendChild(row);
   }
   box.appendChild(c2);
+}
+/* v1.9.7: Histórico com ícone, ação, card, quem, quando e etiqueta Equipe/Meu. */
+const HIST_ROT = {
+  adicionado: ["➕", "Card adicionado"], editado: ["✏️", "Card editado"], senha: ["🔑", "Senha alterada"], arquivado: ["📦", "Card arquivado"],
+  reativado: ["♻️", "Card reativado"], excluido: ["🗑️", "Card excluído"], compartilhado: ["📤", "Card compartilhado"], parou: ["🚫", "Parou de compartilhar"],
+  importado: ["📥", "Importação"], "se-ativada": ["🛡️", "Arquivo protegido com senha da equipe"], "se-trocada": ["🛡️", "Senha da equipe trocada"],
+  primeiro: ["👋", "Primeiro acesso"], conflito: ["⚠️", "Conflito resolvido"], copia: ["🔀", "Cópia de conflito juntada"], texto: ["🕘", ""]
+};
+let histFiltro = "todos";
+function blocoHistorico(box) {
+  const todos = lerHist();
+  const c = el("article", "card painel-mais historico hist2");
+  c.appendChild(el("h3", "", "Histórico"));
+  c.appendChild(el("p", "meta", "Mostrando as últimas 100 ações"));
+  const chips = el("div", "hist-chips");
+  [["todos", "Todos"], ["Equipe", "Equipe"], ["Meu", "Meus"]].forEach(([k, t]) => {
+    const b = btn("hist-chip" + (histFiltro === k ? " on" : ""), null, t, () => { histFiltro = k; render(); });
+    b.dataset.filtro = k; b.setAttribute("aria-pressed", histFiltro === k ? "true" : "false"); chips.appendChild(b);
+  });
+  c.appendChild(chips);
+  const l = todos.filter((e) => histFiltro === "todos" || e.escopo === histFiltro).slice(0, 100);
+  if (!l.length) c.appendChild(el("p", "meta", "Nenhuma ação registrada ainda."));
+  else {
+    const ul = el("ul", "hist2-lista");
+    l.forEach((e) => {
+      const r = HIST_ROT[e.tipo] || HIST_ROT.texto;
+      const li = el("li", "hist2-it"); li.dataset.tipo = e.tipo;
+      li.appendChild(el("span", "hist2-ic", r[0]));
+      const tx = el("div", "hist2-tx");
+      if (e.tipo === "texto") tx.appendChild(el("b", "", e.texto || ""));
+      else if (e.tipo === "primeiro") tx.appendChild(el("b", "", "Primeiro acesso de " + (e.quem || "analista")));
+      else { tx.appendChild(el("b", "", r[1])); if (e.card) { tx.appendChild(document.createTextNode(" · ")); tx.appendChild(el("span", "hist2-card", e.card)); } }
+      tx.appendChild(el("div", "hist2-sub", (e.quem && e.tipo !== "primeiro" ? "por " + e.quem + " · " : "") + dataHoraBR(e.quando)));
+      li.appendChild(tx);
+      li.appendChild(el("span", "hist2-tag " + (e.escopo === "Meu" ? "meu" : "equipe"), e.escopo === "Meu" ? "Meu" : "Equipe"));
+      ul.appendChild(li);
+    });
+    c.appendChild(ul);
+  }
+  c.appendChild(el("div", "hist2-nota", "🔒 O histórico nunca mostra senhas, só que foram alteradas. Ações da Equipe viajam no arquivo da equipe (protegido, se houver senha da equipe); as dos cards Meus ficam só neste aparelho."));
+  box.appendChild(c);
 }
 function renderMais(box) {
   const bloco = (titulo, texto, botoes) => {
@@ -1718,9 +1831,10 @@ function renderMais(box) {
 }
 
 /* ---------- v1.9.3+: Novidades (texto vai junto com o app; mais recente primeiro) ---------- */
-const APP_VERSAO = "1.9.6";
+const APP_VERSAO = "1.9.7";
 const NOVIDADES_VISTA = "caderno-novidades-vista";
 const NOVIDADES = [
+  { v: "1.9.7", data: "16/10/2026", itens: ["Histórico em Mais mostra as últimas 100 ações: quem adicionou, editou, arquivou ou excluiu cards.", "O card não fecha mais sozinho ao clicar fora: o app pergunta antes de descartar.", "Importação mais segura, com prévia antes de aplicar."] },
   { v: "1.9.6", data: "15/10/2026", itens: ["Corrigido: cards da Equipe arquivados agora podem ser excluídos normalmente.", "Transições mais suaves ao salvar, excluir, entrar e pesquisar."] },
   { v: "1.9.5", data: "15/10/2026", itens: ["O arquivo da equipe pode ser protegido com uma senha da equipe: fora do app ele fica ilegível.", "Cada analista digita a senha da equipe só uma vez por aparelho.", "O gestor pode trocar a senha da equipe e ver a senha atual depois de confirmar a própria senha de login."], fazer: "Quando o app pedir, digite a senha da equipe passada pelo gestor." },
   { v: "1.9.4", data: "15/10/2026", itens: ["Novo botão “Compartilhar meu card”: envia link e escalonamento para a equipe, sem login e senha.", "Quem recebe escolhe adicionar ou ignorar e só preenche a própria senha.", "Sobre (i) com explicação do app e regras de uso."] },
@@ -1795,36 +1909,76 @@ function backupPessoal() {
   download("caderno-acessos-backup-pessoal-" + hoje() + ".json", JSON.stringify({ versao: "web-2", tipo: "backup-pessoal", gerado_em: hoje(), itens: itens }, null, 2), "application/json");
   toast("Backup pessoal exportado");
 }
-function mesclar(lista) {
-  let novos = 0, atualizados = 0;
+/* v1.9.7: todo card importado passa por CadernoSync.normalizarCard (lista branca, só texto, limites). "alvo" permite simular (prévia). */
+function idDaChave(chave) { let h = 2166136261; for (let k = 0; k < chave.length; k++) { h ^= chave.charCodeAt(k); h = Math.imul(h, 16777619); } return "imp-" + (h >>> 0).toString(16).padStart(8, "0"); }
+function prepararImportacao(lista) {
+  const ok = [], invalidos = [];
+  lista.forEach((raw, pos) => {
+    const inc = window.CadernoSync ? CadernoSync.normalizarCard(raw) : null;
+    if (!inc) { invalidos.push(pos); return; }
+    if (!inc.id) { const k = chaveCard(inc); if (!k) { invalidos.push(pos); return; } inc.id = idDaChave(k); }
+    if (!inc.titulo && !inc.aplicacao) { invalidos.push(pos); return; }
+    if (!inc.escalonamentos) inc.escalonamentos = [];
+    ok.push(inc);
+  });
+  return { itens: ok, invalidos: invalidos };
+}
+function mesclar(lista, alvo) {
+  alvo = alvo || itens;
+  let novos = 0, atualizados = 0, duplicados = 0;
+  const links = new Map(); alvo.forEach((x) => { const u = normUrl(x.url); if (u) links.set(u, (links.get(u) || 0) + 1); });
   lista.forEach((inc) => {
-    if (!inc || typeof inc !== "object") return;
-    if (!inc.id) inc.id = Math.random().toString(16).slice(2, 10);
-    if (Array.isArray(inc.escalonamentos)) inc.escalonamentos = inc.escalonamentos.map(limparNivelEsc).filter(Boolean);
-    const i = itens.findIndex((x) => x.id === inc.id);
+    if (!inc || typeof inc !== "object" || !inc.id) return;
+    const i = alvo.findIndex((x) => x.id === inc.id);
     if (i < 0) {
       // também evita duplicar por fornecedor+aplicação se id diferente
       const chave = chaveCard(inc);
-      const j = chave ? itens.findIndex((x) => chaveCard(x) === chave) : -1;
+      const j = chave ? alvo.findIndex((x) => chaveCard(x) === chave) : -1;
       if (j >= 0) {
-        const atual = itens[j];
+        const atual = alvo[j];
         const junto = Object.assign({}, atual, inc, { id: atual.id });
         ["usuario", "senha"].forEach((k) => { if (!inc[k] && atual[k]) junto[k] = atual[k]; });
         if ((!inc.escalonamentos || !inc.escalonamentos.length) && atual.escalonamentos && atual.escalonamentos.length) junto.escalonamentos = atual.escalonamentos;
-        itens[j] = junto;
+        alvo[j] = junto;
         atualizados++;
         return;
       }
-      itens.push(inc); novos++; return;
+      const u = normUrl(inc.url);
+      if (u && links.get(u)) duplicados++;
+      if (u) links.set(u, (links.get(u) || 0) + 1);
+      alvo.push(inc); novos++; return;
     }
-    const atual = itens[i];
+    const atual = alvo[i];
     const junto = Object.assign({}, atual, inc);
     ["usuario", "senha"].forEach((k) => { if (!inc[k] && atual[k]) junto[k] = atual[k]; });
     if ((!inc.escalonamentos || !inc.escalonamentos.length) && atual.escalonamentos && atual.escalonamentos.length) junto.escalonamentos = atual.escalonamentos;
-    itens[i] = junto;
+    alvo[i] = junto;
     atualizados++;
   });
-  return { novos: novos, atualizados: atualizados };
+  return { novos: novos, atualizados: atualizados, duplicados: duplicados };
+}
+const IMPORT_MAX_BYTES = 5 * 1024 * 1024, IMPORT_MAX_CARDS = 2000;
+/* Prévia antes de aplicar: X novos, Y atualizados, Z possíveis duplicados (mesmo link). */
+async function importarComPrevia(listaBruta, titulo) {
+  if (listaBruta.length > IMPORT_MAX_CARDS) { aviso("Arquivo grande demais", "O arquivo tem " + listaBruta.length + " cards. O limite é " + IMPORT_MAX_CARDS + " por importação. Nada foi importado."); return false; }
+  const prep = prepararImportacao(listaBruta);
+  if (!prep.itens.length) { aviso("Nada importado", "Nenhum card válido no arquivo" + (prep.invalidos.length ? " (" + prep.invalidos.length + " ignorado(s) por formato errado)" : "") + "."); return false; }
+  const sim = mesclar(prep.itens.map((x) => Object.assign({}, x)), itens.map((x) => Object.assign({}, x)));
+  const ok = await dialogo({
+    titulo: titulo || "Importar cards?",
+    texto: sim.novos + " novo(s), " + sim.atualizados + " atualizado(s), " + sim.duplicados + " possível(is) duplicado(s) (mesmo link)." + (prep.invalidos.length ? " " + prep.invalidos.length + " card(s) com formato errado serão ignorados." : "") + " Usuário e senha que você já tem não são apagados.",
+    ok: "Importar", cancelar: "Cancelar"
+  });
+  if (!ok) { toast("Importação cancelada"); return false; }
+  histLote = { n: 0 };
+  let res;
+  try { res = mesclar(prep.itens); save(); }
+  finally { histLote = null; }
+  addHist({ tipo: "importado", card: res.novos + " novo(s), " + res.atualizados + " atualizado(s)", escopo: "Meu", local: true });
+  fotoMeus = fotoIndividuais();
+  if (aba === "mais") render();
+  toast("Importação concluída: " + res.novos + " novo(s), " + res.atualizados + " atualizado(s). Total: " + itens.length + " card(s).");
+  return true;
 }
 function chaveCard(it) {
   const a = String(it.aplicacao || "").trim().toLowerCase();
@@ -1836,18 +1990,16 @@ function chaveCard(it) {
 function importarJson(ev) {
   const f = ev.target.files && ev.target.files[0];
   if (!f) return;
+  if (f.size > IMPORT_MAX_BYTES) { aviso("Arquivo grande demais", "O limite é 5 MB por importação. Nada foi importado."); ev.target.value = ""; return; }
   const r = new FileReader();
-  r.onload = () => {
-    try {
-      const data = JSON.parse(r.result);
-      const lista = Array.isArray(data) ? data : (data.itens || []);
-      const res = mesclar(lista);
-      save();
-      aviso("Importação concluída", res.novos + " novo(s), " + res.atualizados + " atualizado(s). Total: " + itens.length + " card(s).");
-    } catch (e) {
-      aviso("Arquivo inválido", "Esse arquivo não é um JSON do Caderno de Acessos.");
-    }
+  r.onload = async () => {
     ev.target.value = "";
+    let data;
+    try { data = JSON.parse(r.result); } catch (e) { aviso("Arquivo inválido", "Esse arquivo não é um JSON do Caderno de Acessos."); return; }
+    const lista = Array.isArray(data) ? data : (data && typeof data === "object" && Array.isArray(data.itens)) ? data.itens : null;
+    if (!lista) { aviso("Arquivo inválido", "Formato não reconhecido: o JSON precisa ser uma lista de cards ou ter a lista em “itens”. Nada foi importado."); return; }
+    try { await importarComPrevia(lista, "Importar JSON?"); }
+    catch (e) { aviso("Falha na importação", "Não foi possível importar esse arquivo. Nada foi alterado."); }
   };
   r.readAsText(f);
 }
@@ -1890,7 +2042,7 @@ const ABAS_PLAN = [
   { nome: "Ferramentas arquivadas", filtro: (it) => !!it.arquivado_em && it.categoria !== "Externo" }
 ];
 function ordenarCards(lista) {
-  return lista.slice().sort((a, b) => (a.aplicacao || a.titulo || "").localeCompare(b.aplicacao || b.titulo || "") || (a.cliente || "").localeCompare(b.cliente || "") || (a.titulo || "").localeCompare(b.titulo || ""));
+  return lista.slice().sort((a, b) => String(a.aplicacao || a.titulo || "").localeCompare(String(b.aplicacao || b.titulo || "")) || String(a.cliente || "").localeCompare(String(b.cliente || "")) || String(a.titulo || "").localeCompare(String(b.titulo || "")));
 }
 function abasPlanilha() {
   return ABAS_PLAN.map((a) => ({ nome: a.nome, sempre: !!a.sempre, arquivo: /arquivad/.test(a.nome), lista: ordenarCards(itens.filter(a.filtro)) }))
@@ -2486,6 +2638,7 @@ function cardsDeWorkbook(wb, XLSX) {
 async function importarPlanilha(ev) {
   const f = ev.target.files && ev.target.files[0];
   if (!f) return;
+  if (f.size > IMPORT_MAX_BYTES) { aviso("Arquivo grande demais", "O limite é 5 MB por importação. Nada foi importado."); ev.target.value = ""; return; }
   try {
     toast("Lendo planilha…");
     const XLSX = await carregarXlsxLib();
@@ -2496,9 +2649,7 @@ async function importarPlanilha(ev) {
       aviso("Nada importado", "Não encontrei abas/colunas reconhecíveis (ID, Título, Aplicação… ou Fornecedor, Contato…).");
       return;
     }
-    const res = mesclar(lista);
-    save();
-    aviso("Planilha importada", res.novos + " novo(s), " + res.atualizados + " atualizado(s). Senhas individuais já preenchidas neste aparelho não foram apagadas.");
+    await importarComPrevia(lista, "Importar planilha?");
   } catch (e) {
     aviso("Falha na importação", "Não foi possível ler a planilha. Verifique se o arquivo é .xlsx ou .xls.");
   } finally {
@@ -2596,7 +2747,7 @@ function preencherSelect(sel, valores, atual, rotuloNovo) {
   sel.value = atual && valores.includes(atual) ? atual : "";
 }
 function unicos(campo) {
-  return Array.from(new Set(itens.map((it) => (it[campo] || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  return Array.from(new Set(itens.map((it) => String(it[campo] || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
 }
 function ligarNovo(sel, input) {
   const upd = () => { input.hidden = sel.value !== NOVO; if (!input.hidden) input.focus(); };
@@ -2632,8 +2783,24 @@ function abrirFicha(it) {
   $("erroForm").textContent = "";
   $("avisoInd").hidden = $("fVisibilidade").value !== "Individual";
   abrirSheet("sheet");
+  fichaFoto = fotoFicha();
   setTimeout(() => $("fTitulo").focus(), 50);
 }
+/* v1.9.7: a ficha não fecha sozinha. Foto do formulário ao abrir; fechar com alterações pergunta antes. */
+let fichaFoto = null, perguntandoDescarte = false;
+function fotoFicha() { return JSON.stringify([...$("ficha").querySelectorAll("input, select, textarea")].map((x) => x.type === "checkbox" ? x.checked : x.value).concat([JSON.stringify(escDraft)])); }
+function fichaSuja() { return $("sheet").classList.contains("on") && fichaFoto != null && fotoFicha() !== fichaFoto; }
+async function pedirFecharFicha() {
+  if (perguntandoDescarte) return false;
+  if (!fichaSuja()) { fichaFoto = null; fecharSheet("sheet"); return true; }
+  perguntandoDescarte = true;
+  try {
+    const sim = await dialogo({ titulo: "Descartar alterações?", texto: "Você tem alterações não salvas neste card.", ok: "Descartar", cancelar: "Continuar editando", perigo: true });
+    if (sim) { fichaFoto = null; fecharSheet("sheet"); return true; }
+    return false;
+  } finally { perguntandoDescarte = false; }
+}
+window.addEventListener("beforeunload", (ev) => { if (fichaSuja()) { ev.preventDefault(); ev.returnValue = ""; } });
 $("fVisibilidade").addEventListener("change", () => { $("avisoInd").hidden = $("fVisibilidade").value !== "Individual"; });
 $("fOlho").dataset.alvo = "fSenha";
 ligarOlho($("fOlho"));
@@ -2669,6 +2836,7 @@ function lerFicha() {
 function gravar(o, msg) {
   const i = itens.findIndex((x) => x.id === o.id);
   if (i >= 0) itens[i] = o; else itens.push(o);
+  fichaFoto = null;
   fecharSheet("sheet");
   save();
   toast(msg);
@@ -2685,16 +2853,24 @@ $("atualizarSenha").addEventListener("click", () => {
   o.senha_atualizada_em = hoje();
   gravar(o, "Senha atualizada hoje" + (o.ciclo !== "Nunca" ? " · próxima troca em " + o.ciclo + " dias" : ""));
 });
-$("fechar").addEventListener("click", () => fecharSheet("sheet"));
+$("fechar").addEventListener("click", () => pedirFecharFicha());
 
 /* ---------- Sheets, menu, abas ---------- */
+/* v1.9.7: o fundo escuro só fecha se o clique COMEÇOU e TERMINOU nele (arrastar a seleção de um campo para fora não fecha)
+ * e não logo depois de voltar para a janela (clique de foco vindo do Bloco de Notas, por exemplo). */
+let fundoDown = null, focoJanelaEm = 0;
+document.addEventListener("pointerdown", (ev) => { fundoDown = ev.target; }, true);
+window.addEventListener("focus", () => { focoJanelaEm = Date.now(); });
+function cliqueNoFundo(ev, fundo) { return ev.target === fundo && fundoDown === fundo && Date.now() - focoJanelaEm > 400; }
 function abrirSheet(id) { $(id).classList.add("on"); $(id).setAttribute("aria-hidden", "false"); document.body.classList.add("sem-scroll"); }
 function fecharSheet(id) { $(id).classList.remove("on"); $(id).setAttribute("aria-hidden", "true"); if (!document.querySelector(".sheet.on, .drawer.on")) { document.body.classList.remove("sem-scroll"); renderSePendente(); } }
 document.querySelectorAll("[data-fecha]").forEach((b) => b.addEventListener("click", () => fecharSheet(b.dataset.fecha)));
-document.querySelectorAll(".sheet:not(#dlg):not(#dlgSenha):not(#dlgInstalar):not(#dlgMod):not(#dlgVer), .drawer").forEach((s) => s.addEventListener("click", (ev) => { if (ev.target === s) fecharSheet(s.id); }));
+document.querySelectorAll(".sheet:not(#dlg):not(#dlgSenha):not(#dlgInstalar):not(#dlgMod):not(#dlgVer), .drawer").forEach((s) => s.addEventListener("click", (ev) => { if (!cliqueNoFundo(ev, s)) return; if (s.id === "sheet") pedirFecharFicha(); else fecharSheet(s.id); }));
 document.addEventListener("keydown", (ev) => {
   if (ev.key !== "Escape") return;
+  if (perguntandoDescarte) return;
   const abertos = [...document.querySelectorAll(".sheet.on, .drawer.on")].filter((s) => !(trocaObrigatoria && s.id === "dlgSenha") && s.id !== "dlgMod" && s.id !== "dlgVer");
+  if (abertos.some((s) => s.id === "sheet") && fichaSuja()) { abertos.filter((s) => s.id !== "sheet").forEach((s) => fecharSheet(s.id)); fecharMenus(); pedirFecharFicha(); return; }
   abertos.forEach((s) => fecharSheet(s.id));
   fecharMenus();
   if (!abertos.length && selecao) sairSelecao();
@@ -2890,6 +3066,8 @@ function entrar() {
   document.body.classList.remove("travado");
   if (typeof marcarAtividade === "function") marcarAtividade(true);
   load();
+  try { migrarHistorico(); } catch (e) {}
+  fotoMeus = fotoIndividuais();
   render();
   if (window.CadernoSync) atualizarEstadoSync().then(() => { sincronizar(false); sugerirPasta(); });
   setTimeout(mostrarNovidadesSePendente, 500);
@@ -2991,7 +3169,7 @@ document.getElementById("loginForm").addEventListener("submit", async (ev) => {
 });
 $("formTrocaSenha").addEventListener("submit", salvarTrocaSenha);
 $("tsCancelar").addEventListener("click", () => { if (trocaObrigatoria) sair(); else fecharSheet("dlgSenha"); });
-$("dlgSenha").addEventListener("click", (ev) => { if (ev.target === $("dlgSenha") && !trocaObrigatoria) fecharSheet("dlgSenha"); });
+$("dlgSenha").addEventListener("click", (ev) => { if (cliqueNoFundo(ev, $("dlgSenha")) && !trocaObrigatoria) fecharSheet("dlgSenha"); });
 document.querySelectorAll(".olho[data-alvo]").forEach(ligarOlho);
 aplicarIcones(document.getElementById("login"));
 aplicarIcones(document.getElementById("dlgSenha"));
@@ -3096,7 +3274,7 @@ window.addEventListener("appinstalled", () => {
     abrirInstalar(true);
   });
   dlg.addEventListener("click", (ev) => {
-    if (ev.target === dlg) fecharInstalar(true);
+    if (cliqueNoFundo(ev, dlg)) fecharInstalar(true);
   });
   document.addEventListener("keydown", (ev) => {
     if (ev.key === "Escape" && dlg.classList.contains("on")) {

@@ -28,6 +28,77 @@
     });
     return o;
   }
+  /* v1.9.7: todo card vindo de fora (importação, arquivo da equipe, cópia de conflito) passa por aqui.
+   * Lista branca de campos, tudo vira texto com limite; chaves perigosas (__proto__ etc.) nunca entram. Devolve null se inválido. */
+  const CAMPOS_CARD = { id: 64, titulo: 200, aplicacao: 200, cliente: 200, categoria: 20, visibilidade: 20, url: 2000, usuario: 500, senha: 500,
+    ciclo: 10, ultima: 40, horario: 500, escalonamento: 5000, obs: 5000, arquivado_em: 40, senha_atualizada_em: 40, updatedAt: 40, updatedBy: 120,
+    modeloId: 80, modeloDono: 80, modeloPor: 120 };
+  const PROIBIDAS = new Set(["__proto__", "constructor", "prototype"]);
+  function txt(v, max) { if (v == null) return ""; if (typeof v === "object") return ""; return String(v).slice(0, max); }
+  function normalizarNivel(n) {
+    if (!n || typeof n !== "object" || Array.isArray(n)) return null;
+    const nv = Number(n.nivel);
+    return { nivel: Number.isFinite(nv) && nv > 0 ? Math.min(Math.floor(nv), 99) : 1,
+      canal: ["portal", "email", "telefone", "outro"].indexOf(n.canal) >= 0 ? n.canal : "outro",
+      valor: txt(n.valor, 2000), nome: txt(n.nome, 200), horario: txt(n.horario, 200), obs: txt(n.obs, 1000) };
+  }
+  function normalizarCard(raw) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+    const o = {};
+    Object.keys(CAMPOS_CARD).forEach((k) => {
+      if (PROIBIDAS.has(k) || !Object.prototype.hasOwnProperty.call(raw, k)) return;
+      const v = raw[k];
+      if (k === "arquivado_em" && (v == null || v === "")) { o[k] = null; return; }
+      if (v == null) return;
+      if (typeof v === "object") return; // tipo errado (objeto/array no lugar de texto): ignora o campo
+      o[k] = txt(v, CAMPOS_CARD[k]);
+    });
+    if (Object.prototype.hasOwnProperty.call(raw, "escalonamentos")) o.escalonamentos = Array.isArray(raw.escalonamentos) ? raw.escalonamentos.slice(0, 20).map(normalizarNivel).filter(Boolean) : [];
+    if (!("arquivado_em" in o)) o.arquivado_em = null;
+    if (o.id != null) o.id = o.id.trim();
+    if (o.visibilidade && o.visibilidade !== "Individual") o.visibilidade = "Equipe";
+    if (o.categoria && o.categoria !== "Externo") o.categoria = "Interno";
+    return o;
+  }
+  /* Separa itens válidos dos inválidos (sem id ou que não são objeto). */
+  function filtrarItens(lista) {
+    const ok = [], invalidos = [];
+    (Array.isArray(lista) ? lista : []).forEach((raw, i) => {
+      const c = normalizarCard(raw);
+      if (!c || !c.id || !(c.titulo || c.aplicacao)) invalidos.push({ pos: i, titulo: c ? (c.titulo || c.aplicacao || c.id || "") : "" });
+      else ok.push(c);
+    });
+    return { itens: ok, invalidos: invalidos };
+  }
+  /* Documento remoto limpo: itens normalizados, tombstones e histórico válidos. */
+  function limparDoc(d) {
+    if (!docValido(d)) return { doc: d, invalidos: [] };
+    const f = filtrarItens(d.itens);
+    const out = { tipo: TIPO, versao: d.versao, itens: f.itens,
+      removidos: (Array.isArray(d.removidos) ? d.removidos : []).filter((t) => t && typeof t === "object" && (typeof t.id === "string" || typeof t.id === "number")).map((t) => ({ id: String(t.id).slice(0, 64), deletedAt: txt(t.deletedAt, 40), deletedBy: txt(t.deletedBy, 120), titulo: txt(t.titulo, 200) })) };
+    if (Array.isArray(d.modelos)) out.modelos = d.modelos.filter((m) => m && typeof m === "object" && !Array.isArray(m));
+    if (Array.isArray(d.modelosRemovidos)) out.modelosRemovidos = d.modelosRemovidos.filter((t) => t && typeof t === "object" && t.id != null);
+    out.historico = limparHistorico(d.historico);
+    return { doc: out, invalidos: f.invalidos };
+  }
+  /* v1.9.7: histórico estruturado { id, tipo, card, quem, quando, escopo }. Nunca guarda senhas. */
+  const HIST_MAX = 100;
+  const HIST_TIPOS = ["adicionado", "editado", "senha", "arquivado", "reativado", "excluido", "compartilhado", "parou", "importado", "se-ativada", "se-trocada", "primeiro", "conflito", "copia", "texto"];
+  function limparEntrada(e) {
+    if (!e || typeof e !== "object" || Array.isArray(e) || typeof e.id !== "string" || !e.id) return null;
+    const tipo = HIST_TIPOS.indexOf(e.tipo) >= 0 ? e.tipo : "texto";
+    const o = { id: e.id.slice(0, 120), tipo: tipo, card: txt(e.card, 200), quem: txt(e.quem, 120), quando: txt(e.quando, 40), escopo: e.escopo === "Meu" ? "Meu" : "Equipe" };
+    if (e.texto) o.texto = txt(e.texto, 300);
+    if (e.local) o.local = true;
+    return o;
+  }
+  function limparHistorico(l) { return (Array.isArray(l) ? l : []).slice(0, 500).map(limparEntrada).filter(Boolean); }
+  /* Junta listas pelo id (a primeira lista vence em caso de id repetido), mais recente primeiro, até "max". */
+  function mesclarHistorico(listas, max) {
+    const m = new Map();
+    listas.forEach((l) => (l || []).forEach((e) => { if (e && e.id && !m.has(e.id)) m.set(e.id, e); }));
+    return [...m.values()].sort((a, b) => ts(b.quando) - ts(a.quando)).slice(0, max || HIST_MAX);
+  }
   function limparTomb(t) { return { id: t.id, deletedAt: t.deletedAt, deletedBy: t.deletedBy || "", titulo: t.titulo || "" }; }
 
   /* Documento do arquivo da equipe. "filtro" decide o que pode sair (só cards compartilhados).
@@ -44,6 +115,7 @@
       d.modelos = (extras.modelos || []).filter((m) => m && m.id).map(limparModelo);
       d.modelosRemovidos = (extras.modelosRemovidos || []).filter((t) => t && t.id && ts(t.deletedAt) >= lim).map(limparTomb);
     }
+    if (extras && Array.isArray(extras.historico)) d.historico = extras.historico.filter((e) => e && e.escopo === "Equipe" && !e.local).slice(0, HIST_MAX);
     return d;
   }
   function modelosDoDoc(d) { return d ? { tipo: TIPO, itens: Array.isArray(d.modelos) ? d.modelos.map(limparModelo) : [], removidos: Array.isArray(d.modelosRemovidos) ? d.modelosRemovidos : [] } : null; }
@@ -246,7 +318,7 @@
     return a;
   }
 
-  g.CadernoSync = { TIPO: TIPO, limparModelo: limparModelo, modelosDoDoc: modelosDoDoc, CAMPOS_MODELO: CAMPOS_MODELO, PRINCIPAL: PRINCIPAL, LOG: LOG, montarDoc: montarDoc, docValido: docValido, mesclar: mesclar, ts: ts, semMeta: semMeta,
+  g.CadernoSync = { TIPO: TIPO, normalizarCard: normalizarCard, filtrarItens: filtrarItens, limparDoc: limparDoc, limparHistorico: limparHistorico, mesclarHistorico: mesclarHistorico, HIST_MAX: HIST_MAX, limparModelo: limparModelo, modelosDoDoc: modelosDoDoc, CAMPOS_MODELO: CAMPOS_MODELO, PRINCIPAL: PRINCIPAL, LOG: LOG, montarDoc: montarDoc, docValido: docValido, mesclar: mesclar, ts: ts, semMeta: semMeta,
     comRetentativa: comRetentativa, retentavel: retentavel, Fila: Fila, ehCopiaConflito: ehCopiaConflito, gravarVerificado: gravarVerificado, anexarLog: anexarLog,
     AdaptadorPasta: AdaptadorPasta, AdaptadorArquivo: AdaptadorArquivo };
 })(typeof window !== "undefined" ? window : globalThis);
