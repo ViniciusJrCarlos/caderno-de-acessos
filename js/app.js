@@ -232,8 +232,10 @@ function aviso(titulo, texto) { return dialogo({ titulo: titulo, texto: texto, o
 
 /* ---------- Excluir (só arquivados) com desfazer ---------- */
 function nomeDe(it) { return it.titulo || it.aplicacao || "este acesso"; }
+// v1.9.6: a sincronização em segundo plano troca os objetos dos cards da Equipe; sempre busca o card atual pelo id.
+function atual(it) { return it ? (itens.find((x) => x.id === it.id) || null) : null; }
 async function excluir(lista) {
-  lista = lista.filter((it) => it && it.arquivado_em);
+  lista = lista.map(atual).filter((it) => it && it.arquivado_em);
   if (!lista.length) return false;
   const sim = await dialogo({
     titulo: lista.length === 1 ? "Excluir " + nomeDe(lista[0]) + " de vez?" : "Excluir " + lista.length + " acessos de vez?",
@@ -242,7 +244,7 @@ async function excluir(lista) {
   });
   if (!sim) return false;
   const removidos = [];
-  lista.forEach((it) => { const i = itens.indexOf(it); if (i >= 0) removidos.push({ i: i, it: it }); });
+  lista.forEach((it) => { const i = itens.findIndex((x) => x.id === it.id); if (i >= 0) removidos.push({ i: i, it: itens[i] }); });
   removidos.sort((a, b) => b.i - a.i).forEach((r) => itens.splice(r.i, 1));
   sairSelecao(false);
   save();
@@ -756,17 +758,19 @@ function abrirMenuCard(it, ancora) {
   if (jaAberto) return;
   const m = el("div", "menu-card");
   m.setAttribute("role", "menu");
-  m.appendChild(btn("mi", "edit", "Editar", () => { fecharMenus(); abrirFicha(it); }, null, "Editar este acesso"));
-  m.appendChild(btn("mi", "copy", "Copiar usuário", () => { fecharMenus(); copiar(it.usuario, "Usuário"); }));
+  const id = it.id;
+  const cur = (fn) => () => { fecharMenus(); const c = atual({ id: id }); if (!c) { toast("Este card não existe mais"); render(); return; } fn(c); };
+  m.appendChild(btn("mi", "edit", "Editar", cur((c) => abrirFicha(c)), null, "Editar este acesso"));
+  m.appendChild(btn("mi", "copy", "Copiar usuário", cur((c) => copiar(c.usuario, "Usuário"))));
   if (it.visibilidade === "Individual" && !it.arquivado_em) {
-    if (it.modeloDono) m.appendChild(btn("mi", "x", "Parar de compartilhar", () => { fecharMenus(); pararCompartilhar(it); }));
-    else m.appendChild(btn("mi", "share", "Compartilhar meu card", () => { fecharMenus(); compartilharMeuCard(it); }));
+    if (it.modeloDono) m.appendChild(btn("mi", "x", "Parar de compartilhar", () => { fecharMenus(); pararCompartilhar(atual(it) || it); }));
+    else m.appendChild(btn("mi", "share", "Compartilhar meu card", cur((c) => compartilharMeuCard(c))));
   }
   if (it.arquivado_em) {
-    m.appendChild(btn("mi ok", "restore", "Reativar", () => { it.arquivado_em = null; save(); toast("Card reativado"); }));
-    m.appendChild(btn("mi warn", "trash", "Excluir", () => { fecharMenus(); excluir([it]); }));
+    m.appendChild(btn("mi ok", "restore", "Reativar", cur((c) => { c.arquivado_em = null; save(); toast("Card reativado"); })));
+    m.appendChild(btn("mi warn", "trash", "Excluir", cur((c) => excluir([c]))));
   }
-  else m.appendChild(btn("mi warn", "archive", "Arquivar", () => { it.arquivado_em = hoje(); save(); toast("Card arquivado"); }));
+  else m.appendChild(btn("mi warn", "archive", "Arquivar", cur((c) => { c.arquivado_em = hoje(); save(); toast("Card arquivado"); })));
   ancora.parentNode.appendChild(m);
 }
 document.addEventListener("click", (ev) => { if (!ev.target.closest(".menu-card")) fecharMenus(); });
@@ -1085,7 +1089,7 @@ async function sincronizarAgora(interativo) {
     const textos = resultado.mud.map(textoMudanca);
     resultado.conf.forEach((c) => textos.push("Conflito em " + nomeDe(c.remoto) + ": você e " + (c.remoto.updatedBy || "outra pessoa") + " alteraram desde a última sincronização. Ficou a versão mais recente" + (CadernoSync.ts(c.remoto.updatedAt) >= CadernoSync.ts(c.local.updatedAt) ? " (de " + (c.remoto.updatedBy || "outra pessoa") + ")." : " (a sua).")));
     registrarHistorico(textos);
-    if (resultado.localMudou || copiasMescladas.length || aba === "mais") render();
+    renderAposSync(); // v1.9.6: sempre redesenha (os objetos dos cards da Equipe foram trocados)
     if (resultado.conf.length) toast(textos[textos.length - 1]);
     else if (copiasMescladas.length) toast(copiasMescladas.length + (copiasMescladas.length === 1 ? " cópia de conflito do OneDrive juntada" : " cópias de conflito do OneDrive juntadas") + " ao arquivo da equipe");
     else if (textos.length === 1) toast(textos[0]);
@@ -1111,6 +1115,21 @@ async function sincronizarAgora(interativo) {
     syncEstado.rodando = false; desenharBotaoSync();
   }
 }
+// Redesenha sem atrapalhar: com ficha/diálogo aberto ou digitando, espera fechar; mantém a rolagem.
+let renderPendente = false;
+function podeRenderAgora() {
+  if (document.querySelector(".sheet.on, .drawer.on, .menu-card")) return false;
+  const a = document.activeElement;
+  if (a && a.closest && a.closest("main") && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return false;
+  return true;
+}
+function renderAposSync() {
+  if (!podeRenderAgora()) { renderPendente = true; return; }
+  renderPendente = false;
+  const y = window.scrollY; render(); if (window.scrollY !== y) window.scrollTo(0, y);
+}
+function renderSePendente() { if (renderPendente) setTimeout(renderAposSync, 0); }
+document.addEventListener("click", () => { if (renderPendente) setTimeout(renderSePendente, 50); });
 function aplicarResultado(r0) {
   // Alterações feitas enquanto o arquivo era gravado não se perdem: mescla de novo o que está na tela com o que foi gravado.
   carimbarMudancas();
@@ -1426,7 +1445,7 @@ async function compartilharMeuCard(card) {
   m.removidos = m.removidos.filter((t) => t.id !== tid);
   gravarModelosLocais(m);
   const meus = meusModelos(); if (meus.indexOf(tid) < 0) meus.push(tid); localStorage.setItem(MEUS_MODELOS_KEY, JSON.stringify(meus));
-  card.modeloDono = tid;
+  (atual(card) || card).modeloDono = tid;
   save();
   await sincronizar(true);
   toast("Card compartilhado com a equipe (sem login e senha)");
@@ -1434,6 +1453,7 @@ async function compartilharMeuCard(card) {
 async function pararCompartilhar(card) {
   const ok = await dialogo({ titulo: "Parar de compartilhar?", texto: "O modelo sai do arquivo da equipe. Quem já adicionou continua com o card dele.", ok: "Parar de compartilhar", cancelar: "Cancelar" });
   if (!ok) return;
+  card = atual(card) || card;
   delete card.modeloDono; // atualizarMeusModelos() cria o tombstone
   save();
   toast("Card não é mais compartilhado");
@@ -1698,9 +1718,10 @@ function renderMais(box) {
 }
 
 /* ---------- v1.9.3+: Novidades (texto vai junto com o app; mais recente primeiro) ---------- */
-const APP_VERSAO = "1.9.5";
+const APP_VERSAO = "1.9.6";
 const NOVIDADES_VISTA = "caderno-novidades-vista";
 const NOVIDADES = [
+  { v: "1.9.6", data: "15/10/2026", itens: ["Corrigido: cards da Equipe arquivados agora podem ser excluídos normalmente.", "Transições mais suaves ao salvar, excluir, entrar e pesquisar."] },
   { v: "1.9.5", data: "15/10/2026", itens: ["O arquivo da equipe pode ser protegido com uma senha da equipe: fora do app ele fica ilegível.", "Cada analista digita a senha da equipe só uma vez por aparelho.", "O gestor pode trocar a senha da equipe e ver a senha atual depois de confirmar a própria senha de login."], fazer: "Quando o app pedir, digite a senha da equipe passada pelo gestor." },
   { v: "1.9.4", data: "15/10/2026", itens: ["Novo botão “Compartilhar meu card”: envia link e escalonamento para a equipe, sem login e senha.", "Quem recebe escolhe adicionar ou ignorar e só preenche a própria senha.", "Sobre (i) com explicação do app e regras de uso."] },
   { v: "1.9.3", data: "14/10/2026", itens: ["Agora, sempre que o app for atualizado, aparece esta tela uma vez com as novidades.", "Em Mais, a lista “Últimas novidades” guarda o que mudou nas versões recentes."] },
@@ -2668,7 +2689,7 @@ $("fechar").addEventListener("click", () => fecharSheet("sheet"));
 
 /* ---------- Sheets, menu, abas ---------- */
 function abrirSheet(id) { $(id).classList.add("on"); $(id).setAttribute("aria-hidden", "false"); document.body.classList.add("sem-scroll"); }
-function fecharSheet(id) { $(id).classList.remove("on"); $(id).setAttribute("aria-hidden", "true"); if (!document.querySelector(".sheet.on, .drawer.on")) document.body.classList.remove("sem-scroll"); }
+function fecharSheet(id) { $(id).classList.remove("on"); $(id).setAttribute("aria-hidden", "true"); if (!document.querySelector(".sheet.on, .drawer.on")) { document.body.classList.remove("sem-scroll"); renderSePendente(); } }
 document.querySelectorAll("[data-fecha]").forEach((b) => b.addEventListener("click", () => fecharSheet(b.dataset.fecha)));
 document.querySelectorAll(".sheet:not(#dlg):not(#dlgSenha):not(#dlgInstalar):not(#dlgMod):not(#dlgVer), .drawer").forEach((s) => s.addEventListener("click", (ev) => { if (ev.target === s) fecharSheet(s.id); }));
 document.addEventListener("keydown", (ev) => {
