@@ -535,3 +535,39 @@ body.travado .login { animation:caderno-fade .2s ease; }
 .rc .rc-travado input:disabled { cursor:not-allowed; opacity:.45; }
 .rc .rc-travado .rc-l1 { cursor:default; }
 .rc .rc-travado .rc-nm { color:var(--muted); }
+
+/* ---------- v2.0.0: contador de texto, faixa de avisos, lixeira, conflitos, duplicados, card com erro ---------- */
+.contador { display:block; font-size:12px; font-weight:600; color:var(--muted); text-align:right; margin-top:3px; }
+.contador.no-limite { color:var(--danger); }
+.esc-row .contador { grid-column:1 / -1; }
+.faixa-avisos { display:flex; flex-direction:column; gap:8px; margin:0 0 12px; }
+.faixa-it { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; padding:10px 12px; border-radius:12px; background:var(--ylw-bg); border:1px solid var(--ylw-bd); color:var(--ylw); font-weight:600; font-size:14px; }
+.faixa-it span { flex:1 1 200px; }
+.btn.pequeno.pri { background:var(--pri); color:var(--on-brand); border-color:var(--pri); }
+.btn.pequeno.perigo { background:var(--danger); color:#fff; border-color:var(--danger); }
+.lix-lista { list-style:none; margin:8px 0 0; padding:0; display:flex; flex-direction:column; gap:8px; }
+.lix-it { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:var(--surface2); }
+.lix-tx { flex:1 1 220px; min-width:0; display:flex; flex-wrap:wrap; align-items:center; gap:6px; color:var(--head); }
+.lix-tx b { overflow-wrap:anywhere; }
+.lix-tx .hist2-sub { flex-basis:100%; font-size:12.5px; color:var(--muted); }
+.lix-tx .lix-tag { font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; }
+.lix-tx .lix-tag.equipe { background:var(--info-bg); color:var(--info); }
+.lix-tx .lix-tag.meu { background:var(--chip-int-bg); color:var(--chip-int); }
+.lix-acoes { display:flex; gap:6px; flex-wrap:wrap; }
+.conf-wrap { overflow-x:auto; margin:8px 0; }
+.conf-tab { width:100%; border-collapse:collapse; font-size:13px; color:var(--text); }
+.conf-tab th, .conf-tab td { border:1px solid var(--line); padding:6px 8px; text-align:left; vertical-align:top; overflow-wrap:anywhere; }
+.conf-tab th { background:var(--surface2); color:var(--head); }
+.conf-tab .conf-campo { font-weight:700; color:var(--head); white-space:nowrap; }
+.dlg-conflito .dlg-botoes, .dlg-dup .dlg-botoes, .dlg-import .dlg-botoes { flex-wrap:wrap; }
+.dup-grupo { border:1px solid var(--line); border-radius:12px; padding:10px; margin:10px 0; background:var(--surface2); }
+.dup-link { font-family:ui-monospace, monospace; font-size:12.5px; color:var(--muted); overflow-wrap:anywhere; margin-bottom:6px; }
+.dup-card { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; padding:6px 0; border-top:1px dashed var(--line); }
+.dup-tx { flex:1 1 180px; min-width:0; color:var(--head); }
+.dup-tx .hist2-sub { font-size:12.5px; color:var(--muted); }
+.dup-acoes { display:flex; gap:6px; }
+.dup-manter { margin-top:8px; }
+.dlg-import .meta { text-align:left; }
+.dlg-import .imp-antigos, .dlg-import .imp-datas, .dlg-import .imp-cortes, .dlg-import .imp-ciclos { color:var(--ylw); background:var(--ylw-bg); border:1px solid var(--ylw-bd); border-radius:10px; padding:8px 10px; }
+.card-erro { border-style:dashed; }
+.card-erro .meta { color:var(--muted); font-size:13px; }

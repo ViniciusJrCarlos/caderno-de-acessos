@@ -1,4 +1,5 @@
-/* Caderno de Acessos — sincronização do arquivo da equipe (v1.9; modelos v1.9.4)
+/* Caderno de Acessos — sincronização do arquivo da equipe (v1.9; modelos v1.9.4; v2.0.0: identidade só pelo id,
+ * cópia de conflito guardada, lixeira de 30 dias, datas saneadas, normUrl conservador)
  * Lógica de merge pura + adaptadores de armazenamento.
  * Interface de adaptador (para trocar no futuro por um servidor):
  *   { id, suportado(): bool, vinculado(): Promise<bool>, nome(): Promise<string>,
@@ -11,7 +12,18 @@
   const RETER_TOMBSTONE_DIAS = 180;
 
   function ts(v) { const n = Date.parse(v || ""); return isNaN(n) ? 0 : n; }
-  function semMeta(it) { const c = Object.assign({}, it); delete c.updatedAt; delete c.updatedBy; return JSON.stringify(c, Object.keys(c).sort()); }
+  // v2.0.0: baseAt (versão em que a edição se baseou) também é metadado: não conta como mudança de conteúdo.
+  /* v2.0.0: comparação profunda (chaves ordenadas em todos os níveis). A fórmula da v1.9.9 (semMetaV1) passava a lista de chaves
+   * do card como filtro também para os níveis de escalonamento, então mudar só o valor/canal de um nível passava despercebido
+   * (a edição não era carimbada nem enviada à equipe). semMetaV1 fica só para migrar as marcas antigas sem recarimbar. */
+  function canon(v) {
+    if (Array.isArray(v)) return v.map(canon);
+    if (v && typeof v === "object") { const o = {}; Object.keys(v).sort().forEach((k) => { if (v[k] !== undefined) o[k] = canon(v[k]); }); return o; }
+    return v;
+  }
+  function semMeta(it) { const c = Object.assign({}, it); delete c.updatedAt; delete c.updatedBy; delete c.baseAt; return JSON.stringify(canon(c)); }
+  function semMetaV1(it) { const c = Object.assign({}, it); delete c.updatedAt; delete c.updatedBy; delete c.baseAt; return JSON.stringify(c, Object.keys(c).sort()); }
+  const LIXEIRA_DIAS = 30;
 
   /* v1.9.4: "Compartilhar meu card". Modelos ficam numa coleção separada ("modelos"), que versões antigas ignoram.
    * Lista branca: só estes campos podem sair. Login e senha NUNCA. */
@@ -32,17 +44,37 @@
    * Lista branca de campos, tudo vira texto com limite; chaves perigosas (__proto__ etc.) nunca entram. Devolve null se inválido. */
   const CAMPOS_CARD = { id: 64, titulo: 200, aplicacao: 200, cliente: 200, categoria: 20, visibilidade: 20, url: 2000, usuario: 500, senha: 500,
     ciclo: 10, ultima: 40, horario: 500, escalonamento: 5000, obs: 5000, arquivado_em: 40, senha_atualizada_em: 40, updatedAt: 40, updatedBy: 120,
-    modeloId: 80, modeloDono: 80, modeloPor: 120 };
+    modeloId: 80, modeloDono: 80, modeloPor: 120, baseAt: 40 };
+  /* v2.0.0: limites dos níveis de escalonamento (os mesmos da ficha). */
+  const LIMITES_NIVEL = { max: 20, valor: 2000, nome: 200, horario: 200, obs: 1000 };
+  /* v2.0.0: datas inválidas viram vazias (uma data como "ontem" derrubava a lista na v1.9.9). */
+  const CAMPOS_DATA = ["ultima", "arquivado_em", "senha_atualizada_em"];
+  function dataValida(v) {
+    const t = String(v == null ? "" : v).trim();
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
+    if (!m) return "";
+    const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+    if (isNaN(d) || d.getUTCFullYear() !== +m[1] || d.getUTCMonth() !== +m[2] - 1 || d.getUTCDate() !== +m[3] || +m[1] < 1900 || +m[1] > 2200) return "";
+    return m[0];
+  }
+  function cicloValido(v) {
+    const t = String(v == null ? "" : v).trim();
+    if (/^\d{1,4}$/.test(t) && +t > 0) return String(+t);
+    return t ? "Nunca" : "";
+  }
+  function isoValido(v) { const t = String(v == null ? "" : v).trim(); return t && !isNaN(Date.parse(t)) ? t.slice(0, 40) : ""; }
   const PROIBIDAS = new Set(["__proto__", "constructor", "prototype"]);
   function txt(v, max) { if (v == null) return ""; if (typeof v === "object") return ""; return String(v).slice(0, max); }
-  function normalizarNivel(n) {
+  function normalizarNivel(n, info) {
     if (!n || typeof n !== "object" || Array.isArray(n)) return null;
     const nv = Number(n.nivel);
+    const t = (v, k) => { const s = txt(v, LIMITES_NIVEL[k]); if (info && v != null && typeof v !== "object" && String(v).length > LIMITES_NIVEL[k]) info.cortados.push("escalonamento." + k); return s; };
     return { nivel: Number.isFinite(nv) && nv > 0 ? Math.min(Math.floor(nv), 99) : 1,
       canal: ["portal", "email", "telefone", "outro"].indexOf(n.canal) >= 0 ? n.canal : "outro",
-      valor: txt(n.valor, 2000), nome: txt(n.nome, 200), horario: txt(n.horario, 200), obs: txt(n.obs, 1000) };
+      valor: t(n.valor, "valor"), nome: t(n.nome, "nome"), horario: t(n.horario, "horario"), obs: t(n.obs, "obs") };
   }
-  function normalizarCard(raw) {
+  /* v2.0.0: info (opcional) recebe { cortados: [campos], datasInvalidas: [campos] } para avisar na importação (nenhum corte silencioso). */
+  function normalizarCard(raw, info) {
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
     const o = {};
     Object.keys(CAMPOS_CARD).forEach((k) => {
@@ -51,14 +83,42 @@
       if (k === "arquivado_em" && (v == null || v === "")) { o[k] = null; return; }
       if (v == null) return;
       if (typeof v === "object") return; // tipo errado (objeto/array no lugar de texto): ignora o campo
+      if (info && String(v).length > CAMPOS_CARD[k]) info.cortados.push(k);
       o[k] = txt(v, CAMPOS_CARD[k]);
     });
-    if (Object.prototype.hasOwnProperty.call(raw, "escalonamentos")) o.escalonamentos = Array.isArray(raw.escalonamentos) ? raw.escalonamentos.slice(0, 20).map(normalizarNivel).filter(Boolean) : [];
+    // v2.0.0: datas e ciclo saneados (data inválida vira vazia; ciclo inválido vira "Nunca")
+    CAMPOS_DATA.forEach((k) => {
+      if (!(k in o) || o[k] == null || o[k] === "") return;
+      const d = dataValida(o[k]);
+      if (!d && info) info.datasInvalidas.push(k);
+      o[k] = d || (k === "arquivado_em" ? null : "");
+    });
+    if ("arquivado_em" in o && o.arquivado_em === "") o.arquivado_em = null;
+    if ("ciclo" in o) { const c = cicloValido(o.ciclo); if (c !== o.ciclo && o.ciclo !== "" && info) info.datasInvalidas.push("ciclo"); o.ciclo = c; }
+    ["updatedAt", "baseAt"].forEach((k) => { if (k in o) o[k] = isoValido(o[k]); });
+    const esc = Array.isArray(raw.escalonamentos) ? raw.escalonamentos : [];
+    if (info && esc.length > LIMITES_NIVEL.max) info.cortados.push("escalonamentos (máx. " + LIMITES_NIVEL.max + " níveis)");
+    // v2.0.0: escalonamentos sempre presente (lista vazia quando não há), para o card normalizado ser estável (sem recarimbos falsos)
+    o.escalonamentos = esc.slice(0, LIMITES_NIVEL.max).map((n) => normalizarNivel(n, info)).filter(Boolean);
     if (!("arquivado_em" in o)) o.arquivado_em = null;
     if (o.id != null) o.id = o.id.trim();
     if (o.visibilidade && o.visibilidade !== "Individual") o.visibilidade = "Equipe";
     if (o.categoria && o.categoria !== "Externo") o.categoria = "Interno";
     return o;
+  }
+  /* v2.0.0: saneia as datas de um card guardado neste aparelho (no lugar), sem mexer em mais nada. Devolve true se mudou. */
+  function sanearDatas(it) {
+    if (!it || typeof it !== "object") return false;
+    let mudou = false;
+    CAMPOS_DATA.forEach((k) => {
+      const v = it[k];
+      if (v == null || v === "") return;
+      const d = dataValida(v);
+      const novo = d || (k === "arquivado_em" ? null : "");
+      if (novo !== v) { it[k] = novo; mudou = true; }
+    });
+    if (it.ciclo != null && it.ciclo !== "") { const c = cicloValido(it.ciclo); if (c !== String(it.ciclo)) { it.ciclo = c; mudou = true; } }
+    return mudou;
   }
   /* Separa itens válidos dos inválidos (sem id ou que não são objeto). */
   function filtrarItens(lista) {
@@ -79,11 +139,16 @@
     if (Array.isArray(d.modelos)) out.modelos = d.modelos.filter((m) => m && typeof m === "object" && !Array.isArray(m));
     if (Array.isArray(d.modelosRemovidos)) out.modelosRemovidos = d.modelosRemovidos.filter((t) => t && typeof t === "object" && t.id != null);
     out.historico = limparHistorico(d.historico);
+    out.lixeira = limparLixeira(d.lixeira);
+    out.lixeiraRemovidos = limparRemocoes(d.lixeiraRemovidos);
+    out.conflitos = limparConflitos(d.conflitos);
+    out.conflitosResolvidos = limparRemocoes(d.conflitosResolvidos);
     return { doc: out, invalidos: f.invalidos };
   }
   /* v1.9.7: histórico estruturado { id, tipo, card, quem, quando, escopo }. Nunca guarda senhas. */
   const HIST_MAX = 100;
-  const HIST_TIPOS = ["adicionado", "editado", "senha", "arquivado", "reativado", "excluido", "compartilhado", "parou", "importado", "se-ativada", "se-trocada", "primeiro", "conflito", "copia", "texto", "ignorado"];
+  const HIST_TIPOS = ["adicionado", "editado", "senha", "arquivado", "reativado", "excluido", "compartilhado", "parou", "importado", "se-ativada", "se-trocada", "primeiro", "conflito", "copia", "texto", "ignorado",
+    "lixeira", "restaurado", "lixeira-apagado", "conflito-resolvido"];
   function limparEntrada(e) {
     if (!e || typeof e !== "object" || Array.isArray(e) || typeof e.id !== "string" || !e.id) return null;
     const tipo = HIST_TIPOS.indexOf(e.tipo) >= 0 ? e.tipo : "texto";
@@ -101,6 +166,63 @@
   }
   function limparTomb(t) { return { id: t.id, deletedAt: t.deletedAt, deletedBy: t.deletedBy || "", titulo: t.titulo || "" }; }
 
+  /* ---------- v2.0.0: Lixeira (30 dias) e cópias de conflito ----------
+   * lixeira: [{ id, card, excluidoEm, excluidoPor }]  — só cards da Equipe vão para o arquivo (criptografado se houver senha da equipe).
+   * lixeiraRemovidos: [{ id, em, por }]  — restaurados ou apagados de vez (para os outros aparelhos tirarem da lixeira).
+   * conflitos: [{ id, cardId, titulo, perdedora, vencedoraAt, vencedorPor, perdedorPor, quando }]
+   * conflitosResolvidos: [{ id, em, por }]
+   * Versões antigas (v1.9.x) ignoram esses campos; cada aparelho v2.0.0 guarda uma cópia local e repõe no próximo envio. */
+  function limparRemocoes(l) {
+    return (Array.isArray(l) ? l : []).filter((t) => t && typeof t === "object" && t.id != null && typeof t.id !== "object")
+      .map((t) => ({ id: String(t.id).slice(0, 120), em: isoValido(t.em), por: txt(t.por, 120) })).filter((t) => t.em).slice(0, 2000);
+  }
+  function limparLixeira(l) {
+    return (Array.isArray(l) ? l : []).map((e) => {
+      if (!e || typeof e !== "object" || Array.isArray(e)) return null;
+      const c = normalizarCard(e.card);
+      if (!c || !c.id || !(c.titulo || c.aplicacao)) return null;
+      const em = isoValido(e.excluidoEm); if (!em) return null;
+      return { id: c.id, card: c, excluidoEm: em, excluidoPor: txt(e.excluidoPor, 120) };
+    }).filter(Boolean).slice(0, 2000);
+  }
+  function limparConflitos(l) {
+    return (Array.isArray(l) ? l : []).map((e) => {
+      if (!e || typeof e !== "object" || Array.isArray(e) || typeof e.id !== "string") return null;
+      const p = normalizarCard(e.perdedora);
+      if (!p || !p.id) return null;
+      return { id: e.id.slice(0, 160), cardId: p.id, titulo: txt(e.titulo, 200), perdedora: p, vencedoraAt: isoValido(e.vencedoraAt), vencedorPor: txt(e.vencedorPor, 120), perdedorPor: txt(e.perdedorPor, 120), quando: isoValido(e.quando) || new Date().toISOString() };
+    }).filter(Boolean).slice(0, 200);
+  }
+  function mesclarRemocoes(listas) {
+    const m = new Map(); const lim = Date.now() - 2 * LIXEIRA_DIAS * 864e5;
+    listas.forEach((l) => (l || []).forEach((t) => { if (!t || !t.id) return; const a = m.get(t.id); if (!a || ts(t.em) > ts(a.em)) m.set(t.id, t); }));
+    return [...m.values()].filter((t) => ts(t.em) >= lim);
+  }
+  /* Junta as lixeiras: por card fica a versão mais recente; sai o que foi restaurado/apagado depois de excluído e o que passou de 30 dias. */
+  function mesclarLixeira(listas, removidos, agora) {
+    const lim = (agora || Date.now()) - LIXEIRA_DIAS * 864e5;
+    const rem = new Map((removidos || []).map((t) => [t.id, t]));
+    const m = new Map();
+    listas.forEach((l) => (l || []).forEach((e) => {
+      if (!e || !e.id || !e.card) return;
+      const a = m.get(e.id);
+      if (!a || ts(e.card.updatedAt) > ts(a.card.updatedAt) || (ts(e.card.updatedAt) === ts(a.card.updatedAt) && ts(e.excluidoEm) > ts(a.excluidoEm))) {
+        // mantém a data de exclusão mais recente (o prazo de 30 dias conta da última exclusão)
+        const ex = a && ts(a.excluidoEm) > ts(e.excluidoEm) ? a.excluidoEm : e.excluidoEm;
+        m.set(e.id, Object.assign({}, e, { excluidoEm: ex }));
+      } else if (ts(e.excluidoEm) > ts(a.excluidoEm)) m.set(e.id, Object.assign({}, a, { excluidoEm: e.excluidoEm, excluidoPor: e.excluidoPor }));
+    }));
+    return [...m.values()].filter((e) => { const r = rem.get(e.id); return ts(e.excluidoEm) >= lim && !(r && ts(r.em) >= ts(e.excluidoEm)); })
+      .sort((a, b) => ts(b.excluidoEm) - ts(a.excluidoEm));
+  }
+  function mesclarConflitos(listas, resolvidos, agora) {
+    const lim = (agora || Date.now()) - LIXEIRA_DIAS * 864e5;
+    const res = new Set((resolvidos || []).map((t) => t.id));
+    const m = new Map();
+    listas.forEach((l) => (l || []).forEach((c) => { if (c && c.id && !m.has(c.id)) m.set(c.id, c); }));
+    return [...m.values()].filter((c) => !res.has(c.id) && ts(c.quando) >= lim).sort((a, b) => ts(b.quando) - ts(a.quando)).slice(0, 50);
+  }
+
   /* Documento do arquivo da equipe. "filtro" decide o que pode sair (só cards compartilhados).
    * extras (opcional): { modelos, modelosRemovidos } — cards Individuais compartilhados como modelo, sem login/senha. */
   function montarDoc(itens, removidos, autor, filtro, extras) {
@@ -116,15 +238,31 @@
       d.modelosRemovidos = (extras.modelosRemovidos || []).filter((t) => t && t.id && ts(t.deletedAt) >= lim).map(limparTomb);
     }
     if (extras && Array.isArray(extras.historico)) d.historico = extras.historico.filter((e) => e && e.escopo === "Equipe" && !e.local).slice(0, HIST_MAX);
+    // v2.0.0: lixeira e conflitos (só cards da Equipe; o filtro garante que nada Individual entra)
+    if (extras && Array.isArray(extras.lixeira)) d.lixeira = extras.lixeira.filter((e) => e && e.card && filtro(e.card));
+    if (extras && Array.isArray(extras.lixeiraRemovidos)) d.lixeiraRemovidos = extras.lixeiraRemovidos.slice(0, 2000);
+    if (extras && Array.isArray(extras.conflitos)) d.conflitos = extras.conflitos.filter((c) => c && c.perdedora && filtro(c.perdedora));
+    if (extras && Array.isArray(extras.conflitosResolvidos)) d.conflitosResolvidos = extras.conflitosResolvidos.slice(0, 2000);
     return d;
   }
   function modelosDoDoc(d) { return d ? { tipo: TIPO, itens: Array.isArray(d.modelos) ? d.modelos.map(limparModelo) : [], removidos: Array.isArray(d.modelosRemovidos) ? d.modelosRemovidos : [] } : null; }
   function docValido(d) { return !!(d && d.tipo === TIPO && Array.isArray(d.itens)); }
 
   /* Merge por card: vence o updatedAt mais recente; exclusões via tombstones.
-   * local: { itens (só compartilhados), removidos }, remoto: doc, ultimaSync: ISO, chave(it): chave alternativa de casamento.
-   * Retorna { itens, removidos, mudancasRemotas:[{tipo,item,por,em}], conflitos:[{local,remoto}], localMudou, remotoPrecisa } */
-  function mesclar(local, remoto, ultimaSync, chave) {
+   * local: { itens (só compartilhados), removidos }, remoto: doc, ultimaSync: ISO.
+   * v2.0.0: a identidade do card é SÓ o id (o 4º parâmetro, chave alternativa, é ignorado: fundia cards diferentes com o mesmo título).
+   * Conflito = os dois lados mudaram desde a última versão comum. Com baseAt (versão em que cada edição se baseou) a detecção é exata:
+   * r descende de l quando r.baseAt >= l.updatedAt (e vice-versa); sem baseAt (card gravado por versão antiga) usa a regra antiga (ultimaSync).
+   * Retorna { itens, removidos, mudancasRemotas:[{tipo,item,por,em}], conflitos:[{local,remoto,vencedor,perdedor}], voltaram:[{item,tomb}], localMudou, remotoPrecisa } */
+  function concorrentes(l, r, ult) {
+    const tl = ts(l.updatedAt), tr = ts(r.updatedAt);
+    if (tl === tr) return false;
+    const temBase = Object.prototype.hasOwnProperty.call(l, "baseAt") && Object.prototype.hasOwnProperty.call(r, "baseAt");
+    if (temBase) return ts(r.baseAt) < tl && ts(l.baseAt) < tr;
+    if (tr > tl) return !!(ult && tl > ult);
+    return !!(ult && tr > ult);
+  }
+  function mesclar(local, remoto, ultimaSync) {
     const ult = ts(ultimaSync);
     const tomb = new Map();
     (local.removidos || []).concat(remoto && remoto.removidos || []).forEach((t) => {
@@ -136,22 +274,8 @@
     const tombLocal = new Set((local.removidos || []).map((t) => t.id + "@" + t.deletedAt));
     const loc = new Map(local.itens.map((it) => [it.id, it]));
     const rem = new Map();
-    const porChave = new Map();
-    local.itens.forEach((it) => { const k = chave && chave(it); if (k && !porChave.has(k)) porChave.set(k, it.id); });
-    const remIds = new Set(((remoto && remoto.itens) || []).map((r) => r && r.id));
-    ((remoto && remoto.itens) || []).forEach((r) => {
-      if (!r || !r.id) return;
-      if (!loc.has(r.id) && chave) {
-        // id diferente mas mesmo card (ex.: importado em dois aparelhos): adota o id do arquivo, sem duplicar
-        const k = chave(r); const idLocal = k && porChave.get(k);
-        if (idLocal && loc.has(idLocal) && !remIds.has(idLocal)) {
-          const l = loc.get(idLocal); loc.delete(idLocal); loc.set(r.id, Object.assign({}, l, { id: r.id }));
-          porChave.delete(k); localMudou = true;
-        }
-      }
-      rem.set(r.id, r);
-    });
-    const saida = []; const mudancas = []; const conflitos = [];
+    ((remoto && remoto.itens) || []).forEach((r) => { if (r && r.id) rem.set(r.id, r); });
+    const saida = []; const mudancas = []; const conflitos = []; const voltaram = [];
     const ids = new Set([...loc.keys(), ...rem.keys()]);
     ids.forEach((id) => {
       const l = loc.get(id), r = rem.get(id), t = tomb.get(id);
@@ -159,8 +283,11 @@
       if (l && r) {
         const tl = ts(l.updatedAt), tr = ts(r.updatedAt);
         if (semMeta(l) === semMeta(r)) { vence = tl >= tr ? l : r; origem = tl >= tr ? "local" : "igual"; if (tl !== tr) { if (tl > tr) remotoPrecisa = true; else localMudou = true; } }
-        else if (tr > tl) { vence = r; origem = "remoto"; if (ult && tl > ult) conflitos.push({ local: l, remoto: r }); }
-        else { vence = l; origem = "local"; remotoPrecisa = true; if (ult && tr > ult && tr !== tl) conflitos.push({ local: l, remoto: r }); }
+        else {
+          if (tr > tl) { vence = r; origem = "remoto"; }
+          else { vence = l; origem = "local"; remotoPrecisa = true; }
+          if (concorrentes(l, r, ult)) conflitos.push({ local: l, remoto: r, vencedor: vence, perdedor: vence === l ? r : l });
+        }
       } else if (r) { vence = r; origem = "remoto-novo"; }
       else { vence = l; origem = "local-novo"; }
       if (t && ts(t.deletedAt) >= ts(vence.updatedAt)) {
@@ -168,14 +295,36 @@
         if (r) remotoPrecisa = true;
         return;
       }
-      if (t) tomb.delete(id); // card voltou (mais novo que a exclusão)
+      if (t) { tomb.delete(id); voltaram.push({ item: vence, tomb: t }); } // card voltou (editado/restaurado depois da exclusão)
       if (origem === "remoto" || origem === "remoto-novo") { localMudou = true; mudancas.push({ tipo: l ? "atualizado" : "novo", item: r, por: r.updatedBy || "", em: r.updatedAt || "", remoto: true }); }
       if (origem === "local-novo") remotoPrecisa = true;
       saida.push(vence);
     });
     if (remoto && (remoto.removidos || []).length !== tomb.size) remotoPrecisa = true;
     if (!remoto) remotoPrecisa = true;
-    return { itens: saida, removidos: [...tomb.values()], mudancasRemotas: mudancas.filter((m) => m.remoto), conflitos: conflitos, localMudou: localMudou, remotoPrecisa: remotoPrecisa };
+    return { itens: saida, removidos: [...tomb.values()], mudancasRemotas: mudancas.filter((m) => m.remoto), removidosAqui: mudancas.filter((m) => m.tipo === "removido"), conflitos: conflitos, voltaram: voltaram, localMudou: localMudou, remotoPrecisa: remotoPrecisa };
+  }
+
+  /* ---------- v2.0.0: normUrl conservador ----------
+   * Iguais: esquema ignorado (http/https/qualquer xxx://), "//" inicial, host em minúsculas, "www." ignorado, porta padrão (:443/:80) removida,
+   * #fragmento removido, barra final removida, "?" vazio removido, parâmetros da query em outra ordem.
+   * Diferentes: valores de query diferentes, caminhos diferentes, hosts diferentes, maiúsculas no CAMINHO e na query
+   * (a v1.9.9 punha tudo em minúsculas; a v2.0.0 só o host, por segurança, já que a trava agora é "um link = um card"). */
+  function normUrl(u) {
+    let s = String(u == null ? "" : u).trim();
+    if (!s) return "";
+    // só http:// e https:// são a mesma coisa; outro esquema (ftp://, ssh://…) fica no resultado, para não virar o mesmo link
+    let esq = ""; const me = /^([a-z][a-z0-9+.-]*):\/\//i.exec(s);
+    if (me) { s = s.slice(me[0].length); if (!/^https?$/i.test(me[1])) esq = me[1].toLowerCase() + "://"; } else s = s.replace(/^\/\//, "");
+    const h = s.indexOf("#"); if (h >= 0) s = s.slice(0, h);
+    let q = ""; const qi = s.indexOf("?"); if (qi >= 0) { q = s.slice(qi + 1); s = s.slice(0, qi); }
+    const pi = s.indexOf("/");
+    let host = pi >= 0 ? s.slice(0, pi) : s, path = pi >= 0 ? s.slice(pi) : "";
+    host = host.toLowerCase().replace(/^www\./, "").replace(/:(443|80)$/, "").replace(/\.$/, "");
+    path = path.replace(/\/+$/, "");
+    const partes = q.split("&").filter((p) => p !== "").sort();
+    if (!host && !path && !partes.length) return "";
+    return esq + host + path + (partes.length ? "?" + partes.join("&") : "");
   }
 
   /* ---------- Retentativas (arquivo travado pelo OneDrive, leitura no meio da sincronização etc.) ---------- */
@@ -318,7 +467,8 @@
     return a;
   }
 
-  g.CadernoSync = { TIPO: TIPO, normalizarCard: normalizarCard, filtrarItens: filtrarItens, limparDoc: limparDoc, limparHistorico: limparHistorico, mesclarHistorico: mesclarHistorico, HIST_MAX: HIST_MAX, limparModelo: limparModelo, modelosDoDoc: modelosDoDoc, CAMPOS_MODELO: CAMPOS_MODELO, PRINCIPAL: PRINCIPAL, LOG: LOG, montarDoc: montarDoc, docValido: docValido, mesclar: mesclar, ts: ts, semMeta: semMeta,
+  g.CadernoSync = { TIPO: TIPO, normalizarCard: normalizarCard, sanearDatas: sanearDatas, dataValida: dataValida, normUrl: normUrl, LIMITES_NIVEL: LIMITES_NIVEL, CAMPOS_CARD: CAMPOS_CARD, LIXEIRA_DIAS: LIXEIRA_DIAS,
+    limparLixeira: limparLixeira, limparConflitos: limparConflitos, limparRemocoes: limparRemocoes, mesclarLixeira: mesclarLixeira, mesclarConflitos: mesclarConflitos, mesclarRemocoes: mesclarRemocoes, concorrentes: concorrentes, filtrarItens: filtrarItens, limparDoc: limparDoc, limparHistorico: limparHistorico, mesclarHistorico: mesclarHistorico, HIST_MAX: HIST_MAX, limparModelo: limparModelo, modelosDoDoc: modelosDoDoc, CAMPOS_MODELO: CAMPOS_MODELO, PRINCIPAL: PRINCIPAL, LOG: LOG, montarDoc: montarDoc, docValido: docValido, mesclar: mesclar, ts: ts, semMeta: semMeta, semMetaV1: semMetaV1,
     comRetentativa: comRetentativa, retentavel: retentavel, Fila: Fila, ehCopiaConflito: ehCopiaConflito, gravarVerificado: gravarVerificado, anexarLog: anexarLog,
     AdaptadorPasta: AdaptadorPasta, AdaptadorArquivo: AdaptadorArquivo };
 })(typeof window !== "undefined" ? window : globalThis);

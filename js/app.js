@@ -6,16 +6,25 @@ let edit = null;
 function hoje() {
   return new Date().toISOString().slice(0, 10);
 }
+// v2.0.0: data inválida nunca derruba o app ("ontem" numa planilha deixava tudo em branco na v1.9.9): devolve "".
 function addDias(iso, n) {
-  const d = new Date(iso + "T12:00:00");
-  d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  const d = new Date(String(iso || "").slice(0, 10) + "T12:00:00");
+  if (isNaN(d) || !Number.isFinite(Number(n))) return "";
+  d.setDate(d.getDate() + Number(n));
+  return isNaN(d) ? "" : d.toISOString().slice(0, 10);
+}
+function diasAte(it) {
+  const fim = addDias(it.ultima, Number(it.ciclo));
+  if (!fim) return null;
+  const v = Math.round((new Date(fim + "T12:00:00") - new Date(hoje() + "T12:00:00")) / 86400000);
+  return Number.isFinite(v) ? v : null;
 }
 function statusDe(it) {
   if (it.arquivado_em) return "Arquivado";
   if (!it.ciclo || it.ciclo === "Nunca") return "Sem expiração";
   if (!it.ultima) return "Ativo";
-  const dias = Math.round((new Date(addDias(it.ultima, Number(it.ciclo)) + "T12:00:00") - new Date(hoje() + "T12:00:00")) / 86400000);
+  const dias = diasAte(it);
+  if (dias == null) return "Ativo";
   if (dias < 0) return "Vencido";
   if (dias <= 7) return "Vencendo";
   return "Ativo";
@@ -24,7 +33,8 @@ function rotulo(it) {
   const st = statusDe(it);
   if (st === "Arquivado" || st === "Sem expiração" || st === "Ativo" && (!it.ultima || it.ciclo === "Nunca")) return st === "Sem expiração" ? "Não expira" : st;
   if (!it.ultima || it.ciclo === "Nunca") return st;
-  const dias = Math.round((new Date(addDias(it.ultima, Number(it.ciclo)) + "T12:00:00") - new Date(hoje() + "T12:00:00")) / 86400000);
+  const dias = diasAte(it);
+  if (dias == null) return st;
   if (dias < 0) return "Vencido há " + Math.abs(dias) + " dia(s)";
   return "Vence em " + dias + " dias";
 }
@@ -44,6 +54,13 @@ function exemplos() {
 function load() {
   try { itens = JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) { itens = []; }
   if (!Array.isArray(itens)) itens = [];
+  // v2.0.0: descarta lixo (não objeto / sem id) e saneia datas e ciclo dos cards guardados (cliente já quebrado pela v1.9.9 se recupera)
+  itens = itens.filter((it) => it && typeof it === "object" && !Array.isArray(it) && it.id != null && it.id !== "");
+  // v2.0.0 (E1): marcas calculadas ANTES de qualquer ajuste, nas duas fórmulas (antiga e nova), para a migração não carimbar nada
+  const marcasAntes = {};
+  if (window.CadernoSync) itens.filter(compartilhado).forEach((it) => { marcasAntes[it.id] = [CadernoSync.semMetaV1(it), CadernoSync.semMetaV1(itemParaEquipe(it)), CadernoSync.semMeta(it), marcaDe(it)]; });
+  let saneou = false;
+  if (window.CadernoSync) itens.forEach((it) => { if (CadernoSync.sanearDatas(it)) saneou = true; });
   const antes = itens.length;
   // Remove exemplos de versões anteriores (só se ainda estiverem com a senha de exemplo original).
   itens = itens.filter((it) => !(["j1", "j2", "a1", "f1", "f2", "f3"].includes(it.id) && it.senha === "exemplo"));
@@ -82,12 +99,28 @@ function load() {
     if (!it.escalonamento) it.escalonamento = ex.escalonamento || resumoEscalonamentos(it.escalonamentos);
     mudou = true;
   });
-  if (mudou) localStorage.setItem(KEY, JSON.stringify(itens));
+  if (mudou || saneou) localStorage.setItem(KEY, JSON.stringify(itens));
   if (window.CadernoSync && !syncMeta().marcas) carimbarMudancas();
+  else if (window.CadernoSync) migrarMarcas(marcasAntes);
+}
+/* v2.0.0 (E1): abrir o app ou ajustar cards antigos (sem níveis, só o texto do escalonamento, data inválida) nunca muda
+ * updatedAt/updatedBy nem cria Histórico. Se a marca guardada era a do card antes do ajuste (em qualquer fórmula), passa a ser a do
+ * card ajustado. Idempotente: rodar de novo não muda nada. Cards realmente editados (marca diferente) continuam sendo carimbados. */
+function migrarMarcas(antes) {
+  const meta = syncMeta(); if (!meta.marcas) return;
+  let mudou = false;
+  itens.filter(compartilhado).forEach((it) => {
+    const m = meta.marcas[it.id]; const a = antes[it.id]; if (m == null || !a) return;
+    const nova = marcaDe(it);
+    if (m !== nova && a.includes(m)) { meta.marcas[it.id] = nova; mudou = true; }
+  });
+  if (meta.marcaV !== 3) { meta.marcaV = 3; mudou = true; }
+  if (mudou) gravarMeta(meta);
 }
 function save() {
   if (window.CadernoSync) carimbarMudancas();
   registrarMeus();
+  restaurando.clear(); paraLixeira.clear(); paraLixeiraMeus.clear(); restaurandoMeus.clear();
   localStorage.setItem(KEY, JSON.stringify(itens));
   render();
   if (window.CadernoSync) agendarSync();
@@ -235,26 +268,305 @@ function aviso(titulo, texto) { return dialogo({ titulo: titulo, texto: texto, o
 function nomeDe(it) { return it.titulo || it.aplicacao || "este acesso"; }
 // v1.9.6: a sincronização em segundo plano troca os objetos dos cards da Equipe; sempre busca o card atual pelo id.
 function atual(it) { return it ? (itens.find((x) => x.id === it.id) || null) : null; }
+/* v2.0.0: "Excluir" manda para a Lixeira (Mais › Lixeira) por 30 dias. Equipe: lixeira no arquivo da equipe (restaurável por
+ * qualquer analista; o tombstone continua, para versões antigas não ressuscitarem o card). Meus: lixeira só deste aparelho, com login e senha. */
 async function excluir(lista) {
   lista = lista.map(atual).filter((it) => it && it.arquivado_em);
   if (!lista.length) return false;
+  const temEq = lista.some(compartilhado);
   const sim = await dialogo({
-    titulo: lista.length === 1 ? "Excluir " + nomeDe(lista[0]) + " de vez?" : "Excluir " + lista.length + " acessos de vez?",
-    texto: "Essa ação não pode ser desfeita.",
-    ok: "Excluir", cancelar: "Cancelar", perigo: true
+    titulo: lista.length === 1 ? "Mover " + nomeDe(lista[0]) + " para a Lixeira?" : "Mover " + lista.length + " acessos para a Lixeira?",
+    texto: "Fica em Mais › Lixeira por " + DIAS_LIXEIRA + " dias e pode ser restaurado" + (temEq ? " (cards da Equipe: por qualquer analista, para todos)" : "") + ". Depois disso é apagado de vez.",
+    ok: "Mover para a Lixeira", cancelar: "Cancelar", perigo: true
   });
   if (!sim) return false;
-  const removidos = [];
-  lista.forEach((it) => { const i = itens.findIndex((x) => x.id === it.id); if (i >= 0) removidos.push({ i: i, it: itens[i] }); });
-  removidos.sort((a, b) => b.i - a.i).forEach((r) => itens.splice(r.i, 1));
+  const agora = new Date().toISOString(), quem = autor();
+  const lixEq = lerLixeiraEq(), lixMeus = lerLixeiraMeus();
+  const ids = [];
+  lista.forEach((it) => {
+    const i = itens.findIndex((x) => x.id === it.id); if (i < 0) return;
+    const c = itens[i]; ids.push(c.id);
+    if (compartilhado(c)) { paraLixeira.add(c.id); lixEq.itens = lixEq.itens.filter((e) => e.id !== c.id); lixEq.itens.unshift({ id: c.id, card: itemParaEquipe(c), excluidoEm: agora, excluidoPor: quem }); }
+    else { paraLixeiraMeus.add(c.id); lixMeus.splice(0, lixMeus.length, ...lixMeus.filter((e) => e.id !== c.id)); lixMeus.unshift({ id: c.id, card: Object.assign({}, c), excluidoEm: agora, excluidoPor: quem }); }
+    itens.splice(i, 1);
+  });
+  gravarLixeiraEq(lixEq); gravarLixeiraMeus(lixMeus);
   sairSelecao(false);
   save();
-  toast(removidos.length === 1 ? "Excluído" : removidos.length + " excluídos", { texto: "Desfazer", ms: 6000, fn: () => {
-    removidos.sort((a, b) => a.i - b.i).forEach((r) => { if (!itens.some((x) => x.id === r.it.id)) itens.splice(Math.min(r.i, itens.length), 0, r.it); });
-    save();
-    toast("Restaurado");
-  } });
+  toast(ids.length === 1 ? "Movido para a Lixeira" : ids.length + " movidos para a Lixeira", { texto: "Desfazer", ms: 6000, fn: () => { restaurarDaLixeira(ids); } });
   return true;
+}
+
+/* ---------- v2.0.0: Lixeira (30 dias) ---------- */
+const LIX_EQ_KEY = "caderno-acessos-lixeira-equipe";   // { itens: [{ id, card, excluidoEm, excluidoPor }], removidos: [{ id, em, por }] } (cópia local da lixeira do arquivo)
+const LIX_MEUS_KEY = "caderno-acessos-lixeira-meus";   // [{ id, card (completo, com login e senha), excluidoEm, excluidoPor }] — nunca sai do aparelho
+const CONF_KEY = "caderno-acessos-conflitos";          // { itens: [cópias de conflito], resolvidos: [{ id, em, por }] }
+const DIAS_LIXEIRA = 30;
+const paraLixeiraMeus = new Set();
+function lerLixeiraEq() {
+  const o = lerJSON(LIX_EQ_KEY, {});
+  if (!window.CadernoSync) return { itens: [], removidos: [] };
+  const removidos = CadernoSync.mesclarRemocoes([CadernoSync.limparRemocoes(o.removidos)]);
+  return { itens: CadernoSync.mesclarLixeira([CadernoSync.limparLixeira(o.itens)], removidos), removidos: removidos };
+}
+function gravarLixeiraEq(l) { localStorage.setItem(LIX_EQ_KEY, JSON.stringify({ itens: (l.itens || []).filter((e) => e && e.card && compartilhado(e.card)), removidos: l.removidos || [] })); }
+function lerLixeiraMeus() {
+  const lim = Date.now() - DIAS_LIXEIRA * 864e5;
+  const l = lerJSON(LIX_MEUS_KEY, []);
+  return (Array.isArray(l) ? l : []).filter((e) => e && e.id && e.card && typeof e.card === "object" && new Date(e.excluidoEm).getTime() >= lim);
+}
+function gravarLixeiraMeus(l) { localStorage.setItem(LIX_MEUS_KEY, JSON.stringify(l)); }
+function restaurarDaLixeira(ids) {
+  const lixEq = lerLixeiraEq(); let lixMeus = lerLixeiraMeus();
+  const agora = new Date().toISOString(), quem = autor();
+  let n = 0;
+  ids.forEach((id) => {
+    const e = lixEq.itens.find((x) => x.id === id);
+    if (e) {
+      lixEq.itens = lixEq.itens.filter((x) => x.id !== id); lixEq.removidos.push({ id: id, em: agora, por: quem });
+      if (!itens.some((x) => x.id === id)) { const c = Object.assign({}, e.card); if (!c.arquivado_em) c.arquivado_em = hoje(); restaurando.add(id); itens.push(c); n++; }
+      return;
+    }
+    const m = lixMeus.find((x) => x.id === id);
+    if (m) { lixMeus = lixMeus.filter((x) => x.id !== id); if (!itens.some((x) => x.id === id)) { restaurandoMeus.add(id); itens.push(Object.assign({}, m.card)); n++; } }
+  });
+  gravarLixeiraEq(lixEq); gravarLixeiraMeus(lixMeus);
+  save();
+  toast(n === 1 ? "Card restaurado (está no Arquivo)" : n + " cards restaurados (estão no Arquivo)");
+  return n;
+}
+async function apagarDaLixeira(e, equipe) {
+  const sim = await dialogo({ titulo: "Excluir agora da lixeira?", texto: "O card " + nomeDe(e.card) + " será apagado de vez" + (equipe ? ", para toda a equipe" : "") + ". Não dá para desfazer.", ok: "Excluir agora", cancelar: "Cancelar", perigo: true });
+  if (!sim) return false;
+  const agora = new Date().toISOString(), quem = autor();
+  if (equipe) {
+    const l = lerLixeiraEq(); l.itens = l.itens.filter((x) => x.id !== e.id); l.removidos.push({ id: e.id, em: agora, por: quem }); gravarLixeiraEq(l);
+    addHist({ id: "la-" + e.id + "-" + agora, tipo: "lixeira-apagado", card: String(nomeDe(e.card)).slice(0, 200), escopo: "Equipe", quando: agora });
+    agendarSync();
+  } else {
+    gravarLixeiraMeus(lerLixeiraMeus().filter((x) => x.id !== e.id));
+    addHist({ id: "ila-" + e.id + "-" + agora, tipo: "lixeira-apagado", card: String(nomeDe(e.card)).slice(0, 200), escopo: "Meu", local: true, quando: agora });
+  }
+  render(); toast("Apagado de vez");
+  return true;
+}
+function diasParaApagar(e) { return Math.max(0, Math.ceil((new Date(e.excluidoEm).getTime() + DIAS_LIXEIRA * 864e5 - Date.now()) / 864e5)); }
+function blocoLixeira(box) {
+  const eq = lerLixeiraEq().itens, meus = lerLixeiraMeus();
+  const c = el("article", "card painel-mais lixeira"); c.id = "blocoLixeira";
+  c.appendChild(el("h3", "", "🗑️ Lixeira" + (eq.length + meus.length ? " (" + (eq.length + meus.length) + ")" : "")));
+  c.appendChild(el("p", "meta", "Cards excluídos ficam aqui por " + DIAS_LIXEIRA + " dias. Os da Equipe podem ser restaurados por qualquer analista e voltam para o Arquivo de todos. Os Meus ficam só neste aparelho e voltam com usuário e senha."));
+  const todos = eq.map((e) => ({ e: e, equipe: true })).concat(meus.map((e) => ({ e: e, equipe: false }))).sort((a, b) => String(b.e.excluidoEm).localeCompare(String(a.e.excluidoEm)));
+  if (!todos.length) c.appendChild(el("p", "meta vazio-lix", "A Lixeira está vazia."));
+  else {
+    const ul = el("ul", "lix-lista");
+    todos.forEach(({ e, equipe }) => {
+      const li = el("li", "lix-it"); li.dataset.id = e.id;
+      const tx = el("div", "lix-tx");
+      tx.appendChild(el("b", "", nomeDe(e.card)));
+      tx.appendChild(el("span", "lix-tag " + (equipe ? "equipe" : "meu"), equipe ? "Equipe" : "Meu"));
+      tx.appendChild(el("div", "hist2-sub", "Excluído" + (e.excluidoPor ? " por " + e.excluidoPor : "") + " em " + dataHoraBR(e.excluidoEm) + " · apaga sozinho em " + diasParaApagar(e) + " dia(s)"));
+      li.appendChild(tx);
+      const ac = el("div", "lix-acoes");
+      ac.appendChild(btn("btn pequeno pri", "restore", "Restaurar", () => { restaurarDaLixeira([e.id]); }));
+      ac.appendChild(btn("btn pequeno perigo", "trash", "Excluir agora da lixeira", () => apagarDaLixeira(e, equipe)));
+      li.appendChild(ac); ul.appendChild(li);
+    });
+    c.appendChild(ul);
+  }
+  box.appendChild(c);
+}
+
+/* ---------- v2.0.0: cópias de conflito (edição simultânea) ----------
+ * A versão mais recente continua valendo (como antes); a outra fica guardada como "cópia de conflito" no arquivo da equipe por 30 dias
+ * (só cards da Equipe: nada Individual). Qualquer analista pode ver as duas versões e escolher. */
+function lerConflitos() {
+  const o = lerJSON(CONF_KEY, {});
+  if (!window.CadernoSync) return { itens: [], resolvidos: [] };
+  const resolvidos = CadernoSync.mesclarRemocoes([CadernoSync.limparRemocoes(o.resolvidos)]);
+  return { itens: CadernoSync.mesclarConflitos([CadernoSync.limparConflitos(o.itens)], resolvidos), resolvidos: resolvidos };
+}
+function gravarConflitos(c) { localStorage.setItem(CONF_KEY, JSON.stringify({ itens: (c.itens || []).filter((x) => x && x.perdedora && compartilhado(x.perdedora)), resolvidos: c.resolvidos || [] })); }
+function tituloConflito(c) {
+  const a = c.perdedorPor || "Alguém", b = c.vencedorPor || "outra pessoa";
+  return a === b ? "⚠️ " + a + " editou o mesmo card em dois aparelhos" : "⚠️ " + a + " e " + b + " editaram o mesmo card";
+}
+/* Junta lixeira e conflitos do arquivo, das cópias do OneDrive e deste aparelho. */
+function mesclarExtras(remoto, copias, r, conf, remAqui, voltaram) {
+  const agora = Date.now(), nowIso = new Date().toISOString(), quem = autor();
+  const lixL = lerLixeiraEq(), confL = lerConflitos();
+  const hist = [], extraRem = [];
+  const remAntes = CadernoSync.mesclarRemocoes([remoto ? remoto.lixeiraRemovidos : [], lixL.removidos]);
+  voltaram.forEach((v) => {
+    const id = v.item.id;
+    const rr = remAntes.find((t) => t.id === id);
+    extraRem.push({ id: id, em: nowIso, por: quem });
+    if (rr && CadernoSync.ts(rr.em) >= CadernoSync.ts(v.tomb.deletedAt)) return; // restaurado pela Lixeira: o Histórico já tem "Card restaurado"
+    // exclui x edita: a edição foi DEPOIS da exclusão → o card volta (decisão v2.0.0, documentada)
+    hist.push({ id: "volta-" + id + "-" + (v.item.updatedAt || ""), tipo: "texto", texto: "Card " + nomeDe(v.item) + " voltou: " + (v.item.updatedBy || "alguém") + " editou depois de " + (v.tomb.deletedBy || "alguém") + " excluir", card: String(nomeDe(v.item)).slice(0, 200), quem: v.item.updatedBy || "", quando: v.item.updatedAt || nowIso, escopo: "Equipe" });
+  });
+  // exclusão feita DEPOIS da edição: o card sai, mas a versão editada deste aparelho entra na Lixeira (nada se perde)
+  const remAquiEntradas = remAqui.filter((m) => m.item && m.item.id && compartilhado(m.item)).map((m) => ({ id: m.item.id, card: itemParaEquipe(m.item), excluidoEm: m.em || nowIso, excluidoPor: m.por || "" }));
+  const lixRem = CadernoSync.mesclarRemocoes([remAntes, ...copias.map((c) => c.doc.lixeiraRemovidos), extraRem]);
+  const ativos = new Set(r.itens.map((x) => x.id));
+  let lixeira = CadernoSync.mesclarLixeira([remoto ? remoto.lixeira : [], ...copias.map((c) => c.doc.lixeira), lixL.itens, remAquiEntradas], lixRem, agora);
+  lixeira.filter((e) => ativos.has(e.id)).forEach((e) => lixRem.push({ id: e.id, em: nowIso, por: quem }));
+  lixeira = lixeira.filter((e) => !ativos.has(e.id));
+  const confRes = CadernoSync.mesclarRemocoes([remoto ? remoto.conflitosResolvidos : [], ...copias.map((c) => c.doc.conflitosResolvidos), confL.resolvidos]);
+  const novos = [], vistos = new Set();
+  conf.forEach((c) => {
+    const p = c.perdedor, v = c.vencedor;
+    if (!p || !v || !compartilhado(p) || !compartilhado(v)) return;
+    const id = "cf-" + p.id + "-" + CadernoSync.ts(p.updatedAt);
+    if (vistos.has(id)) return; vistos.add(id);
+    novos.push({ id: id, cardId: p.id, titulo: String(nomeDe(v)).slice(0, 200), perdedora: itemParaEquipe(p), vencedoraAt: v.updatedAt || "", vencedorPor: v.updatedBy || "", perdedorPor: p.updatedBy || "", quando: nowIso });
+  });
+  const conflitos = CadernoSync.mesclarConflitos([remoto ? remoto.conflitos : [], ...copias.map((c) => c.doc.conflitos), confL.itens, novos], confRes, agora);
+  const conhecidos = new Set(confL.itens.map((c) => c.id).concat(confL.resolvidos.map((c) => c.id)));
+  const novosConf = conflitos.filter((c) => !conhecidos.has(c.id));
+  novos.forEach((c) => hist.push({ id: "h" + c.id, tipo: "conflito", card: c.titulo, quem: c.perdedorPor, texto: tituloConflito(c).replace(/^⚠️ /, "") + " (" + c.titulo + "). Ficou a versão de " + (c.vencedorPor || "outra pessoa") + ", a mais recente; a de " + (c.perdedorPor || "outra pessoa") + " está guardada como cópia de conflito.", quando: c.quando, escopo: "Equipe" }));
+  const sig = (l, f) => JSON.stringify((l || []).map(f).sort());
+  const fl = (e) => e.id + "@" + e.excluidoEm + "@" + (e.card.updatedAt || ""), ft = (t) => t.id + "@" + t.em, fc = (c) => c.id;
+  const precisa = !remoto || sig(remoto.lixeira, fl) !== sig(lixeira, fl) || sig(remoto.lixeiraRemovidos, ft) !== sig(lixRem, ft) || sig(remoto.conflitos, fc) !== sig(conflitos, fc) || sig(remoto.conflitosResolvidos, ft) !== sig(confRes, ft);
+  return { lixeira: lixeira, lixRem: lixRem, conflitos: conflitos, confRes: confRes, novosConf: novosConf, hist: hist, precisa: precisa };
+}
+const CAMPOS_VER = [["titulo", "Título"], ["aplicacao", "Aplicação"], ["cliente", "Cliente / operação"], ["categoria", "Categoria"], ["url", "Link"], ["usuario", "Usuário"], ["senha", "Senha"], ["ciclo", "Ciclo (dias)"], ["ultima", "Última troca"], ["horario", "Horário"], ["escalonamentos", "Escalonamento"], ["obs", "Observações"], ["arquivado_em", "Arquivado em"]];
+function valorVer(c, k) {
+  if (k === "escalonamentos") return resumoEscalonamentos(niveisDe(c)) || c.escalonamento || "";
+  if (k === "ultima" || k === "arquivado_em") return c[k] ? dataBR(c[k]) : "";
+  return c[k] == null ? "" : String(c[k]);
+}
+function verConflito(id) {
+  const c = lerConflitos().itens.find((x) => x.id === id);
+  if (!c) { toast("Esse conflito já foi resolvido"); return Promise.resolve(false); }
+  const vivo = itens.find((x) => x.id === c.cardId);
+  return janela("dlgVer", (box, fim) => {
+    box.classList.add("dlg-conflito");
+    box.appendChild(el("h3", "", tituloConflito(c)));
+    if (!vivo) {
+      box.appendChild(el("p", "meta", "O card " + c.titulo + " não existe mais (foi excluído). Você pode recuperar a outra versão pela Lixeira, se ainda estiver lá."));
+      const bb = el("div", "dlg-botoes"); bb.appendChild(botaoDlg("pri", "Dispensar aviso", () => { resolverConflito(c, false); fim(true); })); bb.appendChild(botaoDlg("", "Fechar", () => fim(false))); box.appendChild(bb);
+      return;
+    }
+    box.appendChild(el("p", "meta", "Card: " + nomeDe(vivo) + ". Ficou valendo a versão de " + (vivo.updatedBy || c.vencedorPor || "outra pessoa") + " (" + dataHoraBR(vivo.updatedAt) + "), a mais recente. A versão de " + (c.perdedorPor || "outra pessoa") + " (" + dataHoraBR(c.perdedora.updatedAt) + ") ficou guardada. Escolha qual fica."));
+    const difs = CAMPOS_VER.filter(([k]) => valorVer(vivo, k) !== valorVer(c.perdedora, k));
+    if (!difs.length) box.appendChild(el("p", "meta", "As duas versões têm o mesmo conteúdo."));
+    else {
+      const t = el("table", "conf-tab");
+      const hr = el("tr"); ["Campo", "Esta (atual, de " + (vivo.updatedBy || "?") + ")", "A outra (de " + (c.perdedorPor || "?") + ")"].forEach((h) => hr.appendChild(el("th", "", h))); t.appendChild(hr);
+      difs.forEach(([k, r]) => {
+        const tr = el("tr");
+        tr.appendChild(el("td", "conf-campo", r));
+        const v1 = valorVer(vivo, k), v2 = valorVer(c.perdedora, k);
+        // senhas nunca aparecem: só que são diferentes
+        tr.appendChild(el("td", "", k === "senha" ? (v1 ? MASCARA + " (diferente)" : "—") : (v1 || "—")));
+        tr.appendChild(el("td", "", k === "senha" ? (v2 ? MASCARA + " (diferente)" : "—") : (v2 || "—")));
+        t.appendChild(tr);
+      });
+      const w = el("div", "conf-wrap"); w.appendChild(t); box.appendChild(w);
+    }
+    const bb = el("div", "dlg-botoes");
+    bb.appendChild(botaoDlg("pri", "Ficar com esta", () => { resolverConflito(c, false); fim(true); toast("Ficou a versão atual"); }));
+    bb.appendChild(botaoDlg("", "Ficar com a outra", () => { resolverConflito(c, true); fim(true); toast("Ficou a outra versão"); }));
+    bb.appendChild(botaoDlg("", "Fechar", () => fim(false)));
+    box.appendChild(bb);
+  });
+}
+function resolverConflito(c, outra) {
+  const agora = new Date().toISOString(), quem = autor();
+  const l = lerConflitos(); l.itens = l.itens.filter((x) => x.id !== c.id); l.resolvidos.push({ id: c.id, em: agora, por: quem }); gravarConflitos(l);
+  const vivo = itens.find((x) => x.id === c.cardId);
+  let ficou = vivo ? (vivo.updatedBy || c.vencedorPor || "outra pessoa") : "";
+  if (outra && vivo) {
+    Object.keys(c.perdedora).forEach((k) => { if (["id", "updatedAt", "updatedBy", "baseAt"].indexOf(k) < 0) vivo[k] = c.perdedora[k]; });
+    ficou = c.perdedorPor || "outra pessoa";
+  }
+  addHist({ id: "hr" + c.id, tipo: "conflito-resolvido", card: c.titulo, texto: "Conflito em " + c.titulo + " resolvido por " + (quem || "analista") + (ficou ? ": ficou a versão de " + ficou : ""), escopo: "Equipe", quando: agora });
+  if (outra && vivo) save(); else { render(); agendarSync(); }
+}
+
+/* ---------- v2.0.0: painel de duplicados (cards da Equipe com o mesmo link) ---------- */
+const DUP_DEC_KEY = "caderno-acessos-duplicados-decisoes"; // { [normUrl|ids ordenados]: "manter" } — muda o grupo, pergunta de novo
+const dupAvisados = new Set();
+function gruposDuplicados(todos) {
+  const m = new Map();
+  itens.filter((c) => compartilhado(c) && !c.arquivado_em).forEach((c) => { const u = normUrl(c.url); if (!u) return; if (!m.has(u)) m.set(u, []); m.get(u).push(c); });
+  const dec = lerJSON(DUP_DEC_KEY, {});
+  return [...m.entries()].filter(([, l]) => l.length > 1).map(([u, l]) => ({ url: u, cards: l, chave: u + "|" + l.map((x) => x.id).sort().join(",") }))
+    .filter((g) => todos || dec[g.chave] !== "manter");
+}
+function textoDuplicados(gs) { const n = gs.reduce((a, g) => a + g.cards.length, 0); return "⚠️ " + n + " cards da Equipe com o mesmo link"; }
+function avisarDuplicadosNovos() {
+  const gs = gruposDuplicados().filter((g) => !dupAvisados.has(g.chave));
+  if (!gs.length) return false;
+  gs.forEach((g) => dupAvisados.add(g.chave));
+  toast(textoDuplicados(gruposDuplicados()), { texto: "Ver", ms: 9000, fn: () => painelDuplicados() });
+  return true;
+}
+function painelDuplicados() {
+  const gs = gruposDuplicados();
+  if (!gs.length) { toast("Nenhum card da Equipe repetido"); return Promise.resolve(false); }
+  return janela("dlgVer", (box, fim) => {
+    box.classList.add("dlg-dup");
+    box.appendChild(el("h3", "", textoDuplicados(gs)));
+    box.appendChild(el("p", "meta", "Na Equipe vale “um link = um card”. Abra os cards, arquive o que sobra (vai para o Arquivo e, se quiser, depois para a Lixeira) ou mantenha os dois se forem mesmo diferentes."));
+    gs.forEach((g) => {
+      const sec = el("section", "dup-grupo"); sec.dataset.url = g.url;
+      sec.appendChild(el("div", "dup-link", g.url));
+      g.cards.forEach((c) => {
+        const row = el("div", "dup-card"); row.dataset.id = c.id;
+        const tx = el("div", "dup-tx"); tx.appendChild(el("b", "", nomeDe(c)));
+        tx.appendChild(el("div", "hist2-sub", rotuloCliente(c) + (c.updatedBy ? " · atualizado por " + c.updatedBy : "") + (c.updatedAt ? " em " + dataHoraBR(c.updatedAt) : "")));
+        row.appendChild(tx);
+        const ac = el("div", "dup-acoes");
+        ac.appendChild(botaoDlg("pequeno", "Abrir", () => { fim(true); const x = atual(c); if (x) abrirFicha(x); }));
+        ac.appendChild(botaoDlg("pequeno", "Arquivar", () => { const x = atual(c); if (x) { x.arquivado_em = hoje(); save(); toast("Card arquivado"); } fim(true); if (gruposDuplicados().length) setTimeout(painelDuplicados, 60); }));
+        row.appendChild(ac); sec.appendChild(row);
+      });
+      const bm = botaoDlg("pequeno", g.cards.length > 2 ? "Manter todos" : "Manter os dois", () => { const d = lerJSON(DUP_DEC_KEY, {}); d[g.chave] = "manter"; localStorage.setItem(DUP_DEC_KEY, JSON.stringify(d)); toast("Decisão guardada"); fim(true); render(); if (gruposDuplicados().length) setTimeout(painelDuplicados, 60); });
+      bm.classList.add("dup-manter"); sec.appendChild(bm);
+      box.appendChild(sec);
+    });
+    const bb = el("div", "dlg-botoes"); bb.appendChild(botaoDlg("pri", "Fechar", () => fim(false))); box.appendChild(bb);
+  });
+}
+/* Faixa de avisos (conflitos e duplicados) no topo da Equipe e em Mais. */
+function faixaAvisos(box) {
+  const cs = lerConflitos().itens, gs = gruposDuplicados();
+  if (!cs.length && !gs.length) return;
+  const f = el("div", "faixa-avisos");
+  if (cs.length) {
+    const l = el("div", "faixa-it faixa-conflito");
+    l.appendChild(el("span", "", cs.length === 1 ? tituloConflito(cs[0]) + ": " + cs[0].titulo : "⚠️ " + cs.length + " cards editados ao mesmo tempo por pessoas diferentes"));
+    l.appendChild(botaoDlg("pequeno", "Ver as duas versões", () => verConflito(cs[0].id)));
+    f.appendChild(l);
+  }
+  if (gs.length) {
+    const l = el("div", "faixa-it faixa-dup");
+    l.appendChild(el("span", "", textoDuplicados(gs)));
+    l.appendChild(botaoDlg("pequeno", "Ver", () => painelDuplicados()));
+    f.appendChild(l);
+  }
+  box.appendChild(f);
+}
+function blocoAvisos(box) {
+  const cs = lerConflitos().itens, gs = gruposDuplicados();
+  const c = el("article", "card painel-mais avisos-v2"); c.id = "blocoAvisos";
+  c.appendChild(el("h3", "", "Conflitos de edição e cards repetidos"));
+  if (!cs.length && !gs.length) { c.appendChild(el("p", "meta", "Nenhum conflito de edição nem card da Equipe com o mesmo link.")); box.appendChild(c); return; }
+  if (cs.length) {
+    const ul = el("ul", "lix-lista");
+    cs.forEach((x) => { const li = el("li", "lix-it"); const tx = el("div", "lix-tx"); tx.appendChild(el("b", "", tituloConflito(x))); tx.appendChild(el("div", "hist2-sub", x.titulo + " · " + dataHoraBR(x.quando))); li.appendChild(tx); const ac = el("div", "lix-acoes"); ac.appendChild(botaoDlg("pequeno pri", "Ver as duas versões", () => verConflito(x.id))); li.appendChild(ac); ul.appendChild(li); });
+    c.appendChild(ul);
+  }
+  if (gs.length) {
+    c.appendChild(el("p", "meta", textoDuplicados(gs) + ":"));
+    const ul = el("ul", "lix-lista");
+    gs.forEach((g) => { const li = el("li", "lix-it"); const tx = el("div", "lix-tx"); tx.appendChild(el("b", "", g.url)); tx.appendChild(el("div", "hist2-sub", g.cards.map((x) => nomeDe(x) + " (" + rotuloCliente(x) + ")").join(" · "))); li.appendChild(tx); ul.appendChild(li); });
+    c.appendChild(ul);
+    const row = el("div", "acoes-mais"); row.appendChild(botaoDlg("pri", "Ver e resolver", () => painelDuplicados())); c.appendChild(row);
+  }
+  box.appendChild(c);
 }
 
 /* ---------- Seleção múltipla (só na aba Arquivo) ---------- */
@@ -384,7 +696,7 @@ function abrirUrl(url) {
 }
 function diasRestantes(it) {
   if (!it.ultima || !it.ciclo || it.ciclo === "Nunca") return null;
-  return Math.round((new Date(addDias(it.ultima, Number(it.ciclo)) + "T12:00:00") - new Date(hoje() + "T12:00:00")) / 86400000);
+  return diasAte(it);
 }
 const CORES = ["#0F6B8A", "#1B5FAD", "#1B365D", "#5B4BB7", "#0E7C5A", "#B4530A", "#9D2B6B", "#2F6F73"];
 function corDe(it) {
@@ -526,16 +838,19 @@ function hrefEsc(nivel) {
 /* ---------- Lista ---------- */
 function visiveis() {
   const q = (document.getElementById("busca").value || "").trim().toLowerCase();
-  return itens.filter((it) => {
+  // v2.0.0: um card com dado estragado nunca derruba a lista: na dúvida ele aparece (como aviso) em vez de quebrar tudo
+  const filtro = (it) => {
     const arq = !!it.arquivado_em;
     if (aba === "equipe" && (it.visibilidade !== "Equipe" || arq)) return false;
     if (aba === "meu" && (it.visibilidade !== "Individual" || arq)) return false;
-    if (aba === "vencendo" && (arq || ["Vencendo", "Vencido"].indexOf(statusDe(it)) < 0)) return false;
+    if (aba === "vencendo") { let st = ""; try { st = statusDe(it); } catch (e) { st = ""; } if (arq || ["Vencendo", "Vencido"].indexOf(st) < 0) return false; }
     if (aba === "arquivo" && !arq) return false;
     if (aba === "mais" || aba === "gerador") return false;
     const blob = [it.titulo, it.aplicacao, it.cliente, it.usuario, it.url, it.categoria, it.visibilidade, it.escalonamento, resumoEscalonamentos(niveisDe(it))].join(" ").toLowerCase();
     return !q || blob.indexOf(q) >= 0;
-  }).sort((a, b) => String(a.aplicacao || a.titulo || "").localeCompare(String(b.aplicacao || b.titulo || "")) || String(a.cliente || "").localeCompare(String(b.cliente || "")) || String(a.titulo || "").localeCompare(String(b.titulo || "")));
+  };
+  const S = (v) => { try { return String(v == null ? "" : v); } catch (e) { return ""; } };
+  return itens.filter((it) => { try { return filtro(it); } catch (e) { return !q && aba !== "mais" && aba !== "gerador" && aba !== "vencendo"; } }).sort((a, b) => S(a.aplicacao || a.titulo).localeCompare(S(b.aplicacao || b.titulo)) || S(a.cliente).localeCompare(S(b.cliente)) || S(a.titulo).localeCompare(S(b.titulo)));
 }
 function render() {
   const box = document.getElementById("lista");
@@ -545,7 +860,8 @@ function render() {
   if (selecao) { const ids = new Set(itens.map((x) => x.id)); selecao.forEach((id) => { if (!ids.has(id)) selecao.delete(id); }); if (!selecao.size) selecao = null; }
   atualizarBarraSelecao();
   box.classList.toggle("modo-sel", !!selecao);
-  const nVenc = itens.filter((it) => !it.arquivado_em && ["Vencendo", "Vencido"].indexOf(statusDe(it)) >= 0).length;
+  // v2.0.0: um card com dado estragado nunca derruba a lista (cada card é isolado)
+  const nVenc = itens.filter((it) => { try { return !it.arquivado_em && ["Vencendo", "Vencido"].indexOf(statusDe(it)) >= 0; } catch (e) { return false; } }).length;
   document.getElementById("contVenc").textContent = nVenc ? String(nVenc) : "";
   const painel = aba === "mais" || aba === "gerador";
   document.getElementById("buscaWrap").classList.toggle("oculto", painel);
@@ -553,6 +869,7 @@ function render() {
   box.classList.toggle("mais", painel);
   if (aba === "mais") { renderMais(box); return; }
   if (aba === "gerador") { renderGerador(box); return; }
+  if (aba === "equipe") { try { faixaAvisos(box); } catch (e) { /* aviso é melhor esforço */ } }
   const list = visiveis();
   if (!list.length) {
     box.appendChild(el("p", "vazio", document.getElementById("busca").value ? "Nenhum acesso encontrado para essa busca." : "Nenhum card nesta aba."));
@@ -560,7 +877,7 @@ function render() {
   }
   const grupos = [];
   list.forEach((it) => {
-    const nome = it.aplicacao || it.titulo || "Sem aplicação";
+    let nome = "Sem aplicação"; try { nome = String(it.aplicacao || it.titulo || "Sem aplicação"); } catch (e) {}
     let g = grupos.find((x) => x.nome === nome);
     if (!g) { g = { nome: nome, itens: [] }; grupos.push(g); }
     g.itens.push(it);
@@ -572,9 +889,21 @@ function render() {
     h.appendChild(el("span", "", g.nome));
     if (g.itens.length > 1) h.appendChild(el("span", "grupo-qtd", g.itens.length + " acessos"));
     sec.appendChild(h);
-    g.itens.forEach((it) => sec.appendChild(cardDe(it)));
+    g.itens.forEach((it) => { try { sec.appendChild(cardDe(it)); } catch (e) { sec.appendChild(cardComErro(it, e)); } });
     box.appendChild(sec);
   });
+}
+const cardsComErroLog = new Set();
+function cardComErro(it, e) {
+  const c = el("article", "card c-ok card-erro"); c.dataset.id = it && it.id || "";
+  let nome = "(card com erro)"; try { nome = String((it && (it.titulo || it.aplicacao)) || nome); } catch (x) {}
+  c.appendChild(el("h3", "", nome));
+  c.appendChild(el("p", "meta", "Este card tem um dado com formato errado e não pôde ser mostrado por completo. Abra e salve de novo para corrigir."));
+  const row = el("div", "acoes-mais");
+  row.appendChild(btn("btn pequeno", "edit", "Abrir", () => { const x = atual(it); if (x) abrirFicha(x); }));
+  c.appendChild(row);
+  try { const k = (it && it.id) + "|" + (e && e.message); if (!cardsComErroLog.has(k)) { cardsComErroLog.add(k); registrarErro("mostrar card", String((it && it.id) || ""), e, null); } } catch (x) {}
+  return c;
 }
 function statusBadge(it) {
   const st = statusDe(it);
@@ -781,7 +1110,7 @@ function avisarDuplicadosReativados(lista) {
   const dups = lista.map((c) => atual(c) || c).filter((c) => compartilhado(c) && !c.arquivado_em).map((c) => ({ c: c, d: duplicadosEquipe(c) })).filter((x) => x.d.length);
   if (!dups.length) return;
   const x = dups[0];
-  aviso("⚠️ Já existe esse card na Equipe: " + nomeDe(x.d[0]) + " (" + rotuloCliente(x.d[0]) + ")", "O card " + nomeDe(x.c) + " foi reativado mesmo assim, mas tem o mesmo link e o mesmo cliente/operação de outro card da Equipe." + (dups.length > 1 ? " Outros " + (dups.length - 1) + " card(s) reativado(s) também se repetem." : "") + " Se for repetido, arquive um deles.");
+  aviso("⚠️ Já existe um card da Equipe com esse link: " + nomeDe(x.d[0]) + " (" + rotuloCliente(x.d[0]) + ")", "O card " + nomeDe(x.c) + " foi reativado mesmo assim, mas tem o mesmo link de outro card ativo da Equipe (na Equipe vale “um link = um card”)." + (dups.length > 1 ? " Outros " + (dups.length - 1) + " card(s) reativado(s) também se repetem." : "") + " Em Mais › Conflitos de edição e cards repetidos você arquiva um deles ou mantém os dois.");
 }
 /* ---------- Aba Mais ---------- */
 /* ---------- Gerador de senhas ---------- */
@@ -930,7 +1259,8 @@ function removidosLocais() { return lerJSON(REMOVIDOS_KEY, []); }
 /* Mesma regra do JSON da equipe: só cards de Equipe; Individuais nunca saem. */
 function compartilhado(it) { return !!it && it.visibilidade !== "Individual"; }
 function itemParaEquipe(it) { const c = semSegredoIndividual(it); const n = window.CadernoSync && CadernoSync.normalizarCard ? CadernoSync.normalizarCard(c) : c; return n && n.id ? n : c; }
-function marcaDe(it) { return window.CadernoSync ? CadernoSync.semMeta(it) : JSON.stringify(it); }
+// v2.0.0: a marca é a do card normalizado (o mesmo que vai para o arquivo): ajustes de formato não contam como edição.
+function marcaDe(it) { return window.CadernoSync ? CadernoSync.semMeta(itemParaEquipe(it)) : JSON.stringify(it); }
 /* Chamada a cada save(): carimba updatedAt/updatedBy nos cards de equipe alterados e cria tombstones das exclusões. */
 function carimbarMudancas() {
   const meta = syncMeta();
@@ -939,11 +1269,15 @@ function carimbarMudancas() {
   if (!meta.marcas) { meta.marcas = novas; gravarMeta(meta); return false; }
   const agora = new Date().toISOString(); const quem = autor();
   let mudou = false;
+  const bases = meta.bases || {};
   itens.filter(compartilhado).forEach((it) => {
     if (meta.marcas[it.id] !== novas[it.id]) {
-      const antes = meta.marcas[it.id] ? JSON.parse(meta.marcas[it.id]) : null;
+      let antes = null; try { antes = meta.marcas[it.id] ? JSON.parse(meta.marcas[it.id]) : null; } catch (e) { antes = {}; }
       registrarAcao(!antes ? "novo card" : (!antes.arquivado_em && it.arquivado_em) ? "arquivar" : (antes.arquivado_em && !it.arquivado_em) ? "reativar" : antes.senha !== it.senha ? "atualizar senha" : "salvar", nomeDe(it));
-      histAcao(tipoMudanca(antes, it), it, "Equipe", "c-" + it.id + "-" + agora, agora);
+      if (restaurando.has(it.id)) addHist({ id: "r-" + it.id + "-" + agora, tipo: "restaurado", card: String(nomeDe(it)).slice(0, 200), texto: "Card restaurado por " + (quem || "analista"), escopo: "Equipe", quando: agora });
+      else histAcao(tipoMudanca(antes, it), it, "Equipe", "c-" + it.id + "-" + agora, agora);
+      // v2.0.0: baseAt = versão em que esta edição se baseou (a última vista na sincronização), para detectar edição simultânea
+      it.baseAt = Object.prototype.hasOwnProperty.call(bases, it.id) ? (bases[it.id] || "") : (it.updatedAt || "");
       it.updatedAt = agora; it.updatedBy = quem; mudou = true;
     }
   });
@@ -954,7 +1288,8 @@ function carimbarMudancas() {
       rem = rem.filter((t) => t.id !== id);
       let titulo = antigo ? nomeDe(antigo) : ""; try { if (!titulo) titulo = nomeDe(JSON.parse(meta.marcas[id])); } catch (e) {}
       registrarAcao("excluir", titulo);
-      histAcao("excluido", { titulo: titulo }, "Equipe", "x-" + id + "-" + agora, agora);
+      if (paraLixeira.has(id)) addHist({ id: "x-" + id + "-" + agora, tipo: "lixeira", card: String(titulo).slice(0, 200), escopo: "Equipe", quando: agora });
+      else histAcao("excluido", { titulo: titulo }, "Equipe", "x-" + id + "-" + agora, agora);
       rem.push({ id: id, deletedAt: agora, deletedBy: quem, titulo: titulo });
       mudou = true;
     }
@@ -968,6 +1303,7 @@ function carimbarMudancas() {
   if (atualizarMeusModelos()) mudou = true;
   return mudou;
 }
+const restaurando = new Set(), paraLixeira = new Set(); // v2.0.0: ids sendo restaurados da / movidos para a Lixeira (tipo certo no Histórico)
 function dataHoraBR(iso) {
   const d = new Date(iso); if (isNaN(d)) return "";
   const p = (n) => String(n).padStart(2, "0");
@@ -1019,6 +1355,7 @@ function histAcao(tipo, it, escopo, id, quando) {
 }
 /* Cards Meus (Individuais): compara com a última foto em memória a cada save(). */
 let fotoMeus = null;
+const restaurandoMeus = new Set();
 function fotoIndividuais() { const m = new Map(); itens.filter((x) => !compartilhado(x)).forEach((x) => m.set(x.id, JSON.stringify(x))); return m; }
 function registrarMeus() {
   const nova = fotoIndividuais();
@@ -1027,9 +1364,12 @@ function registrarMeus() {
     nova.forEach((j, id) => {
       const a = fotoMeus.get(id); if (a === j) return;
       const antes = a ? JSON.parse(a) : null, it = JSON.parse(j);
-      histAcao(tipoMudanca(antes, it), it, "Meu", "i-" + id + "-" + agora, agora);
+      if (restaurandoMeus.has(id)) addHist({ id: "ir-" + id + "-" + agora, tipo: "restaurado", card: String(nomeDe(it)).slice(0, 200), texto: "Card restaurado por " + (autor() || "você"), escopo: "Meu", local: true, quando: agora });
+      else histAcao(tipoMudanca(antes, it), it, "Meu", "i-" + id + "-" + agora, agora);
+      // v2.0.0: card Meu também ganha data de alteração (só neste aparelho), para a reimportação não voltar a uma versão antiga
+      const vivo = itens.find((x) => x.id === id); if (vivo && !histLote) { vivo.updatedAt = agora; nova.set(id, JSON.stringify(vivo)); }
     });
-    fotoMeus.forEach((j, id) => { if (!nova.has(id) && !itens.some((x) => x.id === id)) histAcao("excluido", JSON.parse(j), "Meu", "ix-" + id + "-" + agora, agora); });
+    fotoMeus.forEach((j, id) => { if (!nova.has(id) && !itens.some((x) => x.id === id)) { if (paraLixeiraMeus.has(id)) addHist({ id: "ix-" + id + "-" + agora, tipo: "lixeira", card: String(nomeDe(JSON.parse(j))).slice(0, 200), escopo: "Meu", local: true, quando: agora }); else histAcao("excluido", JSON.parse(j), "Meu", "ix-" + id + "-" + agora, agora); } });
   }
   fotoMeus = nova;
 }
@@ -1135,26 +1475,29 @@ async function sincronizarAgora(interativo) {
       carimbarMudancas();
       const meta = syncMeta();
       let base = { itens: itens.filter(compartilhado).map(itemParaEquipe), removidos: removidosLocais() };
-      let r = CadernoSync.mesclar(base, remoto, meta.ultimaSync, chaveCard);
-      const mud = r.mudancasRemotas.slice(), conf = r.conflitos.slice();
+      let r = CadernoSync.mesclar(base, remoto, meta.ultimaSync);
+      const mud = r.mudancasRemotas.slice(), conf = r.conflitos.slice(), remAqui = r.removidosAqui.slice(), voltaram = r.voltaram.slice();
       let localMudou = r.localMudou, precisa = r.remotoPrecisa || !remoto || !!seEstado.pendente || precisaCifrar(bruto);
       // v1.9.4: modelos (cards Individuais compartilhados, sem login/senha). O cache local repõe o que um app antigo (v1.9.3) tenha apagado ao gravar.
       let rm = CadernoSync.mesclar(modelosLocais(), CadernoSync.modelosDoDoc(remoto) || { itens: [], removidos: [] }, "", null);
       if (rm.remotoPrecisa) precisa = true;
       copias.forEach((c) => {
-        const r2 = CadernoSync.mesclar({ itens: r.itens, removidos: r.removidos }, c.doc, meta.ultimaSync, chaveCard);
-        r2.mudancasRemotas.forEach((m) => mud.push(m)); r2.conflitos.forEach((x) => conf.push(x));
+        const r2 = CadernoSync.mesclar({ itens: r.itens, removidos: r.removidos }, c.doc, meta.ultimaSync);
+        r2.mudancasRemotas.forEach((m) => mud.push(m)); r2.conflitos.forEach((x) => conf.push(x)); r2.removidosAqui.forEach((x) => remAqui.push(x)); r2.voltaram.forEach((x) => voltaram.push(x));
         localMudou = localMudou || r2.localMudou; precisa = true; r = r2;
         rm = CadernoSync.mesclar({ itens: rm.itens, removidos: rm.removidos }, CadernoSync.modelosDoDoc(c.doc), "", null);
       });
       copiasFechadas = copiasFechadas.filter((n, i, l) => l.indexOf(n) === i);
       // v1.9.7: histórico da Equipe viaja no arquivo; primeiro o que veio do arquivo (vence pelo id), depois o deste aparelho e o deduzido das mudanças
+      // v2.0.0: lixeira da Equipe e cópias de conflito (juntadas com a cópia local, que repõe o que um app v1.9.x tenha apagado)
+      const ex = mesclarExtras(remoto, copias, r, conf, remAqui, voltaram);
+      if (ex.precisa) precisa = true;
       const histLocal = lerHist();
-      const histEq = CadernoSync.mesclarHistorico([remoto ? remoto.historico : [], ...copias.map((c) => c.doc.historico), histLocal.filter((e) => e.escopo === "Equipe" && !e.local), mud.map(histDeMudanca)], CadernoSync.HIST_MAX);
+      const histEq = CadernoSync.mesclarHistorico([remoto ? remoto.historico : [], ...copias.map((c) => c.doc.historico), histLocal.filter((e) => e.escopo === "Equipe" && !e.local), mud.map(histDeMudanca), ex.hist], CadernoSync.HIST_MAX);
       const idsRem = new Set(((remoto && remoto.historico) || []).map((e) => e.id));
       if (histEq.some((e) => !idsRem.has(e.id))) precisa = true;
-      if (precisa) await a.gravar(await fecharDocEquipe(CadernoSync.montarDoc(r.itens, r.removidos, autor(), compartilhado, { modelos: rm.itens, modelosRemovidos: rm.removidos, historico: histEq }), bruto));
-      resultado = { r: r, mud: mud, conf: conf, localMudou: localMudou, rm: rm, histEq: histEq };
+      if (precisa) await a.gravar(await fecharDocEquipe(CadernoSync.montarDoc(r.itens, r.removidos, autor(), compartilhado, { modelos: rm.itens, modelosRemovidos: rm.removidos, historico: histEq, lixeira: ex.lixeira, lixeiraRemovidos: ex.lixRem, conflitos: ex.conflitos, conflitosResolvidos: ex.confRes }), bruto));
+      resultado = { r: r, mud: mud, conf: ex.novosConf, localMudou: localMudou, rm: rm, histEq: histEq, ex: ex };
       copiasMescladas = copias.map((c) => c.nome);
     }, { aoFalhar: () => { syncEstado.pendente = true; desenharBotaoSync(); } });
     await concluirSenhaPendente(a);
@@ -1163,6 +1506,8 @@ async function sincronizarAgora(interativo) {
     for (const v of invalidos.slice(0, 20)) await registrarErro("ignorar card inválido", (v.x.titulo ? v.x.titulo + " " : "") + "(posição " + (v.x.pos + 1) + " em " + v.origem + ")", { name: "CardInvalido", message: "card com formato errado foi ignorado e não foi aplicado" }, a);
     for (const nome of copiasFechadas) await registrarErro("juntar cópia de conflito", nome, { name: "SenhaEquipe", message: "cópia protegida com outra senha da equipe; ficou na pasta" }, a);
     gravarModelosLocais({ itens: resultado.rm.itens.map(CadernoSync.limparModelo), removidos: resultado.rm.removidos });
+    gravarLixeiraEq({ itens: resultado.ex.lixeira, removidos: resultado.ex.lixRem });
+    gravarConflitos({ itens: resultado.ex.conflitos, resolvidos: resultado.ex.confRes });
     aplicarResultado(resultado.r);
     // só apaga as cópias depois da gravação verificada do arquivo principal
     for (const nome of copiasMescladas) {
@@ -1171,11 +1516,12 @@ async function sincronizarAgora(interativo) {
     }
     syncEstado.pendente = false;
     const textos = resultado.mud.map(textoMudanca);
-    resultado.conf.forEach((c) => textos.push("Conflito em " + nomeDe(c.remoto) + ": você e " + (c.remoto.updatedBy || "outra pessoa") + " alteraram desde a última sincronização. Ficou a versão mais recente" + (CadernoSync.ts(c.remoto.updatedAt) >= CadernoSync.ts(c.local.updatedAt) ? " (de " + (c.remoto.updatedBy || "outra pessoa") + ")." : " (a sua).")));
+    resultado.conf.forEach((c) => textos.push(tituloConflito(c) + ": " + c.titulo + ". Ficou a versão mais recente; a outra está guardada (Mais › Conflitos de edição)."));
     registrarHistorico(textos);
-    resultado.conf.forEach((c, i) => addHist({ tipo: "conflito", card: String(nomeDe(c.remoto)).slice(0, 200), quem: c.remoto.updatedBy || "", escopo: "Equipe", local: true, texto: textos[resultado.mud.length + i] }));
     renderAposSync(); // v1.9.6: sempre redesenha (os objetos dos cards da Equipe foram trocados)
-    if (resultado.conf.length) toast(textos[textos.length - 1]);
+    const dupNovos = avisarDuplicadosNovos();
+    if (resultado.conf.length) toast(textos[textos.length - 1], { texto: "Ver as duas versões", ms: 9000, fn: () => verConflito(resultado.conf[0].id) });
+    else if (dupNovos) { /* toast de duplicados já mostrado */ }
     else if (copiasMescladas.length) toast(copiasMescladas.length + (copiasMescladas.length === 1 ? " cópia de conflito do OneDrive juntada" : " cópias de conflito do OneDrive juntadas") + " ao arquivo da equipe");
     else if (textos.length === 1) toast(textos[0]);
     else if (textos.length > 1) toast(textos.length + " alterações da equipe recebidas (veja o Histórico em Mais)");
@@ -1218,7 +1564,7 @@ document.addEventListener("click", () => { if (renderPendente) setTimeout(render
 function aplicarResultado(r0) {
   // Alterações feitas enquanto o arquivo era gravado não se perdem: mescla de novo o que está na tela com o que foi gravado.
   carimbarMudancas();
-  const r = CadernoSync.mesclar({ itens: itens.filter(compartilhado).map(itemParaEquipe), removidos: removidosLocais() }, { tipo: CadernoSync.TIPO, itens: r0.itens, removidos: r0.removidos }, "", chaveCard);
+  const r = CadernoSync.mesclar({ itens: itens.filter(compartilhado).map(itemParaEquipe), removidos: removidosLocais() }, { tipo: CadernoSync.TIPO, itens: r0.itens, removidos: r0.removidos }, "");
   if ((r.remotoPrecisa || modelosPendentesEnvio) && syncMeta().ultimaSync) setTimeout(agendarSync, 0);
   modelosPendentesEnvio = false;
   // Individuais ficam intactos; cards de equipe passam a ser os do merge
@@ -1233,8 +1579,8 @@ function aplicarResultado(r0) {
   itens = novaLista;
   localStorage.setItem(KEY, JSON.stringify(itens));
   localStorage.setItem(REMOVIDOS_KEY, JSON.stringify(r.removidos));
-  const marcas = {}; itens.filter(compartilhado).forEach((it) => { marcas[it.id] = marcaDe(it); });
-  gravarMeta({ ultimaSync: new Date().toISOString(), marcas: marcas });
+  const marcas = {}, bases = {}; itens.filter(compartilhado).forEach((it) => { marcas[it.id] = marcaDe(it); bases[it.id] = it.updatedAt || ""; });
+  gravarMeta(Object.assign({}, syncMeta(), { ultimaSync: new Date().toISOString(), marcas: marcas, bases: bases, marcaV: 3 }));
   fotoMeus = fotoIndividuais();
 }
 /* ---------- v1.9.5: senha da equipe no arquivo caderno-equipe.json (ver js/cripto-equipe.js) ---------- */
@@ -1455,7 +1801,8 @@ function atualizarMeusModelos() {
   return mudou;
 }
 function normTxt(s) { return String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim(); }
-function normUrl(u) { return String(u || "").trim().toLowerCase().replace(/^[a-z]+:\/\//, "").replace(/^www\./, "").replace(/[/#?]+$/, ""); }
+/* v2.0.0: normUrl conservador (ver CadernoSync.normUrl): só o host vai para minúsculas; caminho e query mantêm maiúsculas. */
+function normUrl(u) { return window.CadernoSync ? CadernoSync.normUrl(u) : String(u || "").trim(); }
 /* v1.9.8: aviso de duplicado SÓ quando o link é exatamente igual (depois de normUrl). Nome não conta; link vazio nunca é duplicado. */
 function mesmoLink(a, b) { const u = normUrl(a); return !!u && u === normUrl(b); }
 function parecidos(card, tidProprio) {
@@ -1749,7 +2096,7 @@ function telaCompartilhados(manual) {
     bb.appendChild(bSel); bb.appendChild(bIgn); bb.appendChild(bFec);
     desenhar(); conta();
     box.appendChild(bb);
-    box.appendChild(el("p", "rc-nota", "Card com o mesmo link de um card seu em Meus não entra de novo. Os demais avisos não bloqueiam: você decide."));
+    box.appendChild(el("p", "rc-nota", "Card com o mesmo link de um card seu em Meus não entra de novo. Os demais avisos não bloqueiam: você decide. (Na Equipe vale “um link = um card”.)"));
   }).then((r) => {
     if (!r) return; // fechou sem decidir: pergunta de novo na próxima vez
     if (r.abrir) { const c = atual(r.abrir); if (c) abrirFicha(c); return "abriu"; } // "Abrir meu card": fecha sem decidir e abre a ficha normal
@@ -1911,7 +2258,7 @@ const HIST_ROT = {
   adicionado: ["➕", "Card adicionado"], editado: ["✏️", "Card editado"], senha: ["🔑", "Senha alterada"], arquivado: ["📦", "Card arquivado"],
   reativado: ["♻️", "Card reativado"], excluido: ["🗑️", "Card excluído"], compartilhado: ["📤", "Card compartilhado"], parou: ["🚫", "Parou de compartilhar"],
   importado: ["📥", "Importação"], "se-ativada": ["🛡️", "Arquivo protegido com senha da equipe"], "se-trocada": ["🛡️", "Senha da equipe trocada"],
-  ignorado: ["🙈", "Card compartilhado ignorado"], primeiro: ["👋", "Primeiro acesso"], conflito: ["⚠️", "Conflito resolvido"], copia: ["🔀", "Cópia de conflito juntada"], texto: ["🕘", ""]
+  ignorado: ["🙈", "Card compartilhado ignorado"], primeiro: ["👋", "Primeiro acesso"], conflito: ["⚠️", "Edição ao mesmo tempo"], "conflito-resolvido": ["✅", "Conflito resolvido"], lixeira: ["🗑️", "Movido para a Lixeira"], restaurado: ["♻️", "Card restaurado"], "lixeira-apagado": ["❌", "Apagado de vez da Lixeira"], copia: ["🔀", "Cópia de conflito juntada"], texto: ["🕘", ""]
 };
 let histFiltro = "todos";
 function blocoHistorico(box) {
@@ -1967,13 +2314,15 @@ function renderMais(box) {
   });
   blocoNovidades(box);
   bloco("Tema", "Aparência só deste aparelho. Vale também para a tela de login.", bt);
+  try { blocoAvisos(box); } catch (e) {}
   blocoArquivoEquipe(box, bloco);
   blocoModelos(box);
+  try { blocoLixeira(box); } catch (e) {}
   bloco("Compartilhar com a equipe", "Gera o JSON para os outros analistas. Cards Individuais vão sem usuário e sem senha (só título, aplicação, cliente, URL etc.).",
     [btn("btn pri", "download", "Exportar JSON", exportarEquipe)]);
   bloco("Backup pessoal (inclui minhas senhas)", "Arquivo completo, com os usuários e senhas dos seus acessos Individuais. Use só para levar para outro aparelho seu. Não compartilhe.",
     [btn("btn", "lock", "Backup pessoal (inclui minhas senhas)", backupPessoal)]);
-  bloco("Importar", "Junta os cards do arquivo com os deste aparelho (pelo id). Cards que só existem aqui continuam. Usuário e senha que você já tem não são apagados por um arquivo que veio sem eles.",
+  bloco("Importar", "Junta os cards do arquivo com os deste aparelho, só pelo id (cards diferentes com o mesmo nome não se juntam). Cards que só existem aqui continuam. Se o arquivo tiver uma versão mais antiga de um card seu, o app pergunta antes (o padrão é manter o seu). Um usuário ou senha vazio no arquivo nunca apaga o que você já tem; um preenchido substitui o seu se você escolher substituir.",
     [btn("btn", "upload", "Importar JSON", () => document.getElementById("imp").click()),
      btn("btn", "table", "Importar planilha Excel", escolherPlanilha)]);
   bloco("Planilha Excel", "“Excel para importar”: formato simples em abas (externos, internos, arquivados e escalonamento), para subir em “Importar planilha”. “Excel para consulta”: com navegação e escalonamento em blocos, somente leitura. Senhas individuais saem em branco.",
@@ -1993,9 +2342,17 @@ function renderMais(box) {
 }
 
 /* ---------- v1.9.3+: Novidades (texto vai junto com o app; mais recente primeiro) ---------- */
-const APP_VERSAO = "1.9.9";
+const APP_VERSAO = "2.0.0";
 const NOVIDADES_VISTA = "caderno-novidades-vista";
 const NOVIDADES = [
+  { v: "2.0.0", data: "18/10/2026", itens: [
+    "Nova Lixeira em Mais: card excluído fica lá por 30 dias e pode ser restaurado. Os da Equipe voltam para todos.",
+    "Quando duas pessoas editam o mesmo card ao mesmo tempo, nada se perde: o app avisa e mostra as duas versões para você escolher.",
+    "Na Equipe vale “um link = um card”: não dá para salvar dois cards da Equipe com o mesmo link. Se aparecerem repetidos, o app avisa e ajuda a arquivar um deles.",
+    "Ao importar um arquivo antigo, o app não troca os seus cards mais novos sem perguntar, e avisa sobre datas inválidas e textos longos demais.",
+    "Uma data errada numa planilha não deixa mais o app em branco.",
+    "O bloqueio automático cobre a tela na hora e o card que você estava editando continua lá depois da senha.",
+    "Os campos mostram quantos caracteres faltam perto do limite. No celular, o campo em que você está digitando fica sempre visível."] },
   { v: "1.9.9", data: "18/10/2026", itens: ["Card da Equipe repetido (mesmo link e mesmo cliente/operação) não é mais salvo: o app oferece abrir o card que já existe.", "Mesmo link com outro cliente continua só com aviso, que agora mostra o cliente do card existente.", "Em Cards compartilhados, o card que você já tem em Meus não pode ser adicionado de novo e, ao ignorar, some da lista.", "O Histórico mostra os cards compartilhados que você ignorou (só neste aparelho)."] },
   { v: "1.9.8", data: "18/10/2026", itens: ["Nova tela “Cards compartilhados” em Mais: procure nos seus cards e nos da Equipe e veja o que é novo, o que já foi adicionado e o que você compartilhou.", "Selos mostram se o link do card recebido já existe em Meus ou na Equipe.", "Aviso de card repetido só quando o link é exatamente igual, também ao criar ou editar um card. Nada é bloqueado."] },
   { v: "1.9.7", data: "16/10/2026", itens: ["Histórico em Mais mostra as últimas 100 ações: quem adicionou, editou, arquivou ou excluiu cards.", "O card não fecha mais sozinho ao clicar fora: o app pergunta antes de descartar.", "Importação mais segura, com prévia antes de aplicar."] },
@@ -2076,72 +2433,118 @@ function backupPessoal() {
 /* v1.9.7: todo card importado passa por CadernoSync.normalizarCard (lista branca, só texto, limites). "alvo" permite simular (prévia). */
 function idDaChave(chave) { let h = 2166136261; for (let k = 0; k < chave.length; k++) { h ^= chave.charCodeAt(k); h = Math.imul(h, 16777619); } return "imp-" + (h >>> 0).toString(16).padStart(8, "0"); }
 function prepararImportacao(lista) {
-  const ok = [], invalidos = [];
+  const ok = [], invalidos = [], datas = [], ciclos = [], cortes = [], vistos = new Set();
   lista.forEach((raw, pos) => {
-    const inc = window.CadernoSync ? CadernoSync.normalizarCard(raw) : null;
+    const info = { cortados: [], datasInvalidas: [] };
+    const inc = window.CadernoSync ? CadernoSync.normalizarCard(raw, info) : null;
     if (!inc) { invalidos.push(pos); return; }
     if (!inc.id) { const k = chaveCard(inc); if (!k) { invalidos.push(pos); return; } inc.id = idDaChave(k); }
     if (!inc.titulo && !inc.aplicacao) { invalidos.push(pos); return; }
     if (!inc.escalonamentos) inc.escalonamentos = [];
+    // v2.0.0: dois cards do mesmo arquivo com o mesmo id (ex.: linhas sem ID com o mesmo título) não se fundem: o segundo ganha sufixo
+    if (vistos.has(inc.id)) { let n = 2; while (vistos.has(inc.id + "-" + n)) n++; inc.id = (inc.id + "-" + n).slice(0, 64); }
+    vistos.add(inc.id);
+    // v2.0.0: nada é cortado ou zerado em silêncio: a prévia e o aviso final listam os cards
+    if (info.datasInvalidas.some((k) => k !== "ciclo")) datas.push(nomeDe(inc));
+    if (info.datasInvalidas.indexOf("ciclo") >= 0) ciclos.push(nomeDe(inc));
+    if (info.cortados.length) cortes.push(nomeDe(inc) + " (" + [...new Set(info.cortados)].map(rotuloCampo).join(", ") + ")");
     ok.push(inc);
   });
-  return { itens: ok, invalidos: invalidos };
+  return { itens: ok, invalidos: invalidos, datas: datas, ciclos: ciclos, cortes: cortes };
 }
-function mesclar(lista, alvo) {
+function rotuloCampo(k) {
+  const r = { titulo: "título", aplicacao: "aplicação", cliente: "cliente", url: "link", usuario: "usuário", senha: "senha", horario: "horário", escalonamento: "escalonamento", obs: "observações", "escalonamento.valor": "valor do nível", "escalonamento.nome": "nome do nível", "escalonamento.horario": "horário do nível", "escalonamento.obs": "obs. do nível" };
+  return r[k] || k;
+}
+/* v2.0.0 (item 7): "mais recente" de um card = maior entre updatedAt, senha_atualizada_em e ultima.
+ * Se o card do arquivo é diferente do seu e mais antigo por esse critério, nunca substitui sem você escolher (padrão: manter o seu).
+ * Arquivo sem nenhuma data (nem updatedAt, nem última troca) contra um card seu também sem datas: não há como saber, aplica normal. */
+function recenteDe(it) { const T = CadernoSync.ts; return Math.max(T(it.updatedAt), T(it.senha_atualizada_em), T(it.ultima)); }
+function maisAntigo(inc, atual) {
+  const T = CadernoSync.ts;
+  if (CadernoSync.semMeta(itemParaEquipeBruto(inc)) === CadernoSync.semMeta(itemParaEquipeBruto(atual))) return false;
+  return recenteDe(inc) < recenteDe(atual);
+}
+function itemParaEquipeBruto(it) { const n = CadernoSync.normalizarCard(it); return n || it; }
+/* v2.0.0 (item 2): identidade só pelo id (a v1.9.9 juntava cards diferentes com o mesmo título+aplicação+cliente).
+ * modo "manter" (padrão): card do arquivo mais antigo que o seu não substitui; "substituir": substitui.
+ * Login e senha locais nunca são trocados por vazio. Data de alteração local é mantida (o carimbo vem no save). */
+function mesclar(lista, alvo, modo) {
   alvo = alvo || itens;
-  let novos = 0, atualizados = 0, duplicados = 0;
+  let novos = 0, atualizados = 0, duplicados = 0, mantidos = 0, iguais = 0;
+  const antigos = [];
   const links = new Map(); alvo.forEach((x) => { const u = normUrl(x.url); if (u) links.set(u, (links.get(u) || 0) + 1); });
   lista.forEach((inc) => {
     if (!inc || typeof inc !== "object" || !inc.id) return;
     const i = alvo.findIndex((x) => x.id === inc.id);
     if (i < 0) {
-      // também evita duplicar por fornecedor+aplicação se id diferente
-      const chave = chaveCard(inc);
-      const j = chave ? alvo.findIndex((x) => chaveCard(x) === chave) : -1;
-      if (j >= 0) {
-        const atual = alvo[j];
-        const junto = Object.assign({}, atual, inc, { id: atual.id });
-        ["usuario", "senha"].forEach((k) => { if (!inc[k] && atual[k]) junto[k] = atual[k]; });
-        if ((!inc.escalonamentos || !inc.escalonamentos.length) && atual.escalonamentos && atual.escalonamentos.length) junto.escalonamentos = atual.escalonamentos;
-        alvo[j] = junto;
-        atualizados++;
-        return;
-      }
       const u = normUrl(inc.url);
       if (u && links.get(u)) duplicados++;
       if (u) links.set(u, (links.get(u) || 0) + 1);
       alvo.push(inc); novos++; return;
     }
     const atual = alvo[i];
+    if (maisAntigo(inc, atual)) { antigos.push(nomeDe(atual)); if (modo !== "substituir") { mantidos++; return; } }
     const junto = Object.assign({}, atual, inc);
     ["usuario", "senha"].forEach((k) => { if (!inc[k] && atual[k]) junto[k] = atual[k]; });
-    if ((!inc.escalonamentos || !inc.escalonamentos.length) && atual.escalonamentos && atual.escalonamentos.length) junto.escalonamentos = atual.escalonamentos;
+    if (!inc.senha && atual.senha_atualizada_em) junto.senha_atualizada_em = atual.senha_atualizada_em;
+    if ((!inc.escalonamentos || !inc.escalonamentos.length) && atual.escalonamentos && atual.escalonamentos.length) { junto.escalonamentos = atual.escalonamentos; if (!inc.escalonamento) junto.escalonamento = atual.escalonamento; }
+    ["updatedAt", "updatedBy", "baseAt"].forEach((k) => { if (k in atual) junto[k] = atual[k]; else delete junto[k]; });
+    if (CadernoSync.semMeta(itemParaEquipeBruto(junto)) === CadernoSync.semMeta(itemParaEquipeBruto(atual))) { iguais++; return; }
     alvo[i] = junto;
     atualizados++;
   });
-  return { novos: novos, atualizados: atualizados, duplicados: duplicados };
+  return { novos: novos, atualizados: atualizados, duplicados: duplicados, mantidos: mantidos, iguais: iguais, antigos: antigos };
 }
 const IMPORT_MAX_BYTES = 5 * 1024 * 1024, IMPORT_MAX_CARDS = 2000;
-/* Prévia antes de aplicar: X novos, Y atualizados, Z possíveis duplicados (mesmo link). */
+function listaNomes(l, n) { n = n || 5; return l.slice(0, n).join(", ") + (l.length > n ? " e mais " + (l.length - n) : ""); }
+/* Prévia antes de aplicar: novos, atualizados, mais antigos que os seus (escolha), datas inválidas e textos que serão cortados. */
 async function importarComPrevia(listaBruta, titulo) {
   if (listaBruta.length > IMPORT_MAX_CARDS) { aviso("Arquivo grande demais", "O arquivo tem " + listaBruta.length + " cards. O limite é " + IMPORT_MAX_CARDS + " por importação. Nada foi importado."); return false; }
   const prep = prepararImportacao(listaBruta);
   if (!prep.itens.length) { aviso("Nada importado", "Nenhum card válido no arquivo" + (prep.invalidos.length ? " (" + prep.invalidos.length + " ignorado(s) por formato errado)" : "") + "."); return false; }
-  const sim = mesclar(prep.itens.map((x) => Object.assign({}, x)), itens.map((x) => Object.assign({}, x)));
-  const ok = await dialogo({
-    titulo: titulo || "Importar cards?",
-    texto: sim.novos + " novo(s), " + sim.atualizados + " atualizado(s), " + sim.duplicados + " possível(is) duplicado(s) (mesmo link)." + (prep.invalidos.length ? " " + prep.invalidos.length + " card(s) com formato errado serão ignorados." : "") + " Usuário e senha que você já tem não são apagados.",
-    ok: "Importar", cancelar: "Cancelar"
+  const sim = mesclar(prep.itens.map((x) => Object.assign({}, x)), itens.map((x) => Object.assign({}, x)), "manter");
+  const modo = await janela("dlgVer", (box, fim) => {
+    box.classList.add("dlg-import");
+    box.appendChild(el("h3", "", titulo || "Importar cards?"));
+    const p = (t, cls) => box.appendChild(el("p", "meta" + (cls ? " " + cls : ""), t));
+    p(sim.novos + " novo(s), " + sim.atualizados + " atualizado(s)" + (sim.iguais ? ", " + sim.iguais + " igual(is) aos seus" : "") + ". " + sim.duplicados + " possível(is) duplicado(s) (mesmo link).", "imp-resumo");
+    if (sim.antigos.length) p("⚠️ " + sim.antigos.length + " card(s) do arquivo são mais antigos que os seus: " + listaNomes(sim.antigos) + ". Por padrão o app mantém os seus.", "imp-antigos");
+    if (prep.datas.length) p("Data inválida em " + prep.datas.length + " card(s): " + listaNomes(prep.datas) + ". Vão ficar sem data.", "imp-datas");
+    if (prep.ciclos.length) p("Ciclo inválido em " + prep.ciclos.length + " card(s): " + listaNomes(prep.ciclos) + ". Vão ficar como “Nunca expira”.", "imp-ciclos");
+    if (prep.cortes.length) p("Texto longo demais em " + prep.cortes.length + " card(s), será cortado no limite do app: " + listaNomes(prep.cortes, 4) + ".", "imp-cortes");
+    if (prep.invalidos.length) p(prep.invalidos.length + " card(s) com formato errado serão ignorados.");
+    p("Um usuário ou senha vazio no arquivo nunca apaga o que você já tem. Se o arquivo trouxer usuário ou senha preenchidos, eles substituem os seus nos cards atualizados.", "imp-senhas");
+    const bb = el("div", "dlg-botoes");
+    if (sim.antigos.length) {
+      bb.appendChild(botaoDlg("pri", "Importar mantendo os meus", () => fim("manter")));
+      bb.appendChild(botaoDlg("", "Importar e substituir", () => fim("substituir")));
+    } else bb.appendChild(botaoDlg("pri", "Importar", () => fim("manter")));
+    bb.appendChild(botaoDlg("", "Cancelar", () => fim(false)));
+    box.appendChild(bb);
   });
-  if (!ok) { toast("Importação cancelada"); return false; }
+  if (!modo) { toast("Importação cancelada"); return false; }
   histLote = { n: 0 };
-  let res;
-  try { res = mesclar(prep.itens); save(); }
-  finally { histLote = null; }
-  addHist({ tipo: "importado", card: res.novos + " novo(s), " + res.atualizados + " atualizado(s)", escopo: "Meu", local: true });
-  fotoMeus = fotoIndividuais();
-  if (aba === "mais") render();
-  toast("Importação concluída: " + res.novos + " novo(s), " + res.atualizados + " atualizado(s). Total: " + itens.length + " card(s).");
+  let res; const antesLS = localStorage.getItem(KEY);
+  try { res = mesclar(prep.itens, itens, modo); save(); }
+  catch (e) {
+    if (!res || localStorage.getItem(KEY) === antesLS) { try { itens = JSON.parse(antesLS || "[]"); } catch (x) {} histLote = null; throw e; }
+    registrarErro("importar", "", e, null); // os cards já foram gravados: segue com o aviso de sucesso
+  } finally { histLote = null; }
+  // v2.0.0: daqui em diante os cards JÁ estão salvos: um erro não pode mais dizer "Falha na importação"
+  try {
+    addHist({ tipo: "importado", card: res.novos + " novo(s), " + res.atualizados + " atualizado(s)" + (res.mantidos ? ", " + res.mantidos + " mantido(s)" : ""), escopo: "Meu", local: true });
+    fotoMeus = fotoIndividuais();
+    if (aba === "mais") render();
+  } catch (e) { registrarErro("importar (depois de salvar)", "", e, null); }
+  const resumo = "Importação concluída: " + res.novos + " novo(s), " + res.atualizados + " atualizado(s)" + (res.mantidos ? ", " + res.mantidos + " mantido(s) (os seus eram mais novos)" : "") + ". Total: " + itens.length + " card(s).";
+  const extras = [];
+  if (prep.datas.length) extras.push("Data inválida em " + prep.datas.length + " card(s): " + listaNomes(prep.datas) + " (ficaram sem data).");
+  if (prep.ciclos.length) extras.push("Ciclo inválido em " + prep.ciclos.length + " card(s): " + listaNomes(prep.ciclos) + " (ficaram como “Nunca expira”).");
+  if (prep.cortes.length) extras.push("Texto cortado no limite em " + prep.cortes.length + " card(s): " + listaNomes(prep.cortes, 4) + ".");
+  if (extras.length) aviso("Importação concluída", resumo + " " + extras.join(" "));
+  else toast(resumo);
+  setTimeout(() => { if (!extras.length) avisarDuplicadosNovos(); else if (gruposDuplicados().some((g) => !dupAvisados.has(g.chave))) avisarDuplicadosNovos(); }, extras.length ? 0 : 2400);
   return true;
 }
 function chaveCard(it) {
@@ -2163,7 +2566,7 @@ function importarJson(ev) {
     const lista = Array.isArray(data) ? data : (data && typeof data === "object" && Array.isArray(data.itens)) ? data.itens : null;
     if (!lista) { aviso("Arquivo inválido", "Formato não reconhecido: o JSON precisa ser uma lista de cards ou ter a lista em “itens”. Nada foi importado."); return; }
     try { await importarComPrevia(lista, "Importar JSON?"); }
-    catch (e) { aviso("Falha na importação", "Não foi possível importar esse arquivo. Nada foi alterado."); }
+    catch (e) { registrarErro("importar JSON", "", e, null); aviso("Falha na importação", "Não foi possível importar esse arquivo. Nada foi alterado."); }
   };
   r.readAsText(f);
 }
@@ -2803,22 +3206,23 @@ async function importarPlanilha(ev) {
   const f = ev.target.files && ev.target.files[0];
   if (!f) return;
   if (f.size > IMPORT_MAX_BYTES) { aviso("Arquivo grande demais", "O limite é 5 MB por importação. Nada foi importado."); ev.target.value = ""; return; }
+  let lista;
+  // v2.0.0: erro de LEITURA da planilha ≠ erro depois de salvar (a v1.9.9 dizia "Falha na importação" com os cards já gravados)
   try {
     toast("Lendo planilha…");
     const XLSX = await carregarXlsxLib();
     const buf = await f.arrayBuffer();
     const wb = XLSX.read(buf, { type: "array", cellStyles: true });
-    const lista = cardsDeWorkbook(wb, XLSX);
-    if (!lista.length) {
-      aviso("Nada importado", "Não encontrei abas/colunas reconhecíveis (ID, Título, Aplicação… ou Fornecedor, Contato…).");
-      return;
-    }
-    await importarComPrevia(lista, "Importar planilha?");
+    lista = cardsDeWorkbook(wb, XLSX);
   } catch (e) {
-    aviso("Falha na importação", "Não foi possível ler a planilha. Verifique se o arquivo é .xlsx ou .xls.");
-  } finally {
     ev.target.value = "";
+    aviso("Falha na importação", "Não foi possível ler a planilha. Verifique se o arquivo é .xlsx ou .xls. Nada foi alterado.");
+    return;
   }
+  ev.target.value = "";
+  if (!lista.length) { aviso("Nada importado", "Não encontrei abas/colunas reconhecíveis (ID, Título, Aplicação… ou Fornecedor, Contato…)."); return; }
+  try { await importarComPrevia(lista, "Importar planilha?"); }
+  catch (e) { registrarErro("importar planilha", "", e, null); aviso("Falha na importação", "Não foi possível importar a planilha. Nada foi alterado."); }
 }
 function escolherPlanilha() { $("impXls").click(); }
 
@@ -2889,9 +3293,11 @@ function renderEscEditor() {
     row.appendChild(campo(labNome, inpNome));
     row.appendChild(campo(labH, inpH));
     row.appendChild(campo(labO, inpO, "cheio"));
+    ligarContador(inpV, LIM.nValor); ligarContador(inpNome, LIM.nNome); ligarContador(inpH, LIM.nHorario); ligarContador(inpO, LIM.nObs);
     row.appendChild(acoes);
     box.appendChild(row);
   });
+  const b = $("escAdd"); if (b) { b.disabled = escDraft.length >= LIM.niveis; b.title = b.disabled ? "Máximo de " + LIM.niveis + " níveis" : ""; }
 }
 function lerEscDraft() {
   return escDraft.map((n, i) => limparNivelEsc(Object.assign({}, n, { nivel: n.nivel || i + 1 }))).filter((n) => n && (n.valor || n.nome || n.obs));
@@ -2946,6 +3352,7 @@ function abrirFicha(it) {
   $("fObs").value = edit.obs || "";
   $("erroForm").textContent = "";
   $("avisoInd").hidden = $("fVisibilidade").value !== "Individual";
+  atualizarContadores();
   abrirSheet("sheet");
   fichaFoto = fotoFicha();
   setTimeout(() => $("fTitulo").focus(), 50);
@@ -2964,15 +3371,61 @@ async function pedirFecharFicha() {
     return false;
   } finally { perguntandoDescarte = false; }
 }
-window.addEventListener("beforeunload", (ev) => { if (fichaSuja()) { ev.preventDefault(); ev.returnValue = ""; } });
+window.addEventListener("beforeunload", (ev) => { if (!semAvisoAoSair && !document.body.classList.contains("travado") && fichaSuja()) { ev.preventDefault(); ev.returnValue = ""; } });
 $("fVisibilidade").addEventListener("change", () => { $("avisoInd").hidden = $("fVisibilidade").value !== "Individual"; });
 $("fOlho").dataset.alvo = "fSenha";
 ligarOlho($("fOlho"));
 const escAddBtn = $("escAdd");
 if (escAddBtn) escAddBtn.addEventListener("click", () => {
+  if (escDraft.length >= LIM.niveis) { toast("Máximo de " + LIM.niveis + " níveis de escalonamento"); return; }
   escDraft.push(nivelEscVazio(escDraft.length + 1));
   renderEscEditor();
 });
+/* ---------- v2.0.0 (item 5): limites de texto na ficha = os mesmos do arquivo da equipe (normalizarCard) ----------
+ * maxlength em cada campo e contador visível perto do limite ("4.850 / 5.000"). Nada é cortado depois de salvo. */
+const LIM = (function () {
+  const C = (window.CadernoSync && CadernoSync.CAMPOS_CARD) || {}, N = (window.CadernoSync && CadernoSync.LIMITES_NIVEL) || {};
+  return { titulo: C.titulo || 200, aplicacao: C.aplicacao || 200, cliente: C.cliente || 200, url: C.url || 2000, usuario: C.usuario || 500, senha: C.senha || 500, horario: C.horario || 500, escalonamento: C.escalonamento || 5000, obs: C.obs || 5000,
+    niveis: N.max || 20, nValor: N.valor || 2000, nNome: N.nome || 200, nHorario: N.horario || 200, nObs: N.obs || 1000 };
+})();
+const CAMPOS_LIM = [["fTitulo", "titulo"], ["fAplicacaoNova", "aplicacao"], ["fClienteNovo", "cliente"], ["fUrl", "url"], ["fUsuario", "usuario"], ["fSenha", "senha"], ["fHorario", "horario"], ["fEscalonamento", "escalonamento"], ["fObs", "obs"]];
+function fmtNum(n) { return Number(n).toLocaleString("pt-BR"); }
+function ligarContador(inp, max) {
+  if (!inp) return;
+  inp.maxLength = max;
+  let c = inp._contador;
+  if (!c) {
+    c = el("span", "contador"); c.id = (inp.id || "campo") + "-cont"; c.setAttribute("aria-live", "polite"); c.hidden = true;
+    const ancora = inp.parentElement && inp.parentElement.classList.contains("senha-campo") ? inp.parentElement : inp;
+    ancora.insertAdjacentElement("afterend", c); inp._contador = c;
+    inp.addEventListener("input", () => atualizarContador(inp));
+  }
+  atualizarContador(inp);
+}
+function atualizarContador(inp) {
+  const c = inp._contador; if (!c) return;
+  const max = inp.maxLength > 0 ? inp.maxLength : 0, n = inp.value.length;
+  const perto = max && n >= Math.floor(max * 0.8);
+  c.hidden = !perto;
+  c.textContent = perto ? fmtNum(n) + " / " + fmtNum(max) + (n >= max ? " · limite atingido" : "") : "";
+  c.classList.toggle("no-limite", n >= max);
+}
+function atualizarContadores() { CAMPOS_LIM.forEach(([id, k]) => ligarContador($(id), LIM[k])); const b = $("escAdd"); if (b) { b.disabled = escDraft.length >= LIM.niveis; b.title = b.disabled ? "Máximo de " + LIM.niveis + " níveis" : ""; } }
+CAMPOS_LIM.forEach(([id, k]) => ligarContador($(id), LIM[k]));
+/* ---------- v2.0.0 (item 13): no celular, o campo focado vai para o meio da área visível (teclado não cobre) ---------- */
+function centralizarCampo(t) {
+  if (!t || document.activeElement !== t || !t.isConnected) return;
+  const vv = window.visualViewport; const r = t.getBoundingClientRect();
+  const topo = vv ? vv.offsetTop : 0, alt = vv ? vv.height : window.innerHeight;
+  const toque = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+  if (toque || r.top < topo + 8 || r.bottom > topo + alt - 8) { try { t.scrollIntoView({ block: "center" }); } catch (e) { t.scrollIntoView(); } }
+}
+document.addEventListener("focusin", (ev) => {
+  const t = ev.target;
+  if (!t || !t.closest || !t.closest(".sheet") || !/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+  setTimeout(() => centralizarCampo(t), 250);
+});
+if (window.visualViewport) window.visualViewport.addEventListener("resize", () => { const a = document.activeElement; if (a && a.closest && a.closest(".sheet") && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) setTimeout(() => centralizarCampo(a), 60); });
 function lerFicha() {
   const valSel = (sel, nova) => sel.value === NOVO ? nova.value.trim() : sel.value;
   const o = Object.assign({}, edit, {
@@ -2992,10 +3445,26 @@ function lerFicha() {
     obs: $("fObs").value.trim()
   });
   if (!o.escalonamento && o.escalonamentos.length) o.escalonamento = resumoEscalonamentos(o.escalonamentos);
+  // v2.0.0 (item 5): texto acima do limite (ex.: card antigo ou colado por script) não é cortado em silêncio: pede para encurtar
+  const passou = excessoDeTexto(o);
+  if (passou) { $("erroForm").textContent = passou; return null; }
   if (!o.titulo && !o.aplicacao) { $("erroForm").textContent = "Preencha pelo menos o Título ou a Aplicação."; return null; }
   if (!o.titulo) o.titulo = o.aplicacao + (o.cliente ? " " + o.cliente : "");
   if (!o.aplicacao) o.aplicacao = o.titulo;
   return o;
+}
+function excessoDeTexto(o) {
+  const nomes = { titulo: "Título", aplicacao: "Aplicação", cliente: "Cliente / operação", url: "URL", usuario: "Usuário", senha: "Senha", horario: "Horário", escalonamento: "Resumo do escalonamento", obs: "Observação" };
+  for (const k of Object.keys(nomes)) { const n = String(o[k] || "").length; if (n > LIM[k]) return nomes[k] + " passou do limite (" + fmtNum(n) + " / " + fmtNum(LIM[k]) + " caracteres). Encurte o texto para salvar."; }
+  const nv = o.escalonamentos || [];
+  if (nv.length > LIM.niveis) return "Escalonamento passou do limite de " + LIM.niveis + " níveis (" + nv.length + "). Exclua alguns níveis para salvar.";
+  for (let i = 0; i < nv.length; i++) {
+    const x = nv[i];
+    for (const [k, lim, nm] of [["valor", LIM.nValor, "valor"], ["nome", LIM.nNome, "nome"], ["horario", LIM.nHorario, "horário"], ["obs", LIM.nObs, "obs."]]) {
+      const n = String(x[k] || "").length; if (n > lim) return "Nível " + (i + 1) + ": " + nm + " passou do limite (" + fmtNum(n) + " / " + fmtNum(lim) + "). Encurte para salvar.";
+    }
+  }
+  return "";
 }
 function gravar(o, msg) {
   const i = itens.findIndex((x) => x.id === o.id);
@@ -3011,25 +3480,25 @@ let avisandoLink = false;
 /* v1.9.9: cliente/operação comparado com normTxt (sem maiúsculas, acentos e espaços extras); vazio = vazio. */
 function mesmoCliente(a, b) { return normTxt(a) === normTxt(b); }
 function rotuloCliente(c) { return String((c && c.cliente) || "").trim() || "sem cliente"; }
-/* Outros cards da Equipe ativos com o mesmo link E o mesmo cliente: duplicado de verdade. */
+/* v2.0.0: "um link = um card" na Equipe: outro card da Equipe ativo com o mesmo link (normUrl), qualquer título ou cliente. */
 function duplicadosEquipe(o) {
   if (!normUrl(o.url)) return [];
-  return itens.filter((c) => c.id !== o.id && compartilhado(c) && !c.arquivado_em && mesmoLink(c.url, o.url) && mesmoCliente(c.cliente, o.cliente));
+  return itens.filter((c) => c.id !== o.id && compartilhado(c) && !c.arquivado_em && mesmoLink(c.url, o.url));
 }
 /* Retorna true (salvar), false (voltar e editar) ou "abrir" (o usuário escolheu abrir o card existente). */
 async function conferirLinkDuplicado(o) {
   const antes = itens.find((x) => x.id === o.id);
-  // v1.9.9 (item 1): card da Equipe com mesmo link e mesmo cliente de outro card da Equipe ativo não é salvo.
-  // Em edição só trava se o link, o cliente ou a visibilidade (virou Equipe) mudou; duplicado antigo sem mudança salva normal.
-  if (compartilhado(o)) {
-    const mudou = !antes || !compartilhado(antes) || normUrl(antes.url) !== normUrl(o.url) || !mesmoCliente(antes.cliente, o.cliente);
+  // v2.0.0 (item 8): card da Equipe com o mesmo link de outro card da Equipe ativo não é salvo, seja qual for o título ou o cliente.
+  // Em edição só trava se o link ou a visibilidade (virou Equipe) mudou; duplicado antigo sem mudança salva normal (o painel de duplicados avisa).
+  if (compartilhado(o) && !o.arquivado_em) {
+    const mudou = !antes || !compartilhado(antes) || !!antes.arquivado_em || normUrl(antes.url) !== normUrl(o.url);
     const dup = mudou ? duplicadosEquipe(o) : [];
     if (dup.length) {
       let abrir = false;
       avisandoLink = true; perguntandoDescarte = true;
       try {
-        abrir = await dialogo({ titulo: "⛔ Já existe esse card na Equipe: " + nomeDe(dup[0]) + " (" + rotuloCliente(dup[0]) + ")",
-          texto: "Na Equipe não pode haver dois cards com o mesmo link e o mesmo cliente/operação. Abra o card existente ou mude o link ou o cliente." + (dup.length > 1 ? " (Há " + dup.length + " cards iguais.)" : ""),
+        abrir = await dialogo({ titulo: "⛔ Já existe um card da Equipe com esse link: " + nomeDe(dup[0]) + " (" + rotuloCliente(dup[0]) + ")",
+          texto: "Na Equipe vale “um link = um card”: não pode haver dois cards ativos com o mesmo link, mesmo com título ou cliente diferentes. Abra o card existente ou mude o link." + (dup.length > 1 ? " (Há " + dup.length + " cards com esse link.)" : ""),
           ok: "Abrir card existente", cancelar: "Voltar e editar" });
       } finally { avisandoLink = false; perguntandoDescarte = false; }
       if (!abrir) return false;
@@ -3175,10 +3644,29 @@ function ligarMenuExcel() {
   document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && aberto()) fechar(true); }, true);
   window.addEventListener("resize", () => fechar(false));
 }
-function sair() {
-  sessionStorage.removeItem("caderno-acessos-sessao");
-  location.reload();
+/* v2.0.0 (item 6): bloquear NÃO recarrega a página: cobre a tela na hora (sem o "Sair do site?" do navegador), guarda o rascunho
+ * da ficha em memória (o formulário continua como estava, escondido) e o devolve depois da senha. Nada do app fica visível travado
+ * (body.travado esconde #app inteiro: lista, ficha, diálogos e avisos). Recarregar só acontece no "Sair" da troca de senha obrigatória,
+ * quando ainda não há nenhum card aberto (nenhum rascunho a perder). Se um dia for preciso recarregar por segurança, o rascunho é
+ * descartado sem perguntar (beforeunload é desligado antes). */
+let travadoEmMemoria = false;
+function bloquear(auto) {
+  try { sessionStorage.removeItem(SESSAO); } catch (e) {}
+  document.body.classList.add("travado");
+  travadoEmMemoria = true;
+  chaveLoginSessao = null;
+  try { fecharMenus(); } catch (e) {}
+  try { $("fSenha").type = "password"; setOlho($("fOlho"), false); } catch (e) {}
+  try { document.querySelectorAll("#app .linha-val.aberto").forEach((n) => { n.classList.remove("aberto"); n.textContent = MASCARA; }); } catch (e) {}
+  const er = $("loginErro");
+  if (er) er.textContent = auto ? "Bloqueado por inatividade. Digite a senha para continuar" + (fichaSuja() ? " — o card que você estava editando continua aberto." : ".") : "";
+  const inp = $("loginSenha"); if (inp) { inp.value = ""; setTimeout(() => { try { inp.focus(); } catch (e) {} }, 30); }
 }
+function sair() {
+  if (trocaObrigatoria) { semAvisoAoSair = true; sessionStorage.removeItem("caderno-acessos-sessao"); location.reload(); return; }
+  bloquear(false);
+}
+let semAvisoAoSair = false;
 
 /* ---------- Bloqueio automático por inatividade ---------- */
 const BLOQ_KEY = "caderno-acessos-bloqueio-min";
@@ -3208,8 +3696,7 @@ function verificarInatividade() {
   const min = minutosBloqueio();
   if (!min) return;
   if (Date.now() - ultimaAtividade >= min * 60000) {
-    try { sessionStorage.setItem("caderno-acessos-bloqueado-auto", "1"); } catch (e) {}
-    sair();
+    bloquear(true);
   }
 }
 (function iniciarBloqueioAuto() {
@@ -3279,6 +3766,17 @@ function abrirSessao() { sessionStorage.setItem(SESSAO, tokenSessao()); }
 let trocaObrigatoria = false;
 function entrar() {
   if (!loginAtivo().custom) { exigirTrocaSenha(); return; }
+  if (travadoEmMemoria) {
+    // v2.0.0: desbloqueio do bloqueio em memória: nada é recarregado; a ficha aberta (e o rascunho) volta como estava
+    travadoEmMemoria = false;
+    document.body.classList.remove("travado");
+    $("loginErro").textContent = "";
+    marcarAtividade(true);
+    try { render(); } catch (e) {}
+    if ($("sheet").classList.contains("on")) setTimeout(() => { try { ($("ficha").querySelector(":focus") || $("fTitulo")).focus(); } catch (e) {} }, 60);
+    if (window.CadernoSync) sincronizar(false);
+    return;
+  }
   trocaObrigatoria = false;
   document.body.classList.remove("troca-obrig");
   document.body.classList.remove("travado");
