@@ -768,7 +768,7 @@ function abrirMenuCard(it, ancora) {
     else m.appendChild(btn("mi", "share", "Compartilhar meu card", cur((c) => compartilharMeuCard(c))));
   }
   if (it.arquivado_em) {
-    m.appendChild(btn("mi ok", "restore", "Reativar", cur((c) => { c.arquivado_em = null; save(); toast("Card reativado"); })));
+    m.appendChild(btn("mi ok", "restore", "Reativar", cur((c) => { c.arquivado_em = null; save(); toast("Card reativado"); avisarDuplicadosReativados([c]); })));
     m.appendChild(btn("mi warn", "trash", "Excluir", cur((c) => excluir([c]))));
   }
   else m.appendChild(btn("mi warn", "archive", "Arquivar", cur((c) => { c.arquivado_em = hoje(); save(); toast("Card arquivado"); })));
@@ -776,6 +776,13 @@ function abrirMenuCard(it, ancora) {
 }
 document.addEventListener("click", (ev) => { if (!ev.target.closest(".menu-card")) fecharMenus(); });
 
+/* v1.9.9: reativar nunca trava; se o card da Equipe reativado repete link + cliente de outro card ativo, só avisa. */
+function avisarDuplicadosReativados(lista) {
+  const dups = lista.map((c) => atual(c) || c).filter((c) => compartilhado(c) && !c.arquivado_em).map((c) => ({ c: c, d: duplicadosEquipe(c) })).filter((x) => x.d.length);
+  if (!dups.length) return;
+  const x = dups[0];
+  aviso("⚠️ Já existe esse card na Equipe: " + nomeDe(x.d[0]) + " (" + rotuloCliente(x.d[0]) + ")", "O card " + nomeDe(x.c) + " foi reativado mesmo assim, mas tem o mesmo link e o mesmo cliente/operação de outro card da Equipe." + (dups.length > 1 ? " Outros " + (dups.length - 1) + " card(s) reativado(s) também se repetem." : "") + " Se for repetido, arquive um deles.");
+}
 /* ---------- Aba Mais ---------- */
 /* ---------- Gerador de senhas ---------- */
 const GEN_KEY = "caderno-acessos-gerador";
@@ -1552,8 +1559,12 @@ function cardDoModelo(mod) { return itens.find((c) => c.modeloId === mod.id); }
 /* Modelos que ainda não decidi (nem adicionei, nem ignorei) e que não são meus. */
 function modelosNovos(incluirIgnorados) {
   const meus = new Set(meusModelos()), dec = decisoesModelos();
-  return modelosAtivos().filter((m) => !meus.has(m.id) && !cardDoModelo(m) && !itens.some((c) => c.modeloDono === m.id) && (!dec[m.id] || (incluirIgnorados && dec[m.id].acao === "ignorado")));
+  // v1.9.9: o ignorado cujo link já está num card ativo de Meus some de vez (volta só se o card de Meus deixar de existir/ficar ativo).
+  return modelosAtivos().filter((m) => !meus.has(m.id) && !cardDoModelo(m) && !itens.some((c) => c.modeloDono === m.id) && (!dec[m.id] || (incluirIgnorados && dec[m.id].acao === "ignorado" && !jaTenhoEmMeus(m))));
 }
+/* v1.9.9: card Individual ativo com o mesmo link (normUrl) do modelo. Link vazio nunca conta. */
+function meuCardMesmoLink(m) { return selosModelo(m).meus[0] || null; }
+function jaTenhoEmMeus(m) { return !!meuCardMesmoLink(m); }
 function modelosComAtualizacao() {
   const dec = decisoesModelos();
   return modelosAtivos().map((m) => ({ m: m, c: cardDoModelo(m) })).filter((x) => x.c && CadernoSync.ts(x.m.updatedAt) > CadernoSync.ts(x.c.modeloVersao) &&
@@ -1561,11 +1572,16 @@ function modelosComAtualizacao() {
     (x.c.url || "") + JSON.stringify(niveisDe(x.c)) + (x.c.escalonamento || "") + (x.c.obs || "") !== (x.m.url || "") + JSON.stringify((x.m.escalonamentos || []).map(limparNivelEsc).filter(Boolean)) + (x.m.escalonamento || "") + (x.m.obs || ""));
 }
 function adicionarModelos(lista) {
+  // v1.9.9: trava final. Modelo cujo link já está num card ativo de Meus nunca é adicionado, venha de onde vier.
+  const bloqueados = [];
+  lista = lista.filter((m) => { const c = meuCardMesmoLink(m); if (c) { bloqueados.push(c); return false; } return true; });
+  if (bloqueados.length) aviso("Você já tem esse card em Meus: " + nomeDe(bloqueados[0]), (bloqueados.length > 1 ? "E mais " + (bloqueados.length - 1) + ". " : "") + "Ele não foi adicionado de novo.");
   lista.forEach((m) => {
     itens.push({ id: Math.random().toString(16).slice(2, 10), titulo: m.nome || m.sistema || "", aplicacao: m.sistema || m.nome || "", cliente: "", categoria: "Interno", visibilidade: "Individual",
       url: m.url || "", usuario: "", senha: "", ciclo: "90", ultima: hoje(), horario: "", escalonamento: m.escalonamento || "",
       escalonamentos: (m.escalonamentos || []).map((n) => Object.assign({}, n)), obs: m.obs || "", modeloId: m.id, modeloVersao: m.updatedAt || "", modeloPor: m.sharedBy || "" });
   });
+  return lista;
 }
 let modelosAberto = false;
 /* v1.9.8: o botão em Mais sempre abre a tela "Cards compartilhados"; depois da sincronização ela abre sozinha só se chegou card novo. */
@@ -1574,7 +1590,7 @@ async function verificarModelos(manual) {
   if (!manual && document.querySelector(".sheet.on")) return;
   modelosAberto = true;
   try {
-    if (manual || modelosNovos(false).length) await telaCompartilhados(!!manual);
+    if (manual || modelosNovos(false).length) { if ((await telaCompartilhados(!!manual)) === "abriu") return; }
     const atu = modelosComAtualizacao();
     if (atu.length) await atualizarModelosRecebidos(atu);
   } finally { modelosAberto = false; }
@@ -1635,6 +1651,7 @@ function telaCompartilhados(manual) {
     const ignoradoAntes = !!(dec[m.id] && dec[m.id].acao === "ignorado");
     info.set(m, s);
     marc.set(m, !s.meus.length && !s.equipe.length && (manual || !ignoradoAntes));
+    // s.meus.length > 0: checkbox desabilitada (v1.9.9)
   });
   const verCard = (c, origem) => verModelo(conteudoModelo(c), origem + " · login e senha não aparecem aqui");
   return janela("dlgMod", (box, fim) => {
@@ -1682,14 +1699,15 @@ function telaCompartilhados(manual) {
         const s = info.get(m);
         const item = el("div", "mod-item mod-chk rc-item");
         const cb = el("input"); cb.type = "checkbox"; cb.checked = marc.get(m); cb.id = "rc-" + m.id; cb.setAttribute("aria-label", "Selecionar " + (m.nome || ""));
-        cb.addEventListener("change", () => { marc.set(m, cb.checked); conta(); });
+        if (s.meus.length) { cb.checked = false; cb.disabled = true; marc.set(m, false); item.classList.add("rc-travado"); cb.title = "Você já tem esse card em Meus"; }
+        cb.addEventListener("change", () => { marc.set(m, cb.checked && !cb.disabled); conta(); });
         item.appendChild(cb);
         const t = el("div", "mod-txt");
         const l1 = el("label", "rc-l1"); l1.htmlFor = cb.id; l1.appendChild(el("span", "rc-nm", m.nome || m.sistema || "(sem nome)")); l1.appendChild(el("span", "rc-por", " · por " + (m.sharedBy || "alguém da equipe")));
         t.appendChild(l1);
         t.appendChild(el("div", "rc-lk", m.url || "sem link"));
         if (!s.meus.length && !s.equipe.length) t.appendChild(el("div", "rc-selo s-ok", "🟢 Novo: você não tem nada parecido"));
-        if (s.meus.length) { const d = el("div", "rc-selo s-ylw"); d.appendChild(el("span", "", "🟡 Você já tem esse link em Meus: " + nomesLista(s.meus))); d.appendChild(botaoDlg("pequeno", "Ver meu card", () => verCard(s.meus[0], "Meus (card Individual)"))); t.appendChild(d); }
+        if (s.meus.length) { const d = el("div", "rc-selo s-ylw"); d.appendChild(el("span", "", "🟡 Você já tem esse card em Meus: " + nomesLista(s.meus))); d.appendChild(botaoDlg("pequeno", "Abrir meu card", () => fim({ abrir: s.meus[0] }))); t.appendChild(d); }
         if (s.equipe.length) { const d = el("div", "rc-selo s-inf"); d.appendChild(el("span", "", "🔵 Já é card da Equipe: " + nomesLista(s.equipe))); d.appendChild(botaoDlg("pequeno", "Ver card da Equipe", () => verCard(s.equipe[0], "Card da Equipe"))); t.appendChild(d); }
         item.appendChild(t); corpo.appendChild(item);
       });
@@ -1731,14 +1749,21 @@ function telaCompartilhados(manual) {
     bb.appendChild(bSel); bb.appendChild(bIgn); bb.appendChild(bFec);
     desenhar(); conta();
     box.appendChild(bb);
-    box.appendChild(el("p", "rc-nota", "Nada é bloqueado: você decide. Aviso só quando o link é exatamente igual."));
+    box.appendChild(el("p", "rc-nota", "Card com o mesmo link de um card seu em Meus não entra de novo. Os demais avisos não bloqueiam: você decide."));
   }).then((r) => {
     if (!r) return; // fechou sem decidir: pergunta de novo na próxima vez
+    if (r.abrir) { const c = atual(r.abrir); if (c) abrirFicha(c); return "abriu"; } // "Abrir meu card": fecha sem decidir e abre a ficha normal
     const d = decisoesModelos(); const agora = new Date().toISOString();
-    novos.forEach((m) => { d[m.id] = { acao: r.add.indexOf(m) >= 0 ? "adicionado" : "ignorado", em: agora }; });
+    // v1.9.9: modelo com o link em Meus nunca é adicionado; vira ignorado (e some de vez da lista enquanto o card de Meus existir).
+    const descartados = novos.filter((m) => jaTenhoEmMeus(m));
+    novos.forEach((m) => {
+      const acao = r.add.indexOf(m) >= 0 && descartados.indexOf(m) < 0 ? "adicionado" : "ignorado";
+      if (acao === "ignorado" && !(d[m.id] && d[m.id].acao === "ignorado")) addHist({ tipo: "ignorado", card: String(m.nome || m.sistema || "").slice(0, 200), escopo: "Meu", local: true });
+      d[m.id] = { acao: acao, em: agora };
+    });
     gravarDecisoes(d);
-    if (r.add.length) { adicionarModelos(r.add); save(); toast(r.add.length + (r.add.length === 1 ? " card adicionado em Meus. Preencha seu login e senha." : " cards adicionados em Meus. Preencha seu login e senha.")); }
-    else toast("Cards compartilhados ignorados. Você pode vê-los de novo em Mais.");
+    if (r.add.length) { r.add = adicionarModelos(r.add); save(); toast(r.add.length + (r.add.length === 1 ? " card adicionado em Meus. Preencha seu login e senha." : " cards adicionados em Meus. Preencha seu login e senha.")); }
+    else toast(descartados.length && descartados.length === novos.length ? "Cards compartilhados descartados: você já tem esses links em Meus." : "Cards compartilhados ignorados. Você pode vê-los de novo em Mais." + (descartados.length ? " Os que você já tem em Meus foram descartados." : ""));
   });
 }
 async function atualizarModelosRecebidos(lista) {
@@ -1886,7 +1911,7 @@ const HIST_ROT = {
   adicionado: ["➕", "Card adicionado"], editado: ["✏️", "Card editado"], senha: ["🔑", "Senha alterada"], arquivado: ["📦", "Card arquivado"],
   reativado: ["♻️", "Card reativado"], excluido: ["🗑️", "Card excluído"], compartilhado: ["📤", "Card compartilhado"], parou: ["🚫", "Parou de compartilhar"],
   importado: ["📥", "Importação"], "se-ativada": ["🛡️", "Arquivo protegido com senha da equipe"], "se-trocada": ["🛡️", "Senha da equipe trocada"],
-  primeiro: ["👋", "Primeiro acesso"], conflito: ["⚠️", "Conflito resolvido"], copia: ["🔀", "Cópia de conflito juntada"], texto: ["🕘", ""]
+  ignorado: ["🙈", "Card compartilhado ignorado"], primeiro: ["👋", "Primeiro acesso"], conflito: ["⚠️", "Conflito resolvido"], copia: ["🔀", "Cópia de conflito juntada"], texto: ["🕘", ""]
 };
 let histFiltro = "todos";
 function blocoHistorico(box) {
@@ -1968,9 +1993,10 @@ function renderMais(box) {
 }
 
 /* ---------- v1.9.3+: Novidades (texto vai junto com o app; mais recente primeiro) ---------- */
-const APP_VERSAO = "1.9.8";
+const APP_VERSAO = "1.9.9";
 const NOVIDADES_VISTA = "caderno-novidades-vista";
 const NOVIDADES = [
+  { v: "1.9.9", data: "18/10/2026", itens: ["Card da Equipe repetido (mesmo link e mesmo cliente/operação) não é mais salvo: o app oferece abrir o card que já existe.", "Mesmo link com outro cliente continua só com aviso, que agora mostra o cliente do card existente.", "Em Cards compartilhados, o card que você já tem em Meus não pode ser adicionado de novo e, ao ignorar, some da lista.", "O Histórico mostra os cards compartilhados que você ignorou (só neste aparelho)."] },
   { v: "1.9.8", data: "18/10/2026", itens: ["Nova tela “Cards compartilhados” em Mais: procure nos seus cards e nos da Equipe e veja o que é novo, o que já foi adicionado e o que você compartilhou.", "Selos mostram se o link do card recebido já existe em Meus ou na Equipe.", "Aviso de card repetido só quando o link é exatamente igual, também ao criar ou editar um card. Nada é bloqueado."] },
   { v: "1.9.7", data: "16/10/2026", itens: ["Histórico em Mais mostra as últimas 100 ações: quem adicionou, editou, arquivou ou excluiu cards.", "O card não fecha mais sozinho ao clicar fora: o app pergunta antes de descartar.", "Importação mais segura, com prévia antes de aplicar."] },
   { v: "1.9.6", data: "15/10/2026", itens: ["Corrigido: cards da Equipe arquivados agora podem ser excluídos normalmente.", "Transições mais suaves ao salvar, excluir, entrar e pesquisar."] },
@@ -2982,11 +3008,41 @@ function gravar(o, msg) {
 /* v1.9.8: ao salvar, avisa (sem bloquear) se outro card ativo já tem o mesmo link. Card novo: sempre confere.
  * Edição: só se o link mudou e passou a ser igual ao de outro card. Arquivados e link vazio não contam. */
 let avisandoLink = false;
+/* v1.9.9: cliente/operação comparado com normTxt (sem maiúsculas, acentos e espaços extras); vazio = vazio. */
+function mesmoCliente(a, b) { return normTxt(a) === normTxt(b); }
+function rotuloCliente(c) { return String((c && c.cliente) || "").trim() || "sem cliente"; }
+/* Outros cards da Equipe ativos com o mesmo link E o mesmo cliente: duplicado de verdade. */
+function duplicadosEquipe(o) {
+  if (!normUrl(o.url)) return [];
+  return itens.filter((c) => c.id !== o.id && compartilhado(c) && !c.arquivado_em && mesmoLink(c.url, o.url) && mesmoCliente(c.cliente, o.cliente));
+}
+/* Retorna true (salvar), false (voltar e editar) ou "abrir" (o usuário escolheu abrir o card existente). */
 async function conferirLinkDuplicado(o) {
   const antes = itens.find((x) => x.id === o.id);
+  // v1.9.9 (item 1): card da Equipe com mesmo link e mesmo cliente de outro card da Equipe ativo não é salvo.
+  // Em edição só trava se o link, o cliente ou a visibilidade (virou Equipe) mudou; duplicado antigo sem mudança salva normal.
+  if (compartilhado(o)) {
+    const mudou = !antes || !compartilhado(antes) || normUrl(antes.url) !== normUrl(o.url) || !mesmoCliente(antes.cliente, o.cliente);
+    const dup = mudou ? duplicadosEquipe(o) : [];
+    if (dup.length) {
+      let abrir = false;
+      avisandoLink = true; perguntandoDescarte = true;
+      try {
+        abrir = await dialogo({ titulo: "⛔ Já existe esse card na Equipe: " + nomeDe(dup[0]) + " (" + rotuloCliente(dup[0]) + ")",
+          texto: "Na Equipe não pode haver dois cards com o mesmo link e o mesmo cliente/operação. Abra o card existente ou mude o link ou o cliente." + (dup.length > 1 ? " (Há " + dup.length + " cards iguais.)" : ""),
+          ok: "Abrir card existente", cancelar: "Voltar e editar" });
+      } finally { avisandoLink = false; perguntandoDescarte = false; }
+      if (!abrir) return false;
+      const existente = dup[0];
+      if (await pedirFecharFicha()) { const c = atual(existente); if (c) abrirFicha(c); }
+      return "abrir";
+    }
+  }
   if (antes && normUrl(antes.url) === normUrl(o.url)) return true;
   const r = cardsMesmoLink(o.url, o.id);
-  const todos = r.meus.map((c) => nomeDe(c) + " (Meus)").concat(r.equipe.map((c) => nomeDe(c) + " (Equipe)"));
+  // v1.9.9 (item 2): mostra o cliente do card existente no aviso.
+  const rot = (c, onde) => nomeDe(c) + " (" + onde + (c.cliente ? " · " + String(c.cliente).trim() : (onde === "Equipe" ? " · sem cliente" : "")) + ")";
+  const todos = r.meus.map((c) => rot(c, "Meus")).concat(r.equipe.map((c) => rot(c, "Equipe")));
   if (!todos.length) return true;
   avisandoLink = true; perguntandoDescarte = true;
   try {
@@ -2998,14 +3054,18 @@ $("ficha").addEventListener("submit", async (ev) => {
   if (avisandoLink) return;
   const o = lerFicha();
   if (!o) return;
-  if (!(await conferirLinkDuplicado(o))) { setTimeout(() => $("fUrl").focus(), 40); return; }
+  const ok = await conferirLinkDuplicado(o);
+  if (ok === "abrir") return;
+  if (!ok) { setTimeout(() => $("fUrl").focus(), 40); return; }
   gravar(o, "Acesso salvo");
 });
 $("atualizarSenha").addEventListener("click", async () => {
   if (avisandoLink) return;
   const o = lerFicha();
   if (!o) return;
-  if (!(await conferirLinkDuplicado(o))) { setTimeout(() => $("fUrl").focus(), 40); return; }
+  const ok = await conferirLinkDuplicado(o);
+  if (ok === "abrir") return;
+  if (!ok) { setTimeout(() => $("fUrl").focus(), 40); return; }
   o.ultima = hoje();
   o.senha_atualizada_em = hoje();
   gravar(o, "Senha atualizada hoje" + (o.ciclo !== "Nunca" ? " · próxima troca em " + o.ciclo + " dias" : ""));
@@ -3045,6 +3105,7 @@ $("selReativar").addEventListener("click", () => {
   selecao = null;
   save();
   toast(l.length + (l.length === 1 ? " card reativado" : " cards reativados"));
+  avisarDuplicadosReativados(l);
 });
 $("selCancelar").addEventListener("click", () => sairSelecao());
 $("dNovo").addEventListener("click", () => abrirFicha(null));

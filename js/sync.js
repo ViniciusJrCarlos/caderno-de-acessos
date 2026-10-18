@@ -83,7 +83,7 @@
   }
   /* v1.9.7: histórico estruturado { id, tipo, card, quem, quando, escopo }. Nunca guarda senhas. */
   const HIST_MAX = 100;
-  const HIST_TIPOS = ["adicionado", "editado", "senha", "arquivado", "reativado", "excluido", "compartilhado", "parou", "importado", "se-ativada", "se-trocada", "primeiro", "conflito", "copia", "texto"];
+  const HIST_TIPOS = ["adicionado", "editado", "senha", "arquivado", "reativado", "excluido", "compartilhado", "parou", "importado", "se-ativada", "se-trocada", "primeiro", "conflito", "copia", "texto", "ignorado"];
   function limparEntrada(e) {
     if (!e || typeof e !== "object" || Array.isArray(e) || typeof e.id !== "string" || !e.id) return null;
     const tipo = HIST_TIPOS.indexOf(e.tipo) >= 0 ? e.tipo : "texto";
