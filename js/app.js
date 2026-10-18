@@ -1449,13 +1449,21 @@ function atualizarMeusModelos() {
 }
 function normTxt(s) { return String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim(); }
 function normUrl(u) { return String(u || "").trim().toLowerCase().replace(/^[a-z]+:\/\//, "").replace(/^www\./, "").replace(/[/#?]+$/, ""); }
-/* Cards parecidos: mesmo nome ou mesmo link, entre os modelos da equipe e os cards da Equipe. */
+/* v1.9.8: aviso de duplicado SÓ quando o link é exatamente igual (depois de normUrl). Nome não conta; link vazio nunca é duplicado. */
+function mesmoLink(a, b) { const u = normUrl(a); return !!u && u === normUrl(b); }
 function parecidos(card, tidProprio) {
-  const n = normTxt(card.titulo || card.aplicacao), u = normUrl(card.url), out = [];
-  const motivo = (nome, url) => (n && normTxt(nome) === n ? "Mesmo nome" : "") + (u && normUrl(url) === u ? (n && normTxt(nome) === n ? " e mesmo link" : "Mesmo link") : "");
-  modelosAtivos().forEach((m) => { if (m.id === tidProprio) return; const r = motivo(m.nome, m.url); if (r) out.push({ tipo: "modelo", nome: m.nome, motivo: r, por: m.sharedBy, dados: m }); });
-  itens.filter((c) => compartilhado(c) && !c.arquivado_em).forEach((c) => { const r = motivo(c.titulo || c.aplicacao, c.url); if (r) out.push({ tipo: "equipe", nome: nomeDe(c), motivo: r, por: "", dados: Object.assign({ id: c.id }, conteudoModelo(c)) }); });
+  const out = [];
+  if (!normUrl(card.url)) return out;
+  modelosAtivos().forEach((m) => { if (m.id === tidProprio) return; if (mesmoLink(card.url, m.url)) out.push({ tipo: "modelo", nome: m.nome, motivo: "Mesmo link", por: m.sharedBy, dados: m }); });
+  itens.filter((c) => compartilhado(c) && !c.arquivado_em).forEach((c) => { if (mesmoLink(card.url, c.url)) out.push({ tipo: "equipe", nome: nomeDe(c), motivo: "Mesmo link", por: "", dados: Object.assign({ id: c.id }, conteudoModelo(c)) }); });
   return out;
+}
+/* Cards ativos (não arquivados) com o mesmo link, separados em Meus (Individual) e Equipe. "ignorarId" evita comparar o card com ele mesmo. */
+function cardsMesmoLink(url, ignorarId) {
+  const r = { meus: [], equipe: [] };
+  if (!normUrl(url)) return r;
+  itens.forEach((c) => { if (c.id === ignorarId || c.arquivado_em || !mesmoLink(url, c.url)) return; (compartilhado(c) ? r.equipe : r.meus).push(c); });
+  return r;
 }
 /* Janela própria (empilha sobre o diálogo padrão). */
 function janela(id, montar) {
@@ -1468,7 +1476,7 @@ function janela(id, montar) {
     montar(box, fim);
     aplicarIcones(box);
     abrirSheet(id);
-    setTimeout(() => { const f = box.querySelector(".btn.pri") || box.querySelector("button"); if (f) f.focus(); }, 40);
+    setTimeout(() => { const f = box.querySelector(".btn.pri:not(:disabled)") || box.querySelector("button:not(:disabled)"); if (f) f.focus(); }, 40); // v1.9.8: nunca foca botão desativado (o Esc continua funcionando)
   });
 }
 function botaoDlg(cls, texto, fn) { const b = el("button", "btn" + (cls ? " " + cls : ""), texto); b.type = "button"; b.addEventListener("click", fn); return b; }
@@ -1491,12 +1499,12 @@ async function compartilharMeuCard(card) {
   const par = parecidos(card, tid);
   if (par.length) {
     const seguir = await janela("dlgMod", (box, fim) => {
-      box.appendChild(el("h3", "", "⚠️ " + (par.length === 1 ? "Card parecido" : "Cards parecidos")));
-      box.appendChild(el("p", "", par.length === 1 ? "Já existe um card parecido:" : "Já existem " + par.length + " cards parecidos:"));
+      box.appendChild(el("h3", "", "⚠️ Já existe um card com esse link"));
+      box.appendChild(el("p", "", par.length === 1 ? "Este link já está na equipe:" : "Este link já está na equipe em " + par.length + " cards:"));
       par.forEach((p) => {
         const it = el("div", "mod-item");
         const t = el("div", "mod-txt"); t.appendChild(el("strong", "", p.nome));
-        t.appendChild(el("small", "", p.motivo + (p.url || p.dados.url ? ": " + p.dados.url : "") + " · " + (p.tipo === "modelo" ? "compartilhado por " + (p.por || "alguém da equipe") : "card da Equipe")));
+        t.appendChild(el("small", "", p.motivo + (p.dados.url ? ": " + p.dados.url : "") + " · " + (p.tipo === "modelo" ? "compartilhado por " + (p.por || "alguém da equipe") : "card da Equipe")));
         it.appendChild(t);
         it.appendChild(botaoDlg("pequeno", "Ver modelo", () => verModelo(p.dados, p.tipo === "modelo" ? "Compartilhado por " + (p.por || "alguém da equipe") : "Card da Equipe")));
         box.appendChild(it);
@@ -1505,6 +1513,7 @@ async function compartilharMeuCard(card) {
       bb.appendChild(botaoDlg("", "Cancelar", () => fim(false)));
       bb.appendChild(botaoDlg("pri", "Compartilhar mesmo assim", () => fim(true)));
       box.appendChild(bb);
+      box.appendChild(el("p", "mod-nota", "Nada é bloqueado: você decide. Aviso só quando o link é exatamente igual."));
     });
     if (!seguir) return;
   }
@@ -1559,16 +1568,15 @@ function adicionarModelos(lista) {
   });
 }
 let modelosAberto = false;
+/* v1.9.8: o botão em Mais sempre abre a tela "Cards compartilhados"; depois da sincronização ela abre sozinha só se chegou card novo. */
 async function verificarModelos(manual) {
   if (!window.CadernoSync || modelosAberto || document.body.classList.contains("travado") || trocaObrigatoria) return;
   if (!manual && document.querySelector(".sheet.on")) return;
   modelosAberto = true;
   try {
-    const novos = modelosNovos(!!manual);
-    if (novos.length) await receberModelos(novos);
+    if (manual || modelosNovos(false).length) await telaCompartilhados(!!manual);
     const atu = modelosComAtualizacao();
     if (atu.length) await atualizarModelosRecebidos(atu);
-    if (manual && !novos.length && !atu.length) toast("Nenhum card compartilhado novo");
   } finally { modelosAberto = false; }
 }
 function listaMarcavel(box, lista, sub) {
@@ -1582,27 +1590,156 @@ function listaMarcavel(box, lista, sub) {
   });
   return marc;
 }
-async function receberModelos(novos) {
-  const dec = decisoesModelos(); const agora = new Date().toISOString();
-  const r = await janela("dlgMod", (box, fim) => {
-    box.classList.add("mod-receber");
-    box.appendChild(el("h3", "", "📥 " + novos.length + (novos.length === 1 ? " card compartilhado pela equipe" : " cards compartilhados pela equipe")));
-    box.appendChild(el("p", "meta", "Login e senha vêm em branco: você preenche os seus."));
-    const marc = listaMarcavel(box, novos, (m) => "por " + (m.sharedBy || "alguém da equipe") + (m.sistema ? " · " + m.sistema : ""));
-    const bb = el("div", "dlg-botoes mod-botoes");
-    const bSel = botaoDlg("", "", () => fim({ add: novos.filter((m) => marc.get(m).checked) }));
-    const conta = () => { const n = novos.filter((m) => marc.get(m).checked).length; bSel.textContent = "Adicionar selecionados (" + n + ")"; bSel.disabled = !n; };
-    marc.forEach((cb) => cb.addEventListener("change", conta)); conta();
-    bb.appendChild(botaoDlg("pri", "Adicionar todos", () => fim({ add: novos.slice() })));
-    bb.appendChild(bSel);
-    bb.appendChild(botaoDlg("", "Ignorar", () => fim({ add: [] })));
-    box.appendChild(bb);
+/* ---------- v1.9.8: tela "Cards compartilhados" (busca, selos de link igual, abas) ---------- */
+// Normaliza texto guardando, para cada caractere do resultado, a posição no texto original (para destacar o trecho achado).
+function normComMapa(s) {
+  s = String(s || ""); let t = ""; const mapa = [];
+  for (let i = 0; i < s.length; i++) { const n = s[i].normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); for (let j = 0; j < n.length; j++) { t += n[j]; mapa.push(i); } }
+  return { t: t, mapa: mapa };
+}
+function trechoAchado(texto, q) {
+  if (!q) return null; const m = normComMapa(texto); const k = m.t.indexOf(q);
+  if (k < 0) return null; return [m.mapa[k], m.mapa[k + q.length - 1] + 1];
+}
+function textoDestacado(texto, q) {
+  const f = document.createDocumentFragment(); texto = String(texto || ""); const r = trechoAchado(texto, q);
+  if (!r) { f.appendChild(document.createTextNode(texto)); return f; }
+  f.appendChild(document.createTextNode(texto.slice(0, r[0]))); f.appendChild(el("mark", "rc-mk", texto.slice(r[0], r[1]))); f.appendChild(document.createTextNode(texto.slice(r[1])));
+  return f;
+}
+// Procura nos cards locais ativos (Meus e Equipe) por nome, título, aplicação ou link. Nunca usa login nem senha.
+function buscarCardsLocais(consulta) {
+  const q = normTxt(consulta), qu = normUrl(consulta), r = { meus: [], equipe: [] };
+  if (!q) return r;
+  itens.forEach((c) => {
+    if (c.arquivado_em) return;
+    const campos = [c.titulo, c.aplicacao, c.url];
+    const achou = campos.some((v) => normTxt(v).indexOf(q) >= 0) || (qu && normUrl(c.url).indexOf(qu) >= 0);
+    if (achou) (compartilhado(c) ? r.equipe : r.meus).push(c);
   });
-  if (!r) return; // fechou sem escolher: pergunta de novo na próxima vez
-  novos.forEach((m) => { dec[m.id] = { acao: r.add.indexOf(m) >= 0 ? "adicionado" : "ignorado", em: agora }; });
-  gravarDecisoes(dec);
-  if (r.add.length) { adicionarModelos(r.add); save(); toast(r.add.length + (r.add.length === 1 ? " card adicionado em Meus. Preencha seu login e senha." : " cards adicionados em Meus. Preencha seu login e senha.")); }
-  else toast("Cards compartilhados ignorados. Você pode vê-los de novo em Mais.");
+  return r;
+}
+function selosModelo(m) {
+  const r = cardsMesmoLink(m.url, null);
+  r.meus = r.meus.filter((c) => c.modeloId !== m.id);
+  return r;
+}
+function nomesLista(l) { return nomeDe(l[0]) + (l.length > 1 ? " (+" + (l.length - 1) + ")" : ""); }
+function telaCompartilhados(manual) {
+  const dec = decisoesModelos();
+  const novos = modelosNovos(true);
+  const meus = new Set(meusModelos());
+  const info = new Map(); const marc = new Map();
+  novos.forEach((m) => {
+    const s = selosModelo(m);
+    const ignoradoAntes = !!(dec[m.id] && dec[m.id].acao === "ignorado");
+    info.set(m, s);
+    marc.set(m, !s.meus.length && !s.equipe.length && (manual || !ignoradoAntes));
+  });
+  const verCard = (c, origem) => verModelo(conteudoModelo(c), origem + " · login e senha não aparecem aqui");
+  return janela("dlgMod", (box, fim) => {
+    box.classList.add("mod-receber", "rc");
+    box.appendChild(el("h3", "", "📥 Cards compartilhados"));
+    box.appendChild(el("p", "meta rc-sub", "Login e senha vêm em branco: você preenche os seus."));
+    // Busca
+    const lab = el("label", "rc-busca");
+    lab.appendChild(el("span", "rc-busca-ph", "🔎 Procurar nos meus cards e nos da Equipe (nome ou link)"));
+    const inp = el("input"); inp.type = "search"; inp.id = "rcBusca"; inp.autocomplete = "off"; inp.spellcheck = false; inp.setAttribute("aria-label", "Procurar nos meus cards e nos da Equipe (nome ou link)");
+    lab.appendChild(inp); box.appendChild(lab);
+    const res = el("div", "rc-res"); res.id = "rcRes"; res.hidden = true; box.appendChild(res);
+    const MAX = 5;
+    const grupo = (rotulo, lista, q, ehMeu) => {
+      const g = el("div", "rc-res-g"); g.appendChild(el("b", "", rotulo + ": "));
+      if (!lista.length) { g.appendChild(el("span", "rc-nada", "nenhum")); return g; }
+      lista.slice(0, MAX).forEach((c) => {
+        const it = el("div", "rc-res-it");
+        it.appendChild(textoDestacado(nomeDe(c), q));
+        if (c.url) { it.appendChild(document.createTextNode(" · ")); const u = el("span", "rc-res-url"); u.appendChild(textoDestacado(c.url, q)); it.appendChild(u); }
+        g.appendChild(it);
+      });
+      if (lista.length > MAX) g.appendChild(el("div", "rc-mais", "+ " + (lista.length - MAX) + " outro(s). Refine a busca."));
+      return g;
+    };
+    const buscar = () => {
+      const q = normTxt(inp.value); res.textContent = "";
+      if (!q) { res.hidden = true; return; }
+      const r = buscarCardsLocais(inp.value);
+      res.appendChild(grupo("Meus", r.meus, q, true)); res.appendChild(grupo("Equipe", r.equipe, q, false));
+      res.hidden = false;
+    };
+    inp.addEventListener("input", buscar);
+    inp.addEventListener("keydown", (ev) => { if (ev.key === "Enter") ev.preventDefault(); });
+    // Abas
+    const abasEl = el("div", "rc-abas"); abasEl.setAttribute("role", "tablist"); box.appendChild(abasEl);
+    const corpo = el("div", "rc-corpo"); box.appendChild(corpo);
+    let abaAtual = "add";
+    const jaAdicionados = () => modelosAtivos().filter((m) => !meus.has(m.id) && cardDoModelo(m) && !itens.some((c) => c.modeloDono === m.id));
+    const queCompartilhei = () => { const at = new Set(modelosAtivos().map((m) => m.id)); return meusModelos().map((tid) => ({ tid: tid, card: itens.find((c) => c.modeloDono === tid), m: modelosAtivos().find((x) => x.id === tid) })).filter((x) => x.card && at.has(x.tid)); };
+    const vazio = (t) => corpo.appendChild(el("p", "rc-vazio", t));
+    const desenharAdd = () => {
+      if (!novos.length) { vazio("Nada novo para adicionar. Quando alguém da equipe compartilhar um card, ele aparece aqui."); return; }
+      novos.forEach((m) => {
+        const s = info.get(m);
+        const item = el("div", "mod-item mod-chk rc-item");
+        const cb = el("input"); cb.type = "checkbox"; cb.checked = marc.get(m); cb.id = "rc-" + m.id; cb.setAttribute("aria-label", "Selecionar " + (m.nome || ""));
+        cb.addEventListener("change", () => { marc.set(m, cb.checked); conta(); });
+        item.appendChild(cb);
+        const t = el("div", "mod-txt");
+        const l1 = el("label", "rc-l1"); l1.htmlFor = cb.id; l1.appendChild(el("span", "rc-nm", m.nome || m.sistema || "(sem nome)")); l1.appendChild(el("span", "rc-por", " · por " + (m.sharedBy || "alguém da equipe")));
+        t.appendChild(l1);
+        t.appendChild(el("div", "rc-lk", m.url || "sem link"));
+        if (!s.meus.length && !s.equipe.length) t.appendChild(el("div", "rc-selo s-ok", "🟢 Novo: você não tem nada parecido"));
+        if (s.meus.length) { const d = el("div", "rc-selo s-ylw"); d.appendChild(el("span", "", "🟡 Você já tem esse link em Meus: " + nomesLista(s.meus))); d.appendChild(botaoDlg("pequeno", "Ver meu card", () => verCard(s.meus[0], "Meus (card Individual)"))); t.appendChild(d); }
+        if (s.equipe.length) { const d = el("div", "rc-selo s-inf"); d.appendChild(el("span", "", "🔵 Já é card da Equipe: " + nomesLista(s.equipe))); d.appendChild(botaoDlg("pequeno", "Ver card da Equipe", () => verCard(s.equipe[0], "Card da Equipe"))); t.appendChild(d); }
+        item.appendChild(t); corpo.appendChild(item);
+      });
+    };
+    const desenharJa = () => {
+      const l = jaAdicionados();
+      if (!l.length) { vazio("Nenhum card compartilhado adicionado ainda."); return; }
+      l.forEach((m) => {
+        const c = cardDoModelo(m); const ln = el("div", "rc-ln");
+        const d = el("div", ""); d.appendChild(document.createTextNode(m.nome || "")); d.appendChild(el("small", "", " (por " + (m.sharedBy || "alguém da equipe") + ")"));
+        ln.appendChild(d); ln.appendChild(el("small", "", c && compartilhado(c) ? "já está na Equipe" : (c && c.arquivado_em ? "arquivado em Meus" : "já está em Meus")));
+        corpo.appendChild(ln);
+      });
+    };
+    const desenharMeus = () => {
+      const l = queCompartilhei();
+      if (!l.length) { vazio("Você ainda não compartilhou nenhum card. Use “Compartilhar meu card” num card de Meus."); return; }
+      l.forEach((x) => {
+        const ln = el("div", "rc-ln"); ln.appendChild(el("div", "", nomeDe(x.card)));
+        ln.appendChild(botaoDlg("pequeno", "Parar de compartilhar", async () => { await pararCompartilhar(x.card); desenhar(); }));
+        corpo.appendChild(ln);
+      });
+    };
+    const desenhar = () => {
+      const abas = [["add", "Para adicionar (" + novos.length + ")"], ["ja", "Já adicionados (" + jaAdicionados().length + ")"], ["meus", "Que eu compartilhei (" + queCompartilhei().length + ")"]];
+      abasEl.textContent = "";
+      abas.forEach(([k, txt]) => { const b = el("button", "rc-aba" + (k === abaAtual ? " on" : ""), txt); b.type = "button"; b.dataset.rcAba = k; b.setAttribute("role", "tab"); b.setAttribute("aria-selected", k === abaAtual ? "true" : "false"); b.addEventListener("click", () => { abaAtual = k; desenhar(); }); abasEl.appendChild(b); });
+      corpo.textContent = "";
+      if (abaAtual === "add") desenharAdd(); else if (abaAtual === "ja") desenharJa(); else desenharMeus();
+      aplicarIcones(corpo);
+    };
+    // Rodapé
+    const bb = el("div", "rc-rod");
+    const bSel = botaoDlg("pri", "", () => fim({ add: novos.filter((m) => marc.get(m)) }));
+    bSel.id = "rcAdicionar";
+    const bIgn = botaoDlg("", "Ignorar", () => fim({ add: [] })); bIgn.id = "rcIgnorar";
+    const bFec = botaoDlg("", "Fechar", () => fim(false)); bFec.id = "rcFechar";
+    function conta() { const n = novos.filter((m) => marc.get(m)).length; bSel.textContent = "Adicionar selecionados (" + n + ")"; bSel.disabled = !n; bIgn.disabled = !novos.length; }
+    bb.appendChild(bSel); bb.appendChild(bIgn); bb.appendChild(bFec);
+    desenhar(); conta();
+    box.appendChild(bb);
+    box.appendChild(el("p", "rc-nota", "Nada é bloqueado: você decide. Aviso só quando o link é exatamente igual."));
+  }).then((r) => {
+    if (!r) return; // fechou sem decidir: pergunta de novo na próxima vez
+    const d = decisoesModelos(); const agora = new Date().toISOString();
+    novos.forEach((m) => { d[m.id] = { acao: r.add.indexOf(m) >= 0 ? "adicionado" : "ignorado", em: agora }; });
+    gravarDecisoes(d);
+    if (r.add.length) { adicionarModelos(r.add); save(); toast(r.add.length + (r.add.length === 1 ? " card adicionado em Meus. Preencha seu login e senha." : " cards adicionados em Meus. Preencha seu login e senha.")); }
+    else toast("Cards compartilhados ignorados. Você pode vê-los de novo em Mais.");
+  });
 }
 async function atualizarModelosRecebidos(lista) {
   const dec = decisoesModelos();
@@ -1831,9 +1968,10 @@ function renderMais(box) {
 }
 
 /* ---------- v1.9.3+: Novidades (texto vai junto com o app; mais recente primeiro) ---------- */
-const APP_VERSAO = "1.9.7";
+const APP_VERSAO = "1.9.8";
 const NOVIDADES_VISTA = "caderno-novidades-vista";
 const NOVIDADES = [
+  { v: "1.9.8", data: "18/10/2026", itens: ["Nova tela “Cards compartilhados” em Mais: procure nos seus cards e nos da Equipe e veja o que é novo, o que já foi adicionado e o que você compartilhou.", "Selos mostram se o link do card recebido já existe em Meus ou na Equipe.", "Aviso de card repetido só quando o link é exatamente igual, também ao criar ou editar um card. Nada é bloqueado."] },
   { v: "1.9.7", data: "16/10/2026", itens: ["Histórico em Mais mostra as últimas 100 ações: quem adicionou, editou, arquivou ou excluiu cards.", "O card não fecha mais sozinho ao clicar fora: o app pergunta antes de descartar.", "Importação mais segura, com prévia antes de aplicar."] },
   { v: "1.9.6", data: "15/10/2026", itens: ["Corrigido: cards da Equipe arquivados agora podem ser excluídos normalmente.", "Transições mais suaves ao salvar, excluir, entrar e pesquisar."] },
   { v: "1.9.5", data: "15/10/2026", itens: ["O arquivo da equipe pode ser protegido com uma senha da equipe: fora do app ele fica ilegível.", "Cada analista digita a senha da equipe só uma vez por aparelho.", "O gestor pode trocar a senha da equipe e ver a senha atual depois de confirmar a própria senha de login."], fazer: "Quando o app pedir, digite a senha da equipe passada pelo gestor." },
@@ -2841,14 +2979,33 @@ function gravar(o, msg) {
   save();
   toast(msg);
 }
-$("ficha").addEventListener("submit", (ev) => {
+/* v1.9.8: ao salvar, avisa (sem bloquear) se outro card ativo já tem o mesmo link. Card novo: sempre confere.
+ * Edição: só se o link mudou e passou a ser igual ao de outro card. Arquivados e link vazio não contam. */
+let avisandoLink = false;
+async function conferirLinkDuplicado(o) {
+  const antes = itens.find((x) => x.id === o.id);
+  if (antes && normUrl(antes.url) === normUrl(o.url)) return true;
+  const r = cardsMesmoLink(o.url, o.id);
+  const todos = r.meus.map((c) => nomeDe(c) + " (Meus)").concat(r.equipe.map((c) => nomeDe(c) + " (Equipe)"));
+  if (!todos.length) return true;
+  avisandoLink = true; perguntandoDescarte = true;
+  try {
+    return await dialogo({ titulo: "⚠️ Já existe um card com esse link: " + todos[0], texto: (todos.length > 1 ? "Também: " + todos.slice(1, 4).join(", ") + (todos.length > 4 ? " e mais " + (todos.length - 4) : "") + ". " : "") + "Nada é bloqueado: você decide se salva mesmo assim.", ok: "Salvar mesmo assim", cancelar: "Voltar e editar" });
+  } finally { avisandoLink = false; perguntandoDescarte = false; }
+}
+$("ficha").addEventListener("submit", async (ev) => {
   ev.preventDefault();
-  const o = lerFicha();
-  if (o) gravar(o, "Acesso salvo");
-});
-$("atualizarSenha").addEventListener("click", () => {
+  if (avisandoLink) return;
   const o = lerFicha();
   if (!o) return;
+  if (!(await conferirLinkDuplicado(o))) { setTimeout(() => $("fUrl").focus(), 40); return; }
+  gravar(o, "Acesso salvo");
+});
+$("atualizarSenha").addEventListener("click", async () => {
+  if (avisandoLink) return;
+  const o = lerFicha();
+  if (!o) return;
+  if (!(await conferirLinkDuplicado(o))) { setTimeout(() => $("fUrl").focus(), 40); return; }
   o.ultima = hoje();
   o.senha_atualizada_em = hoje();
   gravar(o, "Senha atualizada hoje" + (o.ciclo !== "Nunca" ? " · próxima troca em " + o.ciclo + " dias" : ""));
