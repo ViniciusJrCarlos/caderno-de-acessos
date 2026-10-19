@@ -1,0 +1,78 @@
+/* Caderno de Acessos — css/cards.css
+ * Lista e cards: grupos, card, linhas de usuário/senha, olho, ações e botões (.btn, .acao).
+ * Carregado em ordem pelo index.html (temas → base → layout → cards → telas → componentes): a ordem é a mesma do antigo app.css. */
+/* Lista / grupos */
+main { padding:0 12px 12px; }
+.vazio { color:var(--muted); text-align:center; padding:32px 12px; }
+.grupo { background:var(--surface); border:1px solid var(--line2); border-radius:16px; padding:12px; margin:0 0 14px; break-inside:avoid; box-shadow:0 1px 2px var(--shadow-s); }
+.grupo-topo { display:flex; align-items:center; gap:8px; margin:2px 4px 10px; font-size:17px; color:var(--head); }
+.grupo-qtd { margin-left:auto; font-size:12px; font-weight:500; color:var(--muted); }
+.card { border:1px solid var(--line2); border-radius:14px; background:var(--surface); margin-top:10px; position:relative; }
+.grupo-topo + .card { margin-top:0; }
+.card.c-vencendo { border-color:var(--ylw-bd); }
+.card.c-vencido { border-color:var(--red-bd); }
+.card.c-arq { background:var(--surface2); }
+.card-topo { display:flex; gap:12px; padding:12px 12px 6px; align-items:flex-start; }
+.avatar { width:46px; height:46px; border-radius:50%; color:#fff; display:flex; align-items:center; justify-content:center; flex:none; }
+.card-tit { flex:1; min-width:0; }
+.card-tit h3 { margin:2px 0 2px; font-size:17px; color:var(--head); line-height:1.25; word-break:break-word; }
+.card-sub { color:var(--muted); font-size:13px; }
+.tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+.tag { display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:600; border-radius:999px; padding:2px 9px; }
+.tag-eq { background:#0F6B8A; color:#fff; }
+.tag-ind { background:#1B5FAD; color:#fff; }
+.tag-int { background:var(--chip-int-bg); color:var(--chip-int); }
+.tag-ext { background:var(--chip-ext-bg); color:var(--chip-ext); }
+.card-dir { display:flex; flex-direction:column; align-items:flex-end; gap:6px; position:relative; }
+.st { display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:600; border-radius:8px; padding:3px 8px; border:1px solid transparent; white-space:nowrap; }
+.st-vencendo { background:var(--ylw-bg); color:var(--ylw); border-color:var(--ylw-bd); }
+.st-vencido { background:var(--red-bg); color:var(--red); border-color:var(--red-bd); }
+.st-ok { background:var(--st-ok-bg); color:var(--st-ok); }
+.st-arq { background:var(--st-arq-bg); color:var(--st-arq); }
+.ico-mini { background:none; border:0; color:var(--muted); width:32px; height:28px; border-radius:8px; display:inline-flex; align-items:center; justify-content:center; padding:0; }
+.ico-mini:hover { background:var(--line2); }
+.menu-card { position:absolute; right:0; top:100%; background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:0 12px 28px var(--shadow); padding:6px; z-index:5; min-width:180px; }
+.mi { display:flex; align-items:center; gap:10px; width:100%; background:none; border:0; padding:10px; border-radius:8px; color:var(--text); font-size:14px; text-align:left; }
+.mi:hover { background:var(--hover); }
+.mi.warn { color:var(--red); }
+.mi.ok { color:var(--green); }
+.linhas { padding:2px 12px 8px; }
+.linha { display:flex; align-items:center; gap:8px; min-height:36px; border-bottom:1px dashed var(--line2); }
+.linha-rot { color:var(--text2); font-size:14px; width:72px; flex:none; }
+.linha-val { flex:1; text-align:right; font-size:14px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.secreto { letter-spacing:2px; color:var(--head); font-weight:700; }
+.secreto.aberto { letter-spacing:0; font-weight:600; font-family:Consolas, "Roboto Mono", monospace; user-select:all; }
+.url { color:var(--teal); text-decoration:none; }
+.url:hover { text-decoration:underline; }
+.olho { background:none; border:0; color:var(--icon); width:34px; height:34px; border-radius:8px; display:inline-flex; align-items:center; justify-content:center; padding:0; flex:none; }
+.olho:hover { background:var(--hover); color:var(--head); }
+
+/* Esconde o olho nativo do Edge/Chrome pra não ficar duplicado com o nosso */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear,
+input[type="password"]::-webkit-credentials-auto-fill-button,
+input[type="password"]::-webkit-textfield-decoration-container {
+  display: none !important;
+  visibility: hidden;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+  margin: 0;
+  padding: 0;
+}
+.senha-campo input[type="password"],
+.senha-campo input[type="text"],
+.login-box .senha-campo input {
+  padding-right: 42px;
+}
+
+.olho-vazio { width:34px; flex:none; }
+.card-info { color:var(--muted); font-size:12px; padding-top:8px; }
+.acoes { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding:10px 12px 12px; border-top:1px solid var(--line2); }
+.acao, .btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; background:var(--surface); color:var(--head); border:1px solid var(--line); border-radius:10px; padding:9px 8px; font-size:14px; font-weight:600; }
+.acao:hover:not(:disabled), .btn:hover:not(:disabled) { background:var(--hover); }
+.btn.pri { background:var(--pri); color:#fff; border-color:var(--pri); }
+.btn.perigo { background:var(--danger); color:#fff; border-color:var(--danger); }
+.btn.perigo:hover:not(:disabled) { background:var(--danger-h); }
+.btn.pri:hover:not(:disabled) { background:var(--pri-h); }
+

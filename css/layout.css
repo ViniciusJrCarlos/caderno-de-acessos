@@ -1,0 +1,35 @@
+/* Caderno de Acessos — css/layout.css
+ * Layout do topo: barra superior, abas e busca.
+ * Carregado em ordem pelo index.html (temas → base → layout → cards → telas → componentes): a ordem é a mesma do antigo app.css. */
+/* Topo */
+.topo { background:var(--brand); color:var(--on-brand); display:flex; align-items:center; gap:8px; padding:10px 12px; position:sticky; top:0; z-index:4; min-height:58px; }
+.marca { flex:1; display:flex; align-items:center; justify-content:center; gap:10px; min-width:0; }
+.marca h1 { margin:0; font-size:20px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.logo { border-radius:8px; }
+.tag-off { font-size:14px; opacity:.8; }
+.ico-btn { background:transparent; border:0; color:var(--on-brand); width:40px; height:40px; border-radius:10px; display:inline-flex; align-items:center; justify-content:center; padding:0; }
+.ico-btn:hover { background:rgba(255,255,255,.12); }
+.ico-btn.escuro { color:var(--head); }
+.ico-btn.escuro:hover { background:var(--hover); }
+.so-desktop { display:none !important; }
+.topo-acoes { gap:10px; align-items:center; }
+.tb-btn { display:inline-flex; align-items:center; gap:6px; background:#ffffff; color:#1B365D; border:0; border-radius:8px; padding:9px 14px; font-size:14px; font-weight:600; }
+.tb-btn.pri { background:var(--tb-pri); color:#fff; }
+.tb-btn.pri:hover { background:var(--tb-pri-h); }
+.tb-btn.link { background:transparent; color:var(--on-brand); font-weight:500; line-height:1.15; text-align:center; padding:4px 6px; }
+.tb-btn .ic { width:18px; height:18px; }
+
+/* Abas */
+.abas { display:flex; background:var(--surface); border-bottom:1px solid var(--line); overflow-x:auto; scrollbar-width:none; position:sticky; top:58px; z-index:3; }
+.abas::-webkit-scrollbar { display:none; }
+.abas button { flex:1 0 auto; background:none; border:0; border-bottom:3px solid transparent; color:var(--muted); font-size:15px; padding:12px 14px 10px; display:inline-flex; align-items:center; justify-content:center; gap:6px; }
+.abas button.on { color:var(--head); font-weight:700; border-bottom-color:var(--head); }
+.cont:empty { display:none; }
+.cont { background:var(--danger); color:#fff; border-radius:999px; font-size:11px; font-weight:700; padding:1px 7px; }
+
+/* Busca */
+.busca-wrap { position:relative; margin:12px; }
+.busca-ic { position:absolute; left:14px; top:50%; transform:translateY(-50%); color:var(--placeholder); pointer-events:none; }
+#busca { width:100%; border:1px solid var(--line); border-radius:12px; padding:12px 12px 12px 44px; font-size:16px; background:var(--input); color:var(--text); outline:none; }
+#busca:focus { border-color:var(--teal); box-shadow:0 0 0 3px var(--focus); }
+

@@ -1,0 +1,38 @@
+/* Caderno de Acessos — css/temas.css
+ * Temas Claro (padrão), Escuro e Suave: só as variáveis de cor (:root[data-tema=…]).
+ * Carregado em ordem pelo index.html (temas → base → layout → cards → telas → componentes): a ordem é a mesma do antigo app.css. */
+/* Temas: Claro (padrão), Escuro, Suave — tudo por variáveis */
+:root, :root[data-tema="claro"] {
+  color-scheme:light;
+  --brand:#1B365D; --on-brand:#fff; --head:#1B365D; --pri:#1B365D; --pri-h:#142a4a; --tb-pri:#2a4a78; --tb-pri-h:#34598f;
+  --teal:#0F6B8A; --bg:#F4F6F8; --surface:#fff; --surface2:#F9FAFB; --input:#fff; --hover:#F4F6F8;
+  --text:#1d2939; --text2:#344054; --muted:#5b6475; --icon:#475467; --placeholder:#8a93a3; --line:#D0D5DD; --line2:#E4E7EC;
+  --red:#B42318; --danger:#B42318; --danger-h:#912018; --green:#067647;
+  --ylw-bg:#FEF3C7; --ylw:#92400E; --ylw-bd:#F5D37A; --red-bg:#FEE4E2; --red-bd:#F8B4AE;
+  --chip-int-bg:#EEF2F6; --chip-int:#344054; --chip-ext-bg:#FDF0E6; --chip-ext:#93370D;
+  --st-ok-bg:#F2F4F7; --st-ok:#667085; --st-arq-bg:#E4E7EC; --st-arq:#475467; --info-bg:#EEF4FF; --info:#1B4A8A;
+  --focus:rgba(15,107,138,.15); --overlay:rgba(16,24,40,.5); --shadow:rgba(16,24,40,.2); --shadow-s:rgba(16,24,40,.04); --toast:#1d2939; --sel:#0F6B8A;
+}
+:root[data-tema="escuro"] {
+  color-scheme:dark;
+  --brand:#0B1626; --on-brand:#E8EEF7; --head:#DCE6F5; --pri:#2F65A8; --pri-h:#3A74BD; --tb-pri:#2F65A8; --tb-pri-h:#3A74BD;
+  --teal:#5BC0DE; --bg:#0F1623; --surface:#18212F; --surface2:#141C28; --input:#111925; --hover:#222D3D;
+  --text:#E6EAF0; --text2:#C9D1DC; --muted:#9AA6B8; --icon:#AAB5C5; --placeholder:#7D8899; --line:#2F3C52; --line2:#263246;
+  --red:#FF8A80; --danger:#C93A2E; --danger-h:#DB4A3E; --green:#5EDB94;
+  --ylw-bg:#3A2E0B; --ylw:#F7CE5B; --ylw-bd:#6B5413; --red-bg:#3D1518; --red-bd:#7A2E2E;
+  --chip-int-bg:#26324A; --chip-int:#C9D1DC; --chip-ext-bg:#3D2A1A; --chip-ext:#F4B37E;
+  --st-ok-bg:#243047; --st-ok:#AAB5C5; --st-arq-bg:#2A3448; --st-arq:#C1CAD6; --info-bg:#1B2B47; --info:#A9C7F5;
+  --focus:rgba(91,192,222,.25); --overlay:rgba(0,0,0,.6); --shadow:rgba(0,0,0,.45); --shadow-s:rgba(0,0,0,.25); --toast:#2B3A52; --sel:#5BC0DE;
+}
+:root[data-tema="suave"] {
+  color-scheme:light;
+  --brand:#2C4766; --on-brand:#FBF7F0; --head:#22406A; --pri:#2C4766; --pri-h:#223A55; --tb-pri:#3D5C80; --tb-pri-h:#4A6A90;
+  --teal:#2D6E7E; --bg:#F1EADF; --surface:#FBF7F0; --surface2:#F3ECE1; --input:#FFFCF7; --hover:#EFE7DA;
+  --text:#2E2A25; --text2:#463F37; --muted:#6E655A; --icon:#6E655A; --placeholder:#9A8F80; --line:#DCD1BF; --line2:#E8DFD0;
+  --red:#A83A2C; --danger:#B0432F; --danger-h:#963624; --green:#3F7A4A;
+  --ylw-bg:#F8E9C2; --ylw:#7A4E0E; --ylw-bd:#E6CB85; --red-bg:#F6DDD5; --red-bd:#E5B3A6;
+  --chip-int-bg:#EBE3D6; --chip-int:#463F37; --chip-ext-bg:#F4E1CD; --chip-ext:#8A3F15;
+  --st-ok-bg:#ECE4D7; --st-ok:#6E655A; --st-arq-bg:#E3DACB; --st-arq:#4F473E; --info-bg:#E8EEF3; --info:#2C4766;
+  --focus:rgba(45,110,126,.2); --overlay:rgba(46,42,37,.45); --shadow:rgba(70,55,35,.18); --shadow-s:rgba(70,55,35,.05); --toast:#3B352E; --sel:#2D6E7E;
+}
+
