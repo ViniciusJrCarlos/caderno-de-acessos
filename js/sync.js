@@ -27,7 +27,9 @@
 
   /* v1.9.4: "Compartilhar meu card". Modelos ficam numa coleção separada ("modelos"), que versões antigas ignoram.
    * Lista branca: só estes campos podem sair. Login e senha NUNCA. */
-  const CAMPOS_MODELO = ["id", "nome", "url", "sistema", "escalonamento", "escalonamentos", "obs", "sharedBy", "createdAt", "updatedAt", "updatedBy"];
+  /* v2.0.1: sugeridoPara (lista de nomes que recebem o aviso de card novo; vazio = todos) e parecidoCom (nome do card da Equipe com o
+   * mesmo link, para o selo "Card parecido"). Versões antigas descartam os dois: o card aparece para todos, como um compartilhado comum. */
+  const CAMPOS_MODELO = ["id", "nome", "url", "sistema", "escalonamento", "escalonamentos", "obs", "sharedBy", "createdAt", "updatedAt", "updatedBy", "sugeridoPara", "parecidoCom"];
   const CAMPOS_NIVEL = ["nivel", "canal", "nome", "valor", "horario", "obs"];
   function limparModelo(m) {
     const o = {};
@@ -36,6 +38,13 @@
       if (k === "escalonamentos") {
         if (!Array.isArray(m[k])) return;
         o[k] = m[k].map((n) => { const x = {}; CAMPOS_NIVEL.forEach((c) => { if (n && n[c] != null) x[c] = n[c]; }); return x; });
+      } else if (k === "sugeridoPara") {
+        if (!Array.isArray(m[k])) return;
+        const vistos = new Set(); const l = [];
+        m[k].forEach((n) => { if (typeof n !== "string") return; const t = n.trim().slice(0, 120); const c = t.toLowerCase(); if (t && !vistos.has(c) && l.length < 20) { vistos.add(c); l.push(t); } });
+        if (l.length) o[k] = l;
+      } else if (k === "parecidoCom") {
+        if (typeof m[k] === "string" && m[k].trim()) o[k] = m[k].trim().slice(0, 200);
       } else o[k] = typeof m[k] === "string" || typeof m[k] === "number" ? m[k] : String(m[k]);
     });
     return o;
@@ -148,10 +157,12 @@
   /* v1.9.7: histórico estruturado { id, tipo, card, quem, quando, escopo }. Nunca guarda senhas. */
   const HIST_MAX = 100;
   const HIST_TIPOS = ["adicionado", "editado", "senha", "arquivado", "reativado", "excluido", "compartilhado", "parou", "importado", "se-ativada", "se-trocada", "primeiro", "conflito", "copia", "texto", "ignorado",
-    "lixeira", "restaurado", "lixeira-apagado", "conflito-resolvido"];
+    "lixeira", "restaurado", "lixeira-apagado", "conflito-resolvido", "outra-operacao"];
   function limparEntrada(e) {
     if (!e || typeof e !== "object" || Array.isArray(e) || typeof e.id !== "string" || !e.id) return null;
-    const tipo = HIST_TIPOS.indexOf(e.tipo) >= 0 ? e.tipo : "texto";
+    let tipo = HIST_TIPOS.indexOf(e.tipo) >= 0 ? e.tipo : "texto";
+    // v2.0.1: a v2.0.0/v1.9.9 regravam "outra-operacao" como "texto"; o id "oo-" devolve o tipo.
+    if (tipo === "texto" && /^oo-/.test(e.id) && e.card) tipo = "outra-operacao";
     const o = { id: e.id.slice(0, 120), tipo: tipo, card: txt(e.card, 200), quem: txt(e.quem, 120), quando: txt(e.quando, 40), escopo: e.escopo === "Meu" ? "Meu" : "Equipe" };
     if (e.texto) o.texto = txt(e.texto, 300);
     if (e.local) o.local = true;

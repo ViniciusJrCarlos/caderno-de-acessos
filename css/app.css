@@ -571,3 +571,18 @@ body.travado .login { animation:caderno-fade .2s ease; }
 .dlg-import .imp-antigos, .dlg-import .imp-datas, .dlg-import .imp-cortes, .dlg-import .imp-ciclos { color:var(--ylw); background:var(--ylw-bg); border:1px solid var(--ylw-bd); border-radius:10px; padding:8px 10px; }
 .card-erro { border-style:dashed; }
 .card-erro .meta { color:var(--muted); font-size:13px; }
+
+/* v2.0.1: trava "um link = um card" com mais botões (uma coluna: Abrir, Outra operação, Meus e sugerir, Voltar e editar) */
+.dlg.dlg-mais .dlg-botoes { grid-template-columns:1fr; }
+.dlg.dlg-mais #dlgOk { order:1; }
+.dlg.dlg-mais .dlg-extra { order:2; }
+.dlg.dlg-mais #dlgCancelar { order:3; }
+/* v2.0.1: compartilhar "Para" (Todos / Só para…) */
+.mod-para { border:1px solid var(--line, rgba(127,127,127,.35)); border-radius:10px; padding:8px 12px 10px; margin:6px 0 10px; }
+.mod-para legend { font-weight:600; padding:0 4px; }
+.mod-radio { display:inline-flex; align-items:center; gap:4px; margin-right:16px; cursor:pointer; }
+.mod-para-lista { display:flex; flex-direction:column; gap:4px; margin:8px 0 2px; max-height:180px; overflow:auto; }
+.mod-para-nome { display:flex; align-items:center; gap:6px; }
+.mod-para-novo { display:flex; gap:6px; margin-top:4px; }
+.mod-para-novo input { flex:1; min-width:0; }
+.rc-parecido, .rc-sugerido { font-size:13px; }
