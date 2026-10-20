@@ -1,4 +1,4 @@
-# Arquitetura do Caderno de Acessos (v2.2.0)
+# Arquitetura do Caderno de Acessos (v2.3.0)
 
 O app é um site estático (PWA) sem servidor e sem ferramenta de build. O navegador baixa os arquivos como estão e o service worker (`sw.js`) os guarda para funcionar offline. Os dados ficam no aparelho (localStorage). Os cards da Equipe também vão para o arquivo da equipe (`caderno-equipe.json`), numa pasta do OneDrive escolhida por cada analista.
 
@@ -24,6 +24,7 @@ O app é um site estático (PWA) sem servidor e sem ferramenta de build. O naveg
 | `js/historico.js` | Histórico (Equipe/Meu), registros de Meus, bloco do Histórico. |
 | `js/sincronizacao.js` | Adaptador da pasta, `carimbarMudancas`, `sincronizarAgora`, `aplicarResultado`. |
 | `js/senha-equipe.js` | Arquivo da equipe cifrado: abrir, fechar, proteger, pedir e ver a senha. |
+| `js/assinatura.js` | v2.3.0: assinatura ECDSA P-256 das ações de admin (card, tombstone, ação na Lixeira), chave pública fixada no aparelho (TOFU), verificação no merge (`ehAdminRemoto`, `papelRemoto`), fila de pendentes (`marcarAssinar`, `assinarPendentes`). Carregado antes do `js/perfis.js`. |
 | `js/perfis.js` | v2.2.0: perfis Admin e Analista nos cards da Equipe: lista `perfis` (no arquivo cifrado e no cofre local cifrado), Configurar perfis, Entrar como admin (modo admin em memória), painel de perfis, escolha do nome, regras de permissão no `save()` (`guardarPermissoes`), no merge (`filtrarPermissoesRemoto`, `mesclarPerfisSync`) e na importação, cadeados da ficha. |
 | `js/compartilhados.js` | "Compartilhar meu card" (modelos sem login e senha), "Só para…", adoção, Card parecido, tela Cards compartilhados. |
 | `js/mais.js` | Aba Mais: vincular/criar/usar/desvincular o arquivo, `renderMais`, funções das novidades. |
@@ -62,6 +63,16 @@ Em CSS vale a última regra de mesma força, por isso **não mude a ordem dos ar
 - **Merge dos perfis:** `CadernoSync.mesclarPerfis` junta pelo id, vence o `updatedAt` mais novo, nunca apaga (só desativa) e nunca perde o hash de um admin por causa de uma cópia sem hash.
 - **Camada de dados:** `guardarPermissoes()` no começo do `save()` compara com a foto `baseEquipe` (tirada no `load()`, depois de cada `save()` e do `aplicarResultado()`) e desfaz o que o analista não pode mudar (`CAMPOS_ANALISTA`). No merge, `filtrarPermissoesRemoto()` desfaz mudanças proibidas cujo `updatedBy` não é admin. Para liberar observações ou horário ao analista, basta incluir `obs`/`horario` em `CAMPOS_ANALISTA` e tirar `fObs`/`fHorario` de `CAMPOS_FICHA_ADMIN`.
 - **É proteção de tela**: quem tem o arquivo e a senha da equipe pode alterá-lo por fora; apps antigos não respeitam as permissões.
+
+## Permissões e assinatura do admin (v2.3.0)
+- **Aparelho novo:** o envelope cifrado leva só `perfis: true` (sem nomes). Ao ler, `notarPerfisNoArquivo()` grava `caderno-perfis-no-arquivo`, e `papelAtual()` devolve `analista` até a lista de perfis chegar. Sem perfis no arquivo, continua `livre`. Desvincular limpa a marca.
+- **Quem é admin na sincronização:** não é mais o nome. Cada admin tem um par de chaves ECDSA P-256. A pública (`chavePub`) fica no perfil; a privada (`chavePriv`, `chaveSalt`) também, cifrada com AES-GCM e uma chave PBKDF2 (310.000) da senha de admin. A privada é aberta só em memória no "Entrar como admin" (`prepararChaveAdmin`). Admin vindo da v2.2.0 ganha a chave no primeiro "Entrar como admin"; até lá vale a regra antiga pelo nome (legado). Trocar a senha recifra a mesma chave; "Tornar admin" cria a chave com a senha temporária.
+- **O que é assinado:** o card (`assin` = `perfilId:assinatura` sobre `c|id|updatedAt|conteúdo normalizado`), o tombstone (`t|id|deletedAt`, ou `origAt` quando a exclusão do admin é reafirmada) e a remoção da Lixeira (`l|id|em`). `carimbarMudancas()` e a Lixeira marcam o que foi feito no modo admin (`caderno-assinar-pendentes`); `assinarPendentes()` assina no começo de cada sincronização.
+- **No merge (`filtrarPermissoesRemoto`, assíncrono):** sem assinatura válida de um admin ativo, a mudança é de analista: campos proibidos voltam (inclusive `arquivado_em`, item 8), exclusão de card da Equipe é desfeita, restaurar/editar card que um admin excluiu volta a ser exclusão, e "Excluir agora" da Lixeira da Equipe é ignorado. Tudo vai para o Histórico.
+- **Fixação da chave (TOFU):** `caderno-perfis-chaves` guarda a chave pública de cada admin na primeira vez que o aparelho a vê. Chave trocada no arquivo não é aceita. Admin retirado perde a fixação; se voltar a ser admin, vem com chave nova.
+- **Limites:** (1) quem tem o arquivo e a senha da equipe ainda pode editar o arquivo por fora e, por exemplo, criar um perfil admin falso com chave própria; aparelhos que ainda não fixaram as chaves (aparelho novo) aceitariam. (2) apps antigos (v2.2.0 ou anterior) não verificam nada e regravam o arquivo sem `assin`; mudanças do admin que passem por eles antes de chegar a um aparelho v2.3.0 são tratadas como de analista. Todos precisam atualizar. (3) a chave privada fica só em memória: se a página recarregar antes da sincronização, a mudança do admin sai sem assinatura e os outros aparelhos a desfazem (sincronize antes de fechar). (4) a proteção forte de verdade só vem com o servidor (versão web).
+- **Nome:** o nome de um admin nunca é associado sozinho (`meuPerfil`); escolher o nome de um admin pede a senha de admin dele (`escolherPerfil`, `confirmarSenhaDoAdmin`). O analista já identificado não troca de nome. O último acesso de um admin só é atualizado por aparelho confirmado com a senha (`caderno-perfil-admin-confirmado`).
+- **Componentes novos (BEM):** `.campo-senha` / `.campo-senha__linha` / `.campo-senha__olho`, `.forca-senha` / `__barra` / `__texto` / `--fraca|--media|--forte`, `.sel-bar__dica`, `.cont--compartilhados`.
 
 ## Convenção para código novo
 - **Onde colocar:** no arquivo do assunto. Se não houver, crie um arquivo novo e inclua-o **no `index.html` (antes do `js/app.js`) e na lista `FILES` do `sw.js`**, subindo a versão do cache (`caderno-web-vNN`). Sem isso, o app offline quebra.

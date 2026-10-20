@@ -7,9 +7,18 @@ document.addEventListener("pointerdown", () => { ignorarClique = false; }, true)
 document.addEventListener("click", (ev) => { if (!ev.target.closest(".menu-card")) fecharMenus(); });
 document.addEventListener("click", () => { if (renderPendente) setTimeout(renderSePendente, 50); });
 /* ---------- v1.9.3+: Novidades (texto vai junto com o app; mais recente primeiro) ---------- */
-const APP_VERSAO = "2.2.0";
+const APP_VERSAO = "2.3.0";
 const NOVIDADES_VISTA = "caderno-novidades-vista";
 const NOVIDADES = [
+  { v: "2.3.0", data: "20/10/2026", itens: [
+    "Só o admin arquiva, compartilha e sugere cards à equipe. O analista cuida dos próprios cards em Meus e atualiza senha, datas, ciclo e escalonamento da Equipe.",
+    "As ações de admin saem assinadas com a chave do admin: na sincronização, o nome sozinho não dá permissão. Exclusões e ações na Lixeira de quem não é admin são desfeitas, inclusive vindas de apps antigos.",
+    "O analista não troca mais de nome, e ninguém usa o nome de um admin sem a senha de admin.",
+    "Senha de admin com confirmação, medidor de força e botão de olho para mostrar ou ocultar.",
+    "Card compartilhado chega em Mais › Cards compartilhados, com contador na aba Mais. A lista “Só para…” mostra todos os perfis ativos.",
+    "Pasta sem o arquivo da equipe: o app pergunta antes de criar um novo (com perfis, só o admin cria).",
+    "Quando chega uma versão nova, as abas abertas recarregam sozinhas."
+  ] },
   { v: "2.2.0", data: "19/10/2026", itens: [
     "Perfis Admin e Analista nos cards da Equipe (Mais › Perfis da equipe). Sem perfis configurados, tudo funciona como antes.",
     "Admin: cria cards da Equipe, muda link e identificação, reativa, exclui, resolve conflitos, troca a senha da equipe e cuida dos perfis (Entrar como admin).",
@@ -159,6 +168,15 @@ aplicarTema(temaAtual());
 aplicarIcones();
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => {});
+  // v2.3.0 (item 4): quando a versão nova assume (controllerchange), a aba recarrega. Com a ficha sendo editada, espera fechar.
+  const tinhaControle = !!navigator.serviceWorker.controller; let recarregando = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!tinhaControle || recarregando) return;
+    recarregando = true;
+    const tentar = () => { if (typeof fichaSuja === "function" && fichaSuja()) { setTimeout(tentar, 2000); return; } location.reload(); };
+    if (typeof fichaSuja === "function" && fichaSuja()) toast("Versão nova instalada: a página recarrega quando você salvar ou fechar a ficha.");
+    tentar();
+  });
 }
 // Tela de login: senha padrão (hash no código) ou senha customizada só deste aparelho (localStorage).
 const LOGIN_PADRAO = { iter: 310000, salt: "015d5ac2a5ab08fdac13e98dd8b789fc", hash: "033d6adcf778bd29c7199d684d705ecebbd10bb47d86ecd732a0d225ffa2e9b8" };

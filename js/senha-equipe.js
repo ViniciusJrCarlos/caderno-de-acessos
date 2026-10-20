@@ -40,15 +40,17 @@ async function abrirDocEquipe(d, copia) {
 }
 /* Protegido se: ativando/trocando agora, o arquivo já vinha protegido, ou este aparelho sabe que a equipe usa senha (arquivo recriado sem senha volta a ser protegido). */
 function precisaCifrar(bruto) { const se = lerSE(); return !!(se.atual && bruto && !CadernoCripto.ehProtegido(bruto)); }
+/* v2.3.0 (item 1): o envelope cifrado diz só SE há perfis (sem nomes), para um aparelho novo não ter acesso total antes de decifrar. */
+function marcarPerfis(env, doc) { if (env && doc && Array.isArray(doc.perfis) && doc.perfis.some((p) => p && p.papel === "admin" && p.ativo !== false)) env.perfis = true; return env; }
 async function fecharDocEquipe(doc, bruto) {
   if (!window.CadernoCripto) return doc;
   const p = seEstado.pendente;
-  if (p) return CadernoCripto.fechar(doc, p, p.info);
+  if (p) return marcarPerfis(await CadernoCripto.fechar(doc, p, p.info), doc);
   const se = lerSE();
   if (!se.atual) return doc;
   const reg = await CadernoCripto.chaveGuardada(se.atual);
   if (!reg) { if (CadernoCripto.ehProtegido(bruto)) throw erroSE("SenhaEquipeNecessaria", bruto); return doc; }
-  return CadernoCripto.fechar(doc, { salt: se.atual, iter: reg.iter, chave: reg.chave, verif: reg.verif }, { por: se.por, em: se.em, acao: se.acao });
+  return marcarPerfis(await CadernoCripto.fechar(doc, { salt: se.atual, iter: reg.iter, chave: reg.chave, verif: reg.verif }, { por: se.por, em: se.em, acao: se.acao }), doc);
 }
 async function concluirSenhaPendente(a) {
   const p = seEstado.pendente; if (!p) return;

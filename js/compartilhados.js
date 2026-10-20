@@ -95,6 +95,7 @@ function verModelo(d, origem) {
 }
 async function compartilharMeuCard(card) {
   if (!card || card.visibilidade !== "Individual") return;
+  if (!podeAdminEquipe()) { toast("Só o admin compartilha cards com a equipe. Seus cards de Meus ficam só com você."); return; } // v2.3.0 (item 9)
   if (!syncEstado.vinculado) { toast("Para compartilhar, vincule a pasta da equipe em Mais › Arquivo da equipe."); return; }
   if (!autor()) { toast("Salve seu nome em Mais › Arquivo da equipe antes de compartilhar."); return; }
   const tid = card.modeloDono || ("m-" + card.id);
@@ -143,6 +144,8 @@ async function compartilharMeuCard(card) {
     nomesAnalistas().forEach((n) => addNome(n, false));
     fs.appendChild(lista);
     fs.appendChild(el("p", "mod-nota", "O aviso de card novo só aparece para quem você marcar. O card continua disponível para toda a equipe em Mais › Cards compartilhados."));
+    // v2.3.0 (item 11): onde o card chega
+    box.appendChild(el("p", "mod-nota mod-chegada", "📥 Quem recebe vê o card em Mais › Cards compartilhados (depois de sincronizar) e escolhe “Adicionar selecionados” para levá-lo a Meus, onde preenche o próprio login e senha."));
     const troca = () => { lista.hidden = !rSo.checked; };
     rTodos.addEventListener("change", troca); rSo.addEventListener("change", troca);
     box.appendChild(fs);
@@ -160,7 +163,7 @@ async function compartilharMeuCard(card) {
   });
   if (!ok) return;
   await compartilharModelo(card, { para: ok.para, parecidoCom: "" });
-  toast(ok.para.length ? "Card compartilhado com a equipe, sugerido para " + ok.para.join(", ") + " (sem login e senha)" : "Card compartilhado com a equipe (sem login e senha)");
+  toast((ok.para.length ? "Card compartilhado, sugerido para " + ok.para.join(", ") : "Card compartilhado com a equipe") + ". Chega em Mais › Cards compartilhados de quem recebe (sem login e senha).");
 }
 /* v2.0.1: grava o modelo (sem login e senha) e marca o card como meu modelo. para = [] → Todos. */
 async function compartilharModelo(card, op) {
@@ -190,6 +193,7 @@ function nomesAnalistas() {
   itens.filter(compartilhado).forEach((c) => { pega(c.updatedBy); });
   modelosAtivos().forEach((m) => { pega(m.sharedBy); pega(m.updatedBy); (m.sugeridoPara || []).forEach(pega); });
   try { lerLixeiraEq().itens.forEach((x) => { pega(x.excluidoPor); pega(x.card && x.card.updatedBy); }); } catch (e) { /* sem lixeira */ }
+  try { lerPerfis().filter((p) => p.ativo).forEach((p) => pega(p.nome)); } catch (e) { /* sem perfis */ } // v2.3.0 (item 10): todos os perfis ativos
   return [...vistos.values()].sort((a, b) => a.localeCompare(b, "pt-BR"));
 }
 /* v2.0.1 (item 4): o aviso de card novo só aparece para os sugeridos (lista vazia = todos). O dono nunca recebe o próprio card. */
@@ -449,7 +453,11 @@ function blocoModelos(box) {
   const disp = modelosNovos(true).length;
   const c = el("article", "card painel-mais");
   c.appendChild(el("h3", "", "Cards compartilhados"));
-  c.appendChild(el("p", "meta", "Você compartilha " + meus.size + " · a equipe compartilha " + daEquipe.length + (disp ? " · " + disp + " ainda não adicionado(s)" : "") + ". Use “Compartilhar meu card” num card Individual: vão nome, link, sistema, escalonamento e observações, nunca login e senha."));
+  const pend = modelosNovos(false).filter(paraMim).length;
+  c.appendChild(el("p", "meta", (podeAdminEquipe() ? "Você compartilha " + meus.size + " · " : "") + "a equipe compartilha " + daEquipe.length + (disp ? " · " + disp + " ainda não adicionado(s)" : "") + "."));
+  // v2.3.0 (item 11): como o card chega
+  c.appendChild(el("p", "meta mod-chegada", "📥 Card compartilhado com você chega aqui, não direto em Meus. Abra “Ver cards compartilhados” e escolha “Adicionar selecionados” para levar para Meus (você preenche o seu login e senha)." + (podeAdminEquipe() ? " Para compartilhar, use “Compartilhar meu card” num card de Meus: vão nome, link, sistema, escalonamento e observações, nunca login e senha." : "")));
+  if (pend) { const a = el("p", "se-aviso mod-pendentes"); a.id = "modPendentes"; a.textContent = pend === 1 ? "1 card compartilhado esperando você" : pend + " cards compartilhados esperando você"; c.appendChild(a); }
   const row = el("div", "acoes-mais");
   row.appendChild(btn("btn", "users", "Ver cards compartilhados", () => verificarModelos(true)));
   c.appendChild(row);

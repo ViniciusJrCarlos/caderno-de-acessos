@@ -57,7 +57,7 @@ function restaurarDaLixeira(ids) {
   ids.forEach((id) => {
     const e = lixEq.itens.find((x) => x.id === id);
     if (e) {
-      lixEq.itens = lixEq.itens.filter((x) => x.id !== id); lixEq.removidos.push({ id: id, em: agora, por: quem });
+      lixEq.itens = lixEq.itens.filter((x) => x.id !== id); lixEq.removidos.push({ id: id, em: agora, por: quem }); marcarAssinar("l:" + id);
       if (!itens.some((x) => x.id === id)) { const c = Object.assign({}, e.card); if (!c.arquivado_em) c.arquivado_em = hoje(); restaurando.add(id); itens.push(c); n++; }
       return;
     }
@@ -75,7 +75,7 @@ async function apagarDaLixeira(e, equipe) {
   if (!sim) return false;
   const agora = new Date().toISOString(), quem = autor();
   if (equipe) {
-    const l = lerLixeiraEq(); l.itens = l.itens.filter((x) => x.id !== e.id); l.removidos.push({ id: e.id, em: agora, por: quem }); gravarLixeiraEq(l);
+    const l = lerLixeiraEq(); l.itens = l.itens.filter((x) => x.id !== e.id); l.removidos.push({ id: e.id, em: agora, por: quem }); marcarAssinar("l:" + e.id); gravarLixeiraEq(l);
     addHist({ id: "la-" + e.id + "-" + agora, tipo: "lixeira-apagado", card: String(nomeDe(e.card)).slice(0, 200), escopo: "Equipe", quando: agora });
     agendarSync();
   } else {
@@ -90,7 +90,7 @@ function blocoLixeira(box) {
   const eq = lerLixeiraEq().itens, meus = lerLixeiraMeus();
   const c = el("article", "card painel-mais lixeira"); c.id = "blocoLixeira";
   c.appendChild(el("h3", "", "🗑️ Lixeira" + (eq.length + meus.length ? " (" + (eq.length + meus.length) + ")" : "")));
-  c.appendChild(el("p", "meta", "Cards excluídos ficam aqui por " + DIAS_LIXEIRA + " dias. Os da Equipe podem ser restaurados por qualquer analista e voltam para o Arquivo de todos. Os Meus ficam só neste aparelho e voltam com usuário e senha."));
+  c.appendChild(el("p", "meta", "Cards excluídos ficam aqui por " + DIAS_LIXEIRA + " dias. Os da Equipe podem ser restaurados " + (perfisAtivos() ? "pelo admin" : "por qualquer analista") + " e voltam para o Arquivo de todos. Os Meus ficam só neste aparelho e voltam com usuário e senha."));
   const todos = eq.map((e) => ({ e: e, equipe: true })).concat(meus.map((e) => ({ e: e, equipe: false }))).sort((a, b) => String(b.e.excluidoEm).localeCompare(String(a.e.excluidoEm)));
   if (!todos.length) c.appendChild(el("p", "meta vazio-lix", "A Lixeira está vazia."));
   else {

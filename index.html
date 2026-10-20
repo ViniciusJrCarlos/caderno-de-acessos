@@ -31,7 +31,7 @@
     </span>
     <button type="submit" id="loginBtn">Abrir caderno</button>
     <p id="loginErro" class="login-erro" role="alert"></p>
-    <p class="login-rodape" id="loginRodape">Caderno de Acessos v2.2.0 · © Todos os direitos reservados · Desenv. WebDev</p>
+    <p class="login-rodape" id="loginRodape">Caderno de Acessos v2.3.0 · © Todos os direitos reservados · Desenv. WebDev</p>
     <p class="login-instalar" id="loginInstalarWrap" hidden><button type="button" class="link-instalar" id="btnInstalarApp">Instalar app</button></p>
   </form>
 </section>
@@ -67,7 +67,7 @@
   <button type="button" data-aba="vencendo">Vencendo <span class="cont" id="contVenc"></span></button>
   <button type="button" data-aba="arquivo">Arquivo</button>
   <button type="button" data-aba="gerador">Gerador</button>
-  <button type="button" data-aba="mais">Mais</button>
+  <button type="button" data-aba="mais">Mais <span class="cont cont--compartilhados" id="contMais"></span></button>
 </nav>
 <div class="busca-wrap" id="buscaWrap">
   <span class="busca-ic" data-ic="search"></span>
@@ -154,9 +154,9 @@
   <div class="panel pequeno">
     <div class="panel-topo"><h3>Sobre</h3><button type="button" class="ico-btn escuro" data-fecha="sobre" aria-label="Fechar" data-ic="x"></button></div>
     <div class="panel-corpo">
-      <p class="meta">Caderno de Acessos v2.2.0 · © Todos os direitos reservados · Desenv. WebDev</p>
+      <p class="meta">Caderno de Acessos v2.3.0 · © Todos os direitos reservados · Desenv. WebDev</p>
       <h4 class="sobre-tit">Perfis Admin e Analista</h4>
-      <p class="meta" id="sobrePerfis">Com os perfis configurados (Mais › Perfis da equipe), só o admin cria cards da Equipe, muda link e identificação, reativa, exclui e resolve conflitos; o analista atualiza senha, datas, ciclo e escalonamento e arquiva. É uma proteção de tela, não um controle forte: quem tem o arquivo e a senha da equipe consegue mexer nele por fora, e apps antigos (v2.1.0 ou anterior) não respeitam as permissões. Peça para todos atualizarem.</p>
+      <p class="meta" id="sobrePerfis">Com os perfis configurados (Mais › Perfis da equipe), só o admin cria cards da Equipe, muda link e identificação, arquiva, reativa, exclui, compartilha e resolve conflitos; o analista atualiza senha, datas, ciclo e escalonamento e cuida dos próprios cards em Meus. As ações de admin saem assinadas: o nome sozinho não dá permissão. Ainda é uma proteção de tela, não um controle forte: quem tem o arquivo e a senha da equipe consegue mexer nele por fora, e apps antigos (v2.2.0 ou anterior) não conferem as assinaturas. Peça para todos atualizarem.</p>
       <h4 class="sobre-tit">Para que serve</h4>
       <p class="meta">Caderno de uso interno da equipe de suporte para guardar acessos a sistemas e fornecedores: link, login, senha, ciclo de troca e escalonamento. Funciona offline e fica salvo neste navegador, sem banco de dados.</p>
       <h4 class="sobre-tit">Como usar</h4>
@@ -275,6 +275,7 @@
 <script src="js/historico.js"></script>
 <script src="js/sincronizacao.js"></script>
 <script src="js/senha-equipe.js"></script>
+<script src="js/assinatura.js"></script>
 <script src="js/perfis.js"></script>
 <script src="js/compartilhados.js"></script>
 <script src="js/mais.js"></script>

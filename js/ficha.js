@@ -173,7 +173,7 @@ async function conferirLinkDuplicado(o) {
     if (dup.length && (linkMudou || mesmo.length)) {
       const alvo = mesmo[0] || dup[0];
       const podeOutra = podeAdminEquipe() && !mesmo.length && !!normTxt(o.cliente) && dup.every((c) => !!normTxt(c.cliente));
-      const podeMeus = !antes || !compartilhado(antes);
+      const podeMeus = (!antes || !compartilhado(antes)) && podeAdminEquipe(); // v2.3.0 (item 9): o analista não sugere à equipe
       const extras = [];
       if (podeOutra) extras.push({ texto: "Salvar como outra operação", valor: "outra" });
       if (podeMeus) extras.push({ texto: "Salvar em Meus e sugerir à equipe", valor: "meus" });
@@ -215,7 +215,8 @@ async function conferirLinkDuplicado(o) {
   if (!todos.length) return true;
   avisandoLink = true; perguntandoDescarte = true;
   // v2.2.0: com perfis, o analista (que só cria em Meus) também pode salvar em Meus e sugerir à equipe; nunca “outra operação”
-  const sugerir = !podeAdminEquipe() && !antes && r.equipe.length ? [{ texto: "Salvar em Meus e sugerir à equipe", valor: "meus" }] : undefined;
+  // v2.3.0 (item 9): o analista não compartilha nem sugere à equipe; cuida só dos próprios cards em Meus
+  const sugerir = undefined;
   try {
     return await dialogo({ titulo: "⚠️ Já existe um card com esse link: " + todos[0], texto: (todos.length > 1 ? "Também: " + todos.slice(1, 4).join(", ") + (todos.length > 4 ? " e mais " + (todos.length - 4) : "") + ". " : "") + "Nada é bloqueado: você decide se salva mesmo assim.", ok: "Salvar mesmo assim", cancelar: "Voltar e editar", extras: sugerir, coluna: !!sugerir });
   } finally { avisandoLink = false; perguntandoDescarte = false; }

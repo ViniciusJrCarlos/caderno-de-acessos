@@ -13,11 +13,27 @@ function carimbarSemData() {
   localStorage.setItem(KEY, JSON.stringify(itens));
   const meta = syncMeta(); meta.ultimaSync = ""; gravarMeta(meta);
 }
+/* v2.3.0 (item 12): a pasta escolhida tem o arquivo da equipe? (sem criar nada) */
+async function pastaTemArquivo(a) {
+  try { const d = await a.carregar(); if (!d) return true; const h = await d.getFileHandle(SYNC_ARQUIVO); const f = await h.getFile(); return f.size > 0; }
+  catch (e) { return !(e && e.name === "NotFoundError"); }
+}
 async function vincularPasta() {
   if (!exigirNome()) return;
   try {
     const a = window.__syncAdaptadorTeste || syncPasta;
     await a.vincular();
+    if (!(await pastaTemArquivo(a))) {
+      const comPerfis = perfisAtivos() || perfisNoArquivo();
+      if (comPerfis && papelAtual() !== "admin") {
+        await a.desvincular(); await atualizarEstadoSync();
+        aviso("Esta pasta não tem o arquivo da equipe", "Com os perfis configurados, só o admin cria um arquivo da equipe novo. Confira se escolheu a pasta certa (json-caderno-acessos) ou peça ao admin.");
+        if (aba === "mais") render();
+        return;
+      }
+      const criar = await dialogo({ titulo: "Esta pasta não tem o arquivo da equipe. Criar um novo?", texto: "Na pasta escolhida não existe o " + SYNC_ARQUIVO + ". Se a equipe já usa um arquivo, cancele e escolha a pasta certa. Criar um novo começa um arquivo da equipe vazio nesta pasta, com os cards da Equipe deste aparelho.", ok: "Criar um novo", cancelar: "Cancelar" });
+      if (!criar) { await a.desvincular(); await atualizarEstadoSync(); toast("Nada foi vinculado"); if (aba === "mais") render(); return; }
+    }
     if (!window.__syncAdaptadorTeste && syncArquivo && await syncArquivo.vinculado()) await syncArquivo.desvincular(); // migra do modo arquivo
     localStorage.setItem(MIGRAR_KEY, "1");
     carimbarSemData();
@@ -29,6 +45,7 @@ async function vincularPasta() {
 }
 async function criarArquivoEquipe() {
   if (!exigirNome()) return;
+  if ((perfisAtivos() || perfisNoArquivo()) && papelAtual() !== "admin") { toast("Com os perfis configurados, só o admin cria um arquivo da equipe novo."); return; } // v2.3.0 (item 12)
   try {
     await syncArquivo.criar(SYNC_ARQUIVO);
     carimbarSemData();
@@ -51,6 +68,7 @@ async function desvincularArquivo() {
   const ok = await dialogo({ titulo: "Desvincular a pasta/arquivo da equipe?", texto: "Os cards continuam neste aparelho. Nada é apagado na pasta.", ok: "Desvincular", cancelar: "Cancelar" });
   if (!ok) return;
   const a = adaptador(); if (a) await a.desvincular();
+  localStorage.removeItem(PERFIS_NO_ARQUIVO_KEY); // v2.3.0: outra pasta pode não ter perfis
   syncEstado.pendente = false;
   await atualizarEstadoSync();
   render();
@@ -71,9 +89,13 @@ function blocoArquivoEquipe(box, bloco) {
   const nome = el("input"); nome.type = "text"; nome.id = "syncNome"; nome.placeholder = "Seu nome"; nome.value = autor(); nome.maxLength = 40; nome.autocomplete = "name";
   const salvarNome = btn("btn", "check", "Salvar nome", () => {
     const v = nome.value.trim(); if (!v) { toast("Digite seu nome"); return; }
+    if (!nomeLivre(v)) return; // v2.3.0 (item 5)
     localStorage.setItem(AUTOR_KEY, v); toast("Nome salvo"); render();
   });
   const linhaNome = el("div", "sync-nome"); linhaNome.appendChild(nome); linhaNome.appendChild(salvarNome);
+  // v2.3.0 (item 5): com perfil, o nome vem do perfil (só o admin renomeia, no Painel de perfis)
+  const meu = perfisAtivos() ? meuPerfil() : null;
+  if (meu) { nome.disabled = true; salvarNome.disabled = true; nome.title = salvarNome.title = "O seu nome vem do seu perfil. Só o admin renomeia (Painel de perfis)."; linhaNome.hidden = true; }
   let botoes;
   if (syncEstado.vinculado) {
     botoes = [btn("btn pri", "refresh", "Sincronizar agora", () => sincronizar(true))];
@@ -89,7 +111,7 @@ function blocoArquivoEquipe(box, bloco) {
   bloco("Arquivo da equipe", syncEstado.vinculado
     ? (syncEstado.modo === "pasta" ? "Pasta vinculada: " : "Arquivo vinculado: ") + syncEstado.nome + (ult ? " · Última sincronização " + dataHoraBR(ult) : "") + "." + (syncEstado.modo === "arquivo" && syncEstado.pastaSuportada ? " Recomendado: vincule a pasta para juntar as cópias de conflito do OneDrive." : "") + " Só cards de Equipe vão para o arquivo; cards Individuais e suas senhas nunca saem deste aparelho." + textoSenhaEquipe()
     : syncEstado.pastaSuportada
-      ? "Escolha a pasta do OneDrive da equipe (json-caderno-acessos). O Caderno usa o arquivo caderno-equipe.json (cria se não existir), junta as cópias de conflito do OneDrive e grava um log de erros na pasta. Só cards de Equipe vão para o arquivo."
+      ? "Escolha a pasta do OneDrive da equipe (json-caderno-acessos). O Caderno usa o arquivo caderno-equipe.json (se a pasta não tiver, pergunta antes de criar), junta as cópias de conflito do OneDrive e grava um log de erros na pasta. Só cards de Equipe vão para o arquivo."
       : "Use um arquivo na pasta do OneDrive (ex.: json-caderno-acessos). Uma pessoa cria o arquivo; as outras usam o arquivo existente. Só cards de Equipe vão para o arquivo.",
     [linhaNome].concat(botoes));
   blocoHistorico(box);

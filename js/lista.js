@@ -49,6 +49,12 @@ function atualizarBarraSelecao() {
   bar.hidden = !on;
   document.body.classList.toggle("selecionando", on);
   if (on) $("selQtd").textContent = selecao.size + (selecao.size === 1 ? " selecionado" : " selecionados");
+  // v2.3.0 (item 3): com cards da Equipe na seleção, o analista não vê Reativar nem Excluir (só o admin)
+  const travado = on && !podeAdminEquipe() && selecionados().some(compartilhado);
+  $("selReativar").hidden = travado; $("selExcluir").hidden = travado;
+  let dica = $("selDica");
+  if (travado && !dica) { dica = el("small", "sel-bar__dica"); dica.id = "selDica"; dica.textContent = "🔒 Reativar e excluir cards da Equipe: " + DICA_ADMIN; $("selCancelar").insertAdjacentElement("beforebegin", dica); }
+  if (dica) dica.hidden = !travado;
 }
 /* ---------- Lista ---------- */
 function visiveis() {
@@ -78,6 +84,9 @@ function render() {
   // v2.0.0: um card com dado estragado nunca derruba a lista (cada card é isolado)
   const nVenc = itens.filter((it) => { try { return !it.arquivado_em && ["Vencendo", "Vencido"].indexOf(statusDe(it)) >= 0; } catch (e) { return false; } }).length;
   document.getElementById("contVenc").textContent = nVenc ? String(nVenc) : "";
+  // v2.3.0 (item 11): cards compartilhados esperando você decidir (adicionar em Meus ou ignorar)
+  const cm = document.getElementById("contMais");
+  if (cm) { let n = 0; try { n = syncEstado.vinculado ? modelosNovos(false).filter(paraMim).length : 0; } catch (e) { n = 0; } cm.textContent = n ? String(n) : ""; cm.title = n ? n + (n === 1 ? " card compartilhado esperando você (Mais › Cards compartilhados)" : " cards compartilhados esperando você (Mais › Cards compartilhados)") : ""; }
   const painel = aba === "mais" || aba === "gerador";
   document.getElementById("buscaWrap").classList.toggle("oculto", painel);
   document.getElementById("novo").classList.toggle("oculto", painel);
@@ -290,7 +299,7 @@ function cardDe(it) {
   if (!it.url) bAb.disabled = true;
   acoes.appendChild(bAb);
   c.appendChild(acoes);
-  if (ind && !it.arquivado_em && aba !== "arquivo") {
+  if (ind && !it.arquivado_em && aba !== "arquivo" && (it.modeloDono || podeAdminEquipe())) { // v2.3.0 (item 9): só o admin compartilha
     if (it.modeloDono) c.appendChild(el("div", "mod-compartilhado", "Compartilhado com a equipe (sem login e senha)"));
     else c.appendChild(btn("btn mod-share", "share", "Compartilhar meu card", () => compartilharMeuCard(it), null, "Envia nome, link, sistema, escalonamento e observações para a equipe, sem login e senha"));
   }
@@ -309,13 +318,14 @@ function abrirMenuCard(it, ancora) {
   m.appendChild(btn("mi", "copy", "Copiar usuário", cur((c) => copiar(c.usuario, "Usuário"))));
   if (it.visibilidade === "Individual" && !it.arquivado_em) {
     if (it.modeloDono) m.appendChild(btn("mi", "x", "Parar de compartilhar", () => { fecharMenus(); pararCompartilhar(atual(it) || it); }));
-    else m.appendChild(btn("mi", "share", "Compartilhar meu card", cur((c) => compartilharMeuCard(c))));
+    else if (podeAdminEquipe()) m.appendChild(btn("mi", "share", "Compartilhar meu card", cur((c) => compartilharMeuCard(c))));
   }
   if (it.arquivado_em && compartilhado(it) && !podeAdminEquipe()) m.appendChild(el("p", "mi-dica", "🔒 Reativar e excluir: " + DICA_ADMIN));
   else if (it.arquivado_em) {
     m.appendChild(btn("mi ok", "restore", "Reativar", cur((c) => { c.arquivado_em = null; save(); toast("Card reativado"); avisarDuplicadosReativados([c]); })));
     m.appendChild(btn("mi warn", "trash", "Excluir", cur((c) => excluir([c]))));
   }
+  else if (compartilhado(it) && !podeAdminEquipe()) m.appendChild(el("p", "mi-dica", "🔒 Arquivar: " + DICA_ADMIN)); // v2.3.0 (item 8)
   else m.appendChild(btn("mi warn", "archive", "Arquivar", cur((c) => { c.arquivado_em = hoje(); save(); toast("Card arquivado"); })));
   ancora.parentNode.appendChild(m);
 }

@@ -47,6 +47,7 @@ function carimbarMudancas() {
       // v2.0.0: baseAt = versão em que esta edição se baseou (a última vista na sincronização), para detectar edição simultânea
       it.baseAt = Object.prototype.hasOwnProperty.call(bases, it.id) ? (bases[it.id] || "") : (it.updatedAt || "");
       it.updatedAt = agora; it.updatedBy = quem; mudou = true;
+      if (typeof marcarAssinar === "function") marcarAssinar("c:" + it.id);
     }
   });
   let rem = removidosLocais();
@@ -59,6 +60,7 @@ function carimbarMudancas() {
       if (paraLixeira.has(id)) addHist({ id: "x-" + id + "-" + agora, tipo: "lixeira", card: String(titulo).slice(0, 200), escopo: "Equipe", quando: agora });
       else histAcao("excluido", { titulo: titulo }, "Equipe", "x-" + id + "-" + agora, agora);
       rem.push({ id: id, deletedAt: agora, deletedBy: quem, titulo: titulo });
+      if (typeof marcarAssinar === "function") marcarAssinar("t:" + id);
       mudou = true;
     }
   });
@@ -121,6 +123,7 @@ async function sincronizarAgora(interativo) {
     // ler → mesclar (principal + cópias de conflito) → gravar → reler para verificar. Repete se o arquivo estiver ocupado.
     await CadernoSync.comRetentativa(async () => {
       const bruto = await a.ler();
+      notarPerfisNoArquivo(bruto); // v2.3.0 (item 1): até os perfis chegarem, este aparelho é analista
       const remoto0 = await abrirDocEquipe(bruto, false); // v1.9.5: decifra se protegido (pede a senha da equipe uma vez por aparelho)
       if (remoto0 && !CadernoSync.docValido(remoto0)) { const e = new Error("O arquivo vinculado não é um arquivo da equipe do Caderno."); e.name = "ArquivoInvalido"; throw e; }
       // v1.9.7: cada card do arquivo é conferido e limpo; o que estiver estragado é ignorado e vai para o log (não trava o app)
@@ -135,6 +138,7 @@ async function sincronizarAgora(interativo) {
       }
       if (!localStorage.getItem(PRIMEIRO_KEY) && autor()) addHist({ id: "pa-" + idAparelho(), tipo: "primeiro", card: "", escopo: "Equipe" });
       carimbarMudancas();
+      await assinarPendentes(); // v2.3.0 (item 6): o que foi feito no modo admin sai assinado
       const meta = syncMeta();
       let base = { itens: itens.filter(compartilhado).map(itemParaEquipe), removidos: removidosLocais() };
       let r = CadernoSync.mesclar(base, remoto, meta.ultimaSync);
@@ -156,7 +160,7 @@ async function sincronizarAgora(interativo) {
       // v2.2.0: perfis (a cópia local repõe o que um app antigo apagou) e permissões dos cards da Equipe também no merge
       const pf = await mesclarPerfisSync(remoto, remoto0, copias);
       if (pf.precisa) precisa = true;
-      const perm = filtrarPermissoesRemoto(r, base, pf.itens, !meta.ultimaSync);
+      const perm = await filtrarPermissoesRemoto(r, base, pf.itens, !meta.ultimaSync, { remoto: remoto, copias: copias, remAqui: remAqui, voltaram: voltaram });
       if (perm.mudou) { precisa = true; localMudou = true; }
       const ex = mesclarExtras(remoto, copias, r, conf, remAqui, voltaram);
       if (ex.precisa) precisa = true;

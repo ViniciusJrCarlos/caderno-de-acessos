@@ -21,8 +21,8 @@
     if (v && typeof v === "object") { const o = {}; Object.keys(v).sort().forEach((k) => { if (v[k] !== undefined) o[k] = canon(v[k]); }); return o; }
     return v;
   }
-  function semMeta(it) { const c = Object.assign({}, it); delete c.updatedAt; delete c.updatedBy; delete c.baseAt; return JSON.stringify(canon(c)); }
-  function semMetaV1(it) { const c = Object.assign({}, it); delete c.updatedAt; delete c.updatedBy; delete c.baseAt; return JSON.stringify(c, Object.keys(c).sort()); }
+  function semMeta(it) { const c = Object.assign({}, it); delete c.updatedAt; delete c.updatedBy; delete c.baseAt; delete c.assin; return JSON.stringify(canon(c)); }
+  function semMetaV1(it) { const c = Object.assign({}, it); delete c.updatedAt; delete c.updatedBy; delete c.baseAt; delete c.assin; return JSON.stringify(c, Object.keys(c).sort()); }
   const LIXEIRA_DIAS = 30;
 
   /* v1.9.4: "Compartilhar meu card". Modelos ficam numa coleção separada ("modelos"), que versões antigas ignoram.
@@ -53,7 +53,7 @@
    * Lista branca de campos, tudo vira texto com limite; chaves perigosas (__proto__ etc.) nunca entram. Devolve null se inválido. */
   const CAMPOS_CARD = { id: 64, titulo: 200, aplicacao: 200, cliente: 200, categoria: 20, visibilidade: 20, url: 2000, usuario: 500, senha: 500,
     ciclo: 10, ultima: 40, horario: 500, escalonamento: 5000, obs: 5000, arquivado_em: 40, senha_atualizada_em: 40, updatedAt: 40, updatedBy: 120,
-    modeloId: 80, modeloDono: 80, modeloPor: 120, baseAt: 40 };
+    modeloId: 80, modeloDono: 80, modeloPor: 120, baseAt: 40, assin: 240 }; // v2.3.0: assin = assinatura ECDSA do admin (perfil:assinatura)
   /* v2.0.0: limites dos níveis de escalonamento (os mesmos da ficha). */
   const LIMITES_NIVEL = { max: 20, valor: 2000, nome: 200, horario: 200, obs: 1000 };
   /* v2.0.0: datas inválidas viram vazias (uma data como "ontem" derrubava a lista na v1.9.9). */
@@ -144,7 +144,7 @@
     if (!docValido(d)) return { doc: d, invalidos: [] };
     const f = filtrarItens(d.itens);
     const out = { tipo: TIPO, versao: d.versao, itens: f.itens,
-      removidos: (Array.isArray(d.removidos) ? d.removidos : []).filter((t) => t && typeof t === "object" && (typeof t.id === "string" || typeof t.id === "number")).map((t) => ({ id: String(t.id).slice(0, 64), deletedAt: txt(t.deletedAt, 40), deletedBy: txt(t.deletedBy, 120), titulo: txt(t.titulo, 200) })) };
+      removidos: (Array.isArray(d.removidos) ? d.removidos : []).filter((t) => t && typeof t === "object" && (typeof t.id === "string" || typeof t.id === "number")).map((t) => { const o = { id: String(t.id).slice(0, 64), deletedAt: txt(t.deletedAt, 40), deletedBy: txt(t.deletedBy, 120), titulo: txt(t.titulo, 200) }; if (t.assin) o.assin = txt(t.assin, 240); if (t.origAt) o.origAt = txt(t.origAt, 40); return o; }) };
     if (Array.isArray(d.modelos)) out.modelos = d.modelos.filter((m) => m && typeof m === "object" && !Array.isArray(m));
     if (Array.isArray(d.modelosRemovidos)) out.modelosRemovidos = d.modelosRemovidos.filter((t) => t && typeof t === "object" && t.id != null);
     out.historico = limparHistorico(d.historico);
@@ -166,6 +166,10 @@
     const h = txt(p.adminHash, 128), sa = txt(p.adminSalt, 64), it = parseInt(p.adminIter, 10);
     if (h && HEX.test(h) && sa && HEX.test(sa)) { o.adminHash = h; o.adminSalt = sa; o.adminIter = it > 0 && it <= 5e6 ? it : 310000; }
     if (p.trocarSenha === true) o.trocarSenha = true;
+    // v2.3.0: chave pública ECDSA do admin (verifica as mudanças assinadas) e a privada, cifrada com a senha de admin
+    const cp = txt(p.chavePub, 400), cv = txt(p.chavePriv, 600), cs = txt(p.chaveSalt, 64);
+    if (o.papel === "admin" && cp && /^[A-Za-z0-9_\-.]+$/.test(cp)) o.chavePub = cp;
+    if (o.papel === "admin" && cv && /^[A-Za-z0-9+\/=.]+$/.test(cv) && cs && HEX.test(cs)) { o.chavePriv = cv; o.chaveSalt = cs; }
     return o;
   }
   function limparPerfis(l) {
@@ -184,6 +188,8 @@
       const outro = novo.id === p.id && novo.updatedAt === p.updatedAt && novo.adminHash === p.adminHash ? a : p;
       // cópia local sem hash (aparelho sem a chave do cofre) nunca apaga o hash do admin: o hash só sai quando o papel deixa de ser admin
       if (novo.papel === "admin" && !novo.adminHash && outro.adminHash) { novo.adminHash = outro.adminHash; novo.adminSalt = outro.adminSalt; novo.adminIter = outro.adminIter; }
+      if (novo.papel === "admin" && !novo.chavePub && outro.chavePub) novo.chavePub = outro.chavePub;
+      if (novo.papel === "admin" && !novo.chavePriv && outro.chavePriv && (!novo.chavePub || novo.chavePub === outro.chavePub)) { novo.chavePriv = outro.chavePriv; novo.chaveSalt = outro.chaveSalt; }
       novo.ultimaSync = vivo.ultimaSync; novo.versao = vivo.versao;
       novo.ultimoAcesso = ts(p.ultimoAcesso) > ts(a.ultimoAcesso) ? p.ultimoAcesso : a.ultimoAcesso;
       m.set(p.id, novo);
@@ -221,7 +227,7 @@
    * Versões antigas (v1.9.x) ignoram esses campos; cada aparelho v2.0.0 guarda uma cópia local e repõe no próximo envio. */
   function limparRemocoes(l) {
     return (Array.isArray(l) ? l : []).filter((t) => t && typeof t === "object" && t.id != null && typeof t.id !== "object")
-      .map((t) => ({ id: String(t.id).slice(0, 120), em: isoValido(t.em), por: txt(t.por, 120) })).filter((t) => t.em).slice(0, 2000);
+      .map((t) => { const o = { id: String(t.id).slice(0, 120), em: isoValido(t.em), por: txt(t.por, 120) }; if (t.assin) o.assin = txt(t.assin, 240); return o; }).filter((t) => t.em).slice(0, 2000);
   }
   function limparLixeira(l) {
     return (Array.isArray(l) ? l : []).map((e) => {

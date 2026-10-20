@@ -351,3 +351,15 @@ body.travado .login { animation:caderno-fade .2s ease; }
 .perfis select { padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--input); color:var(--text); font-size:14px; }
 .dlg-perfis { max-width:640px; }
 @media (max-width:600px) { .selo-admin small { display:none; } }
+/* v2.3.0 (item 7): senha de admin com botão de olho e medidor de força (BEM) */
+.se-campo.campo-senha .campo-senha__linha { display:flex; align-items:center; gap:6px; margin:0; font-size:inherit; font-weight:normal; }
+.campo-senha__linha input { flex:1; min-width:0; }
+.campo-senha__olho { flex:none; display:inline-flex; align-items:center; justify-content:center; width:40px; height:40px; border:1px solid var(--line, #ccc); border-radius:10px; background:transparent; color:inherit; cursor:pointer; }
+.campo-senha__olho:focus-visible { outline:2px solid var(--pri); outline-offset:2px; }
+.forca-senha { display:flex; align-items:center; gap:8px; margin:-4px 0 10px; min-height:18px; font-size:12px; }
+.forca-senha__barra { flex:none; display:inline-block; width:90px; height:6px; border-radius:999px; background:var(--line, #ddd); transition:box-shadow .2s; }
+.forca-senha--fraca .forca-senha__barra { box-shadow:inset 30px 0 0 var(--danger, #dc2626); }
+.forca-senha--media .forca-senha__barra { box-shadow:inset 60px 0 0 #d97706; }
+.forca-senha--forte .forca-senha__barra { box-shadow:inset 90px 0 0 #16a34a; }
+.sel-bar__dica { font-size:12px; opacity:.85; }
+.cont--compartilhados { background:var(--pri); margin-left:4px; }
