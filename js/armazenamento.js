@@ -104,6 +104,7 @@ function load() {
   if (mudou || saneou) localStorage.setItem(KEY, JSON.stringify(itens));
   if (window.CadernoSync && !syncMeta().marcas) carimbarMudancas();
   else if (window.CadernoSync) migrarMarcas(marcasAntes);
+  if (typeof fotografarEquipe === "function") fotografarEquipe();
 }
 /* v2.0.0 (E1): abrir o app ou ajustar cards antigos (sem níveis, só o texto do escalonamento, data inválida) nunca muda
  * updatedAt/updatedBy nem cria Histórico. Se a marca guardada era a do card antes do ajuste (em qualquer fórmula), passa a ser a do
@@ -120,10 +121,12 @@ function migrarMarcas(antes) {
   if (mudou) gravarMeta(meta);
 }
 function save() {
+  if (typeof guardarPermissoes === "function") guardarPermissoes(); // v2.2.0: o analista não grava o que só o admin pode mudar
   if (window.CadernoSync) carimbarMudancas();
   registrarMeus();
   restaurando.clear(); paraLixeira.clear(); paraLixeiraMeus.clear(); restaurandoMeus.clear();
   localStorage.setItem(KEY, JSON.stringify(itens));
+  if (typeof fotografarEquipe === "function") fotografarEquipe();
   render();
   if (window.CadernoSync) agendarSync();
 }

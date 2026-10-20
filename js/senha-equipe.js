@@ -69,7 +69,7 @@ function botoesSenhaEquipe() {
   if (!window.CadernoCripto || !(window.crypto && crypto.subtle)) return [];
   if (seEstado.precisaSenha) return [btn("btn pri", "lock", "Digitar senha da equipe", () => pedirSenhaEquipe(seEstado.env))];
   if (!seEstado.protegido) return [btn("btn", "lock", "Proteger arquivo com senha da equipe", () => abrirProtegerEquipe(false))];
-  const out = [btn("btn", "key", "Trocar senha da equipe", () => abrirProtegerEquipe(true))];
+  const out = podeAdminEquipe() ? [btn("btn", "key", "Trocar senha da equipe", () => abrirProtegerEquipe(true))] : [];
   const olho = lerJSON(SE_OLHO_KEY, null);
   if (olho && olho.salt === lerSE().atual) out.push(btn("btn", "eye", "Ver senha da equipe", verSenhaEquipe));
   return out;
@@ -81,6 +81,7 @@ function campoSenha(box, id, rot, auto) {
 }
 function abrirProtegerEquipe(trocar) {
   if (!exigirNome()) return;
+  if (!podeAdminEquipe()) { toast(DICA_ADMIN + " (senha da equipe)."); return; }
   return janela("dlgSE", (box, fim) => {
     box.appendChild(el("h3", "", trocar ? "Trocar senha da equipe" : "Proteger arquivo com senha da equipe"));
     box.appendChild(el("p", "meta", trocar ? "O arquivo é cifrado de novo com a senha nova. Cada analista vai digitar a senha nova uma vez. Passe a senha nova só para quem continua na equipe." : "O caderno-equipe.json passa a ficar ilegível fora do app. Cada analista digita esta senha uma vez por aparelho. A senha não fica gravada no arquivo: se a equipe inteira esquecer, o arquivo não abre (os cards continuam nos aparelhos)."));

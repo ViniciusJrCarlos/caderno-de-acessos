@@ -338,3 +338,16 @@ body.travado .login { animation:caderno-fade .2s ease; }
 .mod-para-novo { display:flex; gap:6px; margin-top:4px; }
 .mod-para-novo input { flex:1; min-width:0; }
 .rc-parecido, .rc-sugerido { font-size:13px; }
+/* v2.2.0: perfis — selo "Modo admin", cadeados da ficha do analista, avisos */
+.selo-admin { background:var(--ylw-bg); color:var(--ylw); border:1px solid var(--ylw-bd); border-radius:10px; display:inline-flex; flex-direction:column; align-items:flex-start; line-height:1.15; padding:4px 10px; margin-left:auto; cursor:pointer; font-weight:700; font-size:13px; }
+.selo-admin small { font-size:11px; font-weight:400; text-decoration:underline; }
+.selo-admin[hidden] { display:none; }
+.selo-admin:not([hidden]) + .sync-btn { margin-left:0; }
+.trava-dica { display:block; font-size:12px; color:var(--muted); margin-top:3px; }
+[data-trava]:disabled { opacity:.65; cursor:not-allowed; }
+.mi-dica { margin:4px 10px; font-size:12px; color:var(--muted); max-width:220px; }
+.aviso-admin { font-size:12px; color:var(--muted); font-style:italic; }
+.perfil-inativo b { text-decoration:line-through; opacity:.7; }
+.perfis select { padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--input); color:var(--text); font-size:14px; }
+.dlg-perfis { max-width:640px; }
+@media (max-width:600px) { .selo-admin small { display:none; } }

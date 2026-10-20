@@ -8,6 +8,7 @@
  * descartado sem perguntar (beforeunload é desligado antes). */
 let travadoEmMemoria = false;
 function bloquear(auto) {
+  try { sairModoAdmin(true); } catch (e) {} // v2.2.0: o modo admin acaba no bloqueio e no logout
   try { sessionStorage.removeItem(SESSAO); } catch (e) {}
   document.body.classList.add("travado");
   travadoEmMemoria = true;

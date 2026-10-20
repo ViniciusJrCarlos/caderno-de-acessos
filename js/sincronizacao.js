@@ -153,14 +153,19 @@ async function sincronizarAgora(interativo) {
       copiasFechadas = copiasFechadas.filter((n, i, l) => l.indexOf(n) === i);
       // v1.9.7: histórico da Equipe viaja no arquivo; primeiro o que veio do arquivo (vence pelo id), depois o deste aparelho e o deduzido das mudanças
       // v2.0.0: lixeira da Equipe e cópias de conflito (juntadas com a cópia local, que repõe o que um app v1.9.x tenha apagado)
+      // v2.2.0: perfis (a cópia local repõe o que um app antigo apagou) e permissões dos cards da Equipe também no merge
+      const pf = await mesclarPerfisSync(remoto, remoto0, copias);
+      if (pf.precisa) precisa = true;
+      const perm = filtrarPermissoesRemoto(r, base, pf.itens, !meta.ultimaSync);
+      if (perm.mudou) { precisa = true; localMudou = true; }
       const ex = mesclarExtras(remoto, copias, r, conf, remAqui, voltaram);
       if (ex.precisa) precisa = true;
       const histLocal = lerHist();
-      const histEq = CadernoSync.mesclarHistorico([remoto ? remoto.historico : [], ...copias.map((c) => c.doc.historico), histLocal.filter((e) => e.escopo === "Equipe" && !e.local), mud.map(histDeMudanca), ex.hist], CadernoSync.HIST_MAX);
+      const histEq = CadernoSync.mesclarHistorico([remoto ? remoto.historico : [], ...copias.map((c) => c.doc.historico), histLocal.filter((e) => e.escopo === "Equipe" && !e.local), mud.map(histDeMudanca), ex.hist, perm.hist], CadernoSync.HIST_MAX);
       const idsRem = new Set(((remoto && remoto.historico) || []).map((e) => e.id));
       if (histEq.some((e) => !idsRem.has(e.id))) precisa = true;
-      if (precisa) await a.gravar(await fecharDocEquipe(CadernoSync.montarDoc(r.itens, r.removidos, autor(), compartilhado, { modelos: rm.itens, modelosRemovidos: rm.removidos, historico: histEq, lixeira: ex.lixeira, lixeiraRemovidos: ex.lixRem, conflitos: ex.conflitos, conflitosResolvidos: ex.confRes }), bruto));
-      resultado = { r: r, mud: mud, conf: ex.novosConf, localMudou: localMudou, rm: rm, histEq: histEq, ex: ex };
+      if (precisa) await a.gravar(await fecharDocEquipe(CadernoSync.montarDoc(r.itens, r.removidos, autor(), compartilhado, { modelos: rm.itens, modelosRemovidos: rm.removidos, historico: histEq, lixeira: ex.lixeira, lixeiraRemovidos: ex.lixRem, conflitos: ex.conflitos, conflitosResolvidos: ex.confRes, perfis: pf.gravar ? pf.itens : [] }), bruto));
+      resultado = { r: r, mud: mud, conf: ex.novosConf, localMudou: localMudou, rm: rm, histEq: histEq, ex: ex, perfis: pf.itens };
       copiasMescladas = copias.map((c) => c.nome);
     }, { aoFalhar: () => { syncEstado.pendente = true; desenharBotaoSync(); } });
     await concluirSenhaPendente(a);
@@ -172,6 +177,7 @@ async function sincronizarAgora(interativo) {
     adotarModelosOrfaos();
     gravarLixeiraEq({ itens: resultado.ex.lixeira, removidos: resultado.ex.lixRem });
     gravarConflitos({ itens: resultado.ex.conflitos, resolvidos: resultado.ex.confRes });
+    await concluirPerfisSync(resultado.perfis);
     aplicarResultado(resultado.r);
     // só apaga as cópias depois da gravação verificada do arquivo principal
     for (const nome of copiasMescladas) {
@@ -245,4 +251,5 @@ function aplicarResultado(r0) {
   const marcas = {}, bases = {}; itens.filter(compartilhado).forEach((it) => { marcas[it.id] = marcaDe(it); bases[it.id] = it.updatedAt || ""; });
   gravarMeta(Object.assign({}, syncMeta(), { ultimaSync: new Date().toISOString(), marcas: marcas, bases: bases, marcaV: 3 }));
   fotoMeus = fotoIndividuais();
+  if (typeof fotografarEquipe === "function") fotografarEquipe();
 }

@@ -1,4 +1,4 @@
-# Arquitetura do Caderno de Acessos (v2.1.0)
+# Arquitetura do Caderno de Acessos (v2.2.0)
 
 O app é um site estático (PWA) sem servidor e sem ferramenta de build. O navegador baixa os arquivos como estão e o service worker (`sw.js`) os guarda para funcionar offline. Os dados ficam no aparelho (localStorage). Os cards da Equipe também vão para o arquivo da equipe (`caderno-equipe.json`), numa pasta do OneDrive escolhida por cada analista.
 
@@ -24,6 +24,7 @@ O app é um site estático (PWA) sem servidor e sem ferramenta de build. O naveg
 | `js/historico.js` | Histórico (Equipe/Meu), registros de Meus, bloco do Histórico. |
 | `js/sincronizacao.js` | Adaptador da pasta, `carimbarMudancas`, `sincronizarAgora`, `aplicarResultado`. |
 | `js/senha-equipe.js` | Arquivo da equipe cifrado: abrir, fechar, proteger, pedir e ver a senha. |
+| `js/perfis.js` | v2.2.0: perfis Admin e Analista nos cards da Equipe: lista `perfis` (no arquivo cifrado e no cofre local cifrado), Configurar perfis, Entrar como admin (modo admin em memória), painel de perfis, escolha do nome, regras de permissão no `save()` (`guardarPermissoes`), no merge (`filtrarPermissoesRemoto`, `mesclarPerfisSync`) e na importação, cadeados da ficha. |
 | `js/compartilhados.js` | "Compartilhar meu card" (modelos sem login e senha), "Só para…", adoção, Card parecido, tela Cards compartilhados. |
 | `js/mais.js` | Aba Mais: vincular/criar/usar/desvincular o arquivo, `renderMais`, funções das novidades. |
 | `js/gerador.js` | Gerador de senhas. |
@@ -54,6 +55,13 @@ Em CSS vale a última regra de mesma força, por isso **não mude a ordem dos ar
 4. Modelos, Lixeira, conflitos e Histórico são juntados à parte. A cópia local repõe o que uma versão antiga tenha apagado.
 5. Se algo mudou, `montarDoc()` monta o arquivo (nunca com nada Individual, nunca com login ou senha nos modelos), e `fecharDocEquipe()` cifra e grava.
 6. `aplicarResultado()` traz para a tela o que chegou, e `verificarModelos()` avisa se chegou card compartilhado novo.
+
+## Perfis (v2.2.0)
+- **Sem admin no arquivo, nada muda** (`papelAtual()` = `livre`). Com perfis: `admin` (só no modo admin), `analista` ou `leitura` (analista desativado).
+- **Onde ficam:** coleção `perfis` no topo do arquivo da equipe, que só é gravada se o arquivo for cifrado. No aparelho: `caderno-perfis` (sem hashes) e `caderno-perfis-cofre` (lista completa, cifrada com a chave da equipe). Apps antigos descartam `perfis` ao regravar; a v2.2.0 repõe a partir do cofre e registra quem gravou (`caderno-perfis-antigos`) para o aviso "ainda está numa versão antiga".
+- **Merge dos perfis:** `CadernoSync.mesclarPerfis` junta pelo id, vence o `updatedAt` mais novo, nunca apaga (só desativa) e nunca perde o hash de um admin por causa de uma cópia sem hash.
+- **Camada de dados:** `guardarPermissoes()` no começo do `save()` compara com a foto `baseEquipe` (tirada no `load()`, depois de cada `save()` e do `aplicarResultado()`) e desfaz o que o analista não pode mudar (`CAMPOS_ANALISTA`). No merge, `filtrarPermissoesRemoto()` desfaz mudanças proibidas cujo `updatedBy` não é admin. Para liberar observações ou horário ao analista, basta incluir `obs`/`horario` em `CAMPOS_ANALISTA` e tirar `fObs`/`fHorario` de `CAMPOS_FICHA_ADMIN`.
+- **É proteção de tela**: quem tem o arquivo e a senha da equipe pode alterá-lo por fora; apps antigos não respeitam as permissões.
 
 ## Convenção para código novo
 - **Onde colocar:** no arquivo do assunto. Se não houver, crie um arquivo novo e inclua-o **no `index.html` (antes do `js/app.js`) e na lista `FILES` do `sw.js`**, subindo a versão do cache (`caderno-web-vNN`). Sem isso, o app offline quebra.

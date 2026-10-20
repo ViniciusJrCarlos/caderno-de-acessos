@@ -130,6 +130,7 @@ function renderMais(box) {
   bloco("Tema", "Aparência só deste aparelho. Vale também para a tela de login.", bt);
   try { blocoAvisos(box); } catch (e) {}
   blocoArquivoEquipe(box, bloco);
+  try { blocoPerfis(box); } catch (e) {}
   blocoModelos(box);
   try { blocoLixeira(box); } catch (e) {}
   bloco("Compartilhar com a equipe", "Gera o JSON para os outros analistas. Cards Individuais vão sem usuário e sem senha (só título, aplicação, cliente, URL etc.).",

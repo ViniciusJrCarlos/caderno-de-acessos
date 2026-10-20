@@ -6,6 +6,7 @@
 async function excluir(lista) {
   lista = lista.map(atual).filter((it) => it && it.arquivado_em);
   if (!lista.length) return false;
+  if (bloqueadoEquipe(lista)) return false;
   const temEq = lista.some(compartilhado);
   const sim = await dialogo({
     titulo: lista.length === 1 ? "Mover " + nomeDe(lista[0]) + " para a Lixeira?" : "Mover " + lista.length + " acessos para a Lixeira?",
@@ -50,6 +51,7 @@ function lerLixeiraMeus() {
 function gravarLixeiraMeus(l) { localStorage.setItem(LIX_MEUS_KEY, JSON.stringify(l)); }
 function restaurarDaLixeira(ids) {
   const lixEq = lerLixeiraEq(); let lixMeus = lerLixeiraMeus();
+  if (!podeAdminEquipe() && lixEq.itens.some((e) => ids.indexOf(e.id) >= 0)) { toast(DICA_ADMIN + " (Lixeira da Equipe)."); return false; }
   const agora = new Date().toISOString(), quem = autor();
   let n = 0;
   ids.forEach((id) => {
@@ -68,6 +70,7 @@ function restaurarDaLixeira(ids) {
   return n;
 }
 async function apagarDaLixeira(e, equipe) {
+  if (equipe && !podeAdminEquipe()) { toast(DICA_ADMIN + " (Lixeira da Equipe)."); return false; }
   const sim = await dialogo({ titulo: "Excluir agora da lixeira?", texto: "O card " + nomeDe(e.card) + " será apagado de vez" + (equipe ? ", para toda a equipe" : "") + ". Não dá para desfazer.", ok: "Excluir agora", cancelar: "Cancelar", perigo: true });
   if (!sim) return false;
   const agora = new Date().toISOString(), quem = autor();
@@ -100,8 +103,11 @@ function blocoLixeira(box) {
       tx.appendChild(el("div", "hist2-sub", "Excluído" + (e.excluidoPor ? " por " + e.excluidoPor : "") + " em " + dataHoraBR(e.excluidoEm) + " · apaga sozinho em " + diasParaApagar(e) + " dia(s)"));
       li.appendChild(tx);
       const ac = el("div", "lix-acoes");
-      ac.appendChild(btn("btn pequeno pri", "restore", "Restaurar", () => { restaurarDaLixeira([e.id]); }));
-      ac.appendChild(btn("btn pequeno perigo", "trash", "Excluir agora da lixeira", () => apagarDaLixeira(e, equipe)));
+      if (equipe && !podeAdminEquipe()) ac.appendChild(el("small", "trava-dica", "🔒 " + DICA_ADMIN));
+      else {
+        ac.appendChild(btn("btn pequeno pri", "restore", "Restaurar", () => { restaurarDaLixeira([e.id]); }));
+        ac.appendChild(btn("btn pequeno perigo", "trash", "Excluir agora da lixeira", () => apagarDaLixeira(e, equipe)));
+      }
       li.appendChild(ac); ul.appendChild(li);
     });
     c.appendChild(ul);

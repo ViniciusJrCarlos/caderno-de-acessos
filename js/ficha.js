@@ -50,6 +50,7 @@ function abrirFicha(it) {
   $("erroForm").textContent = "";
   $("avisoInd").hidden = $("fVisibilidade").value !== "Individual";
   atualizarContadores();
+  aplicarTravasFicha(it); // v2.2.0: cadeados do analista nos cards da Equipe
   abrirSheet("sheet");
   fichaFoto = fotoFicha();
   setTimeout(() => $("fTitulo").focus(), 50);
@@ -171,7 +172,7 @@ async function conferirLinkDuplicado(o) {
     const mesmo = dup.filter((c) => mesmoCliente(c.cliente, o.cliente));
     if (dup.length && (linkMudou || mesmo.length)) {
       const alvo = mesmo[0] || dup[0];
-      const podeOutra = !mesmo.length && !!normTxt(o.cliente) && dup.every((c) => !!normTxt(c.cliente));
+      const podeOutra = podeAdminEquipe() && !mesmo.length && !!normTxt(o.cliente) && dup.every((c) => !!normTxt(c.cliente));
       const podeMeus = !antes || !compartilhado(antes);
       const extras = [];
       if (podeOutra) extras.push({ texto: "Salvar como outra operação", valor: "outra" });
@@ -213,8 +214,10 @@ async function conferirLinkDuplicado(o) {
   const todos = r.meus.map((c) => rot(c, "Meus")).concat(r.equipe.map((c) => rot(c, "Equipe")));
   if (!todos.length) return true;
   avisandoLink = true; perguntandoDescarte = true;
+  // v2.2.0: com perfis, o analista (que só cria em Meus) também pode salvar em Meus e sugerir à equipe; nunca “outra operação”
+  const sugerir = !podeAdminEquipe() && !antes && r.equipe.length ? [{ texto: "Salvar em Meus e sugerir à equipe", valor: "meus" }] : undefined;
   try {
-    return await dialogo({ titulo: "⚠️ Já existe um card com esse link: " + todos[0], texto: (todos.length > 1 ? "Também: " + todos.slice(1, 4).join(", ") + (todos.length > 4 ? " e mais " + (todos.length - 4) : "") + ". " : "") + "Nada é bloqueado: você decide se salva mesmo assim.", ok: "Salvar mesmo assim", cancelar: "Voltar e editar" });
+    return await dialogo({ titulo: "⚠️ Já existe um card com esse link: " + todos[0], texto: (todos.length > 1 ? "Também: " + todos.slice(1, 4).join(", ") + (todos.length > 4 ? " e mais " + (todos.length - 4) : "") + ". " : "") + "Nada é bloqueado: você decide se salva mesmo assim.", ok: "Salvar mesmo assim", cancelar: "Voltar e editar", extras: sugerir, coluna: !!sugerir });
   } finally { avisandoLink = false; perguntandoDescarte = false; }
 }
 /* v2.0.1 (item 5): Histórico da Equipe "Card salvo com link repetido (outra operação) por Fulano". */

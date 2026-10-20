@@ -27,6 +27,7 @@ function avisarDuplicadosNovos() {
   return true;
 }
 function painelDuplicados() {
+  if (!podeAdminEquipe()) { toast("O admin vai resolver os cards repetidos."); return Promise.resolve(false); }
   const gs = gruposDuplicados();
   if (!gs.length) { toast("Nenhum card da Equipe repetido"); return Promise.resolve(false); }
   return janela("dlgVer", (box, fim) => {
@@ -61,13 +62,13 @@ function faixaAvisos(box) {
   if (cs.length) {
     const l = el("div", "faixa-it faixa-conflito");
     l.appendChild(el("span", "", cs.length === 1 ? tituloConflito(cs[0]) + ": " + cs[0].titulo : "⚠️ " + cs.length + " cards editados ao mesmo tempo por pessoas diferentes"));
-    l.appendChild(botaoDlg("pequeno", "Ver as duas versões", () => verConflito(cs[0].id)));
+    l.appendChild(podeAdminEquipe() ? botaoDlg("pequeno", "Ver as duas versões", () => verConflito(cs[0].id)) : el("small", "aviso-admin", "O admin vai resolver"));
     f.appendChild(l);
   }
   if (gs.length) {
     const l = el("div", "faixa-it faixa-dup");
     l.appendChild(el("span", "", textoDuplicados(gs)));
-    l.appendChild(botaoDlg("pequeno", "Ver", () => painelDuplicados()));
+    l.appendChild(podeAdminEquipe() ? botaoDlg("pequeno", "Ver", () => painelDuplicados()) : el("small", "aviso-admin", "O admin vai resolver"));
     f.appendChild(l);
   }
   box.appendChild(f);
@@ -79,7 +80,7 @@ function blocoAvisos(box) {
   if (!cs.length && !gs.length) { c.appendChild(el("p", "meta", "Nenhum conflito de edição nem card da Equipe com o mesmo link.")); box.appendChild(c); return; }
   if (cs.length) {
     const ul = el("ul", "lix-lista");
-    cs.forEach((x) => { const li = el("li", "lix-it"); const tx = el("div", "lix-tx"); tx.appendChild(el("b", "", tituloConflito(x))); tx.appendChild(el("div", "hist2-sub", x.titulo + " · " + dataHoraBR(x.quando))); li.appendChild(tx); const ac = el("div", "lix-acoes"); ac.appendChild(botaoDlg("pequeno pri", "Ver as duas versões", () => verConflito(x.id))); li.appendChild(ac); ul.appendChild(li); });
+    cs.forEach((x) => { const li = el("li", "lix-it"); const tx = el("div", "lix-tx"); tx.appendChild(el("b", "", tituloConflito(x))); tx.appendChild(el("div", "hist2-sub", x.titulo + " · " + dataHoraBR(x.quando))); li.appendChild(tx); const ac = el("div", "lix-acoes"); ac.appendChild(podeAdminEquipe() ? botaoDlg("pequeno pri", "Ver as duas versões", () => verConflito(x.id)) : el("small", "aviso-admin", "O admin vai resolver")); li.appendChild(ac); ul.appendChild(li); });
     c.appendChild(ul);
   }
   if (gs.length) {
@@ -87,7 +88,7 @@ function blocoAvisos(box) {
     const ul = el("ul", "lix-lista");
     gs.forEach((g) => { const li = el("li", "lix-it"); const tx = el("div", "lix-tx"); tx.appendChild(el("b", "", g.url)); tx.appendChild(el("div", "hist2-sub", g.cards.map((x) => nomeDe(x) + " (" + rotuloCliente(x) + ")").join(" · "))); li.appendChild(tx); ul.appendChild(li); });
     c.appendChild(ul);
-    const row = el("div", "acoes-mais"); row.appendChild(botaoDlg("pri", "Ver e resolver", () => painelDuplicados())); c.appendChild(row);
+    const row = el("div", "acoes-mais"); row.appendChild(podeAdminEquipe() ? botaoDlg("pri", "Ver e resolver", () => painelDuplicados()) : el("p", "meta aviso-admin", "O admin vai resolver.")); c.appendChild(row);
   }
   box.appendChild(c);
 }

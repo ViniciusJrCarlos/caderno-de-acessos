@@ -97,6 +97,8 @@ function listaNomes(l, n) { n = n || 5; return l.slice(0, n).join(", ") + (l.len
 async function importarComPrevia(listaBruta, titulo) {
   if (listaBruta.length > IMPORT_MAX_CARDS) { aviso("Arquivo grande demais", "O arquivo tem " + listaBruta.length + " cards. O limite é " + IMPORT_MAX_CARDS + " por importação. Nada foi importado."); return false; }
   const prep = prepararImportacao(listaBruta);
+  const fe = filtrarImportacaoEquipe(prep.itens); prep.itens = fe.itens; // v2.2.0: só o admin importa para a Equipe
+  if (fe.fora) toast(fe.fora + " card(s) da Equipe ficaram de fora: só o admin importa para a Equipe.");
   if (!prep.itens.length) { aviso("Nada importado", "Nenhum card válido no arquivo" + (prep.invalidos.length ? " (" + prep.invalidos.length + " ignorado(s) por formato errado)" : "") + "."); return false; }
   const sim = mesclar(prep.itens.map((x) => Object.assign({}, x)), itens.map((x) => Object.assign({}, x)), "manter");
   const modo = await janela("dlgVer", (box, fim) => {

@@ -152,7 +152,43 @@
     out.lixeiraRemovidos = limparRemocoes(d.lixeiraRemovidos);
     out.conflitos = limparConflitos(d.conflitos);
     out.conflitosResolvidos = limparRemocoes(d.conflitosResolvidos);
+    if (Array.isArray(d.perfis)) out.perfis = limparPerfis(d.perfis); // v2.2.0: sem a coleção = app antigo gravou (o cache local repõe)
     return { doc: out, invalidos: f.invalidos };
+  }
+  /* v2.2.0: perfis da equipe (admin/analista). Só nomes, papéis e o hash PBKDF2 da senha de admin; viaja só dentro do arquivo cifrado. */
+  const HEX = /^[0-9a-f]*$/i;
+  function limparPerfil(p) {
+    if (!p || typeof p !== "object" || Array.isArray(p) || (typeof p.id !== "string" && typeof p.id !== "number")) return null;
+    const nome = txt(p.nome, 60).trim(); if (!nome) return null;
+    const o = { id: String(p.id).slice(0, 64), nome: nome, papel: p.papel === "admin" ? "admin" : "analista", ativo: p.ativo !== false,
+      criadoPor: txt(p.criadoPor, 120), criadoEm: txt(p.criadoEm, 40), updatedAt: txt(p.updatedAt, 40), updatedBy: txt(p.updatedBy, 120),
+      ultimoAcesso: txt(p.ultimoAcesso, 40), ultimaSync: txt(p.ultimaSync, 40), versao: txt(p.versao, 20) };
+    const h = txt(p.adminHash, 128), sa = txt(p.adminSalt, 64), it = parseInt(p.adminIter, 10);
+    if (h && HEX.test(h) && sa && HEX.test(sa)) { o.adminHash = h; o.adminSalt = sa; o.adminIter = it > 0 && it <= 5e6 ? it : 310000; }
+    if (p.trocarSenha === true) o.trocarSenha = true;
+    return o;
+  }
+  function limparPerfis(l) {
+    const vistos = new Set();
+    return (Array.isArray(l) ? l : []).map(limparPerfil).filter((p) => p && !vistos.has(p.id) && vistos.add(p.id)).slice(0, 300);
+  }
+  /* Junta listas de perfis pelo id. Nunca apaga (só desativa). Dados do perfil: vence o updatedAt mais novo;
+   * último acesso/sincronização/versão: o mais recente (cada um atualiza o seu, sem mexer no updatedAt). */
+  function mesclarPerfis(listas) {
+    const m = new Map();
+    listas.forEach((l) => limparPerfis(l).forEach((p) => {
+      const a = m.get(p.id);
+      if (!a) { m.set(p.id, p); return; }
+      const novo = ts(p.updatedAt) > ts(a.updatedAt) ? Object.assign({}, p) : Object.assign({}, a);
+      const vivo = ts(p.ultimaSync) > ts(a.ultimaSync) ? p : a;
+      const outro = novo.id === p.id && novo.updatedAt === p.updatedAt && novo.adminHash === p.adminHash ? a : p;
+      // cópia local sem hash (aparelho sem a chave do cofre) nunca apaga o hash do admin: o hash só sai quando o papel deixa de ser admin
+      if (novo.papel === "admin" && !novo.adminHash && outro.adminHash) { novo.adminHash = outro.adminHash; novo.adminSalt = outro.adminSalt; novo.adminIter = outro.adminIter; }
+      novo.ultimaSync = vivo.ultimaSync; novo.versao = vivo.versao;
+      novo.ultimoAcesso = ts(p.ultimoAcesso) > ts(a.ultimoAcesso) ? p.ultimoAcesso : a.ultimoAcesso;
+      m.set(p.id, novo);
+    }));
+    return Array.from(m.values()).sort((a, b) => String(a.criadoEm).localeCompare(String(b.criadoEm)) || a.id.localeCompare(b.id));
   }
   /* v1.9.7: histórico estruturado { id, tipo, card, quem, quando, escopo }. Nunca guarda senhas. */
   const HIST_MAX = 100;
@@ -248,6 +284,7 @@
       d.modelos = (extras.modelos || []).filter((m) => m && m.id).map(limparModelo);
       d.modelosRemovidos = (extras.modelosRemovidos || []).filter((t) => t && t.id && ts(t.deletedAt) >= lim).map(limparTomb);
     }
+    if (extras && Array.isArray(extras.perfis) && extras.perfis.length) d.perfis = limparPerfis(extras.perfis);
     if (extras && Array.isArray(extras.historico)) d.historico = extras.historico.filter((e) => e && e.escopo === "Equipe" && !e.local).slice(0, HIST_MAX);
     // v2.0.0: lixeira e conflitos (só cards da Equipe; o filtro garante que nada Individual entra)
     if (extras && Array.isArray(extras.lixeira)) d.lixeira = extras.lixeira.filter((e) => e && e.card && filtro(e.card));
@@ -479,7 +516,7 @@
   }
 
   g.CadernoSync = { TIPO: TIPO, normalizarCard: normalizarCard, sanearDatas: sanearDatas, dataValida: dataValida, normUrl: normUrl, LIMITES_NIVEL: LIMITES_NIVEL, CAMPOS_CARD: CAMPOS_CARD, LIXEIRA_DIAS: LIXEIRA_DIAS,
-    limparLixeira: limparLixeira, limparConflitos: limparConflitos, limparRemocoes: limparRemocoes, mesclarLixeira: mesclarLixeira, mesclarConflitos: mesclarConflitos, mesclarRemocoes: mesclarRemocoes, concorrentes: concorrentes, filtrarItens: filtrarItens, limparDoc: limparDoc, limparHistorico: limparHistorico, mesclarHistorico: mesclarHistorico, HIST_MAX: HIST_MAX, limparModelo: limparModelo, modelosDoDoc: modelosDoDoc, CAMPOS_MODELO: CAMPOS_MODELO, PRINCIPAL: PRINCIPAL, LOG: LOG, montarDoc: montarDoc, docValido: docValido, mesclar: mesclar, ts: ts, semMeta: semMeta, semMetaV1: semMetaV1,
+    limparLixeira: limparLixeira, limparConflitos: limparConflitos, limparRemocoes: limparRemocoes, mesclarLixeira: mesclarLixeira, mesclarConflitos: mesclarConflitos, mesclarRemocoes: mesclarRemocoes, concorrentes: concorrentes, filtrarItens: filtrarItens, limparDoc: limparDoc, limparPerfis: limparPerfis, mesclarPerfis: mesclarPerfis, limparHistorico: limparHistorico, mesclarHistorico: mesclarHistorico, HIST_MAX: HIST_MAX, limparModelo: limparModelo, modelosDoDoc: modelosDoDoc, CAMPOS_MODELO: CAMPOS_MODELO, PRINCIPAL: PRINCIPAL, LOG: LOG, montarDoc: montarDoc, docValido: docValido, mesclar: mesclar, ts: ts, semMeta: semMeta, semMetaV1: semMetaV1,
     comRetentativa: comRetentativa, retentavel: retentavel, Fila: Fila, ehCopiaConflito: ehCopiaConflito, gravarVerificado: gravarVerificado, anexarLog: anexarLog,
     AdaptadorPasta: AdaptadorPasta, AdaptadorArquivo: AdaptadorArquivo };
 })(typeof window !== "undefined" ? window : globalThis);

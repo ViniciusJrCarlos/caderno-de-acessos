@@ -7,9 +7,15 @@ document.addEventListener("pointerdown", () => { ignorarClique = false; }, true)
 document.addEventListener("click", (ev) => { if (!ev.target.closest(".menu-card")) fecharMenus(); });
 document.addEventListener("click", () => { if (renderPendente) setTimeout(renderSePendente, 50); });
 /* ---------- v1.9.3+: Novidades (texto vai junto com o app; mais recente primeiro) ---------- */
-const APP_VERSAO = "2.1.0";
+const APP_VERSAO = "2.2.0";
 const NOVIDADES_VISTA = "caderno-novidades-vista";
 const NOVIDADES = [
+  { v: "2.2.0", data: "19/10/2026", itens: [
+    "Perfis Admin e Analista nos cards da Equipe (Mais › Perfis da equipe). Sem perfis configurados, tudo funciona como antes.",
+    "Admin: cria cards da Equipe, muda link e identificação, reativa, exclui, resolve conflitos, troca a senha da equipe e cuida dos perfis (Entrar como admin).",
+    "Analista: atualiza senha, data da troca, ciclo e escalonamento e arquiva. Campos bloqueados aparecem com cadeado: Só o admin pode alterar.",
+    "Proteção de tela, não um controle forte: apps antigos não respeitam as permissões. Peça para todos atualizarem."
+  ] },
   { v: "2.1.0", data: "19/10/2026", itens: ["Organização interna do código para facilitar as próximas melhorias; nada muda no uso."] },
   { v: "2.0.1", data: "18/10/2026", itens: [
     "“Descartar” só fecha a ficha. Na trava de link repetido, “Abrir card existente” agora pergunta antes e avisa qual card está abrindo.",
@@ -101,6 +107,7 @@ document.querySelectorAll(".dr-item").forEach((b) => b.addEventListener("click",
 $("selExcluir").addEventListener("click", () => excluir(selecionados()));
 $("selReativar").addEventListener("click", () => {
   const l = selecionados();
+  if (bloqueadoEquipe(l)) return;
   l.forEach((it) => { it.arquivado_em = null; });
   selecao = null;
   save();
@@ -108,6 +115,7 @@ $("selReativar").addEventListener("click", () => {
   avisarDuplicadosReativados(l);
 });
 $("selCancelar").addEventListener("click", () => sairSelecao());
+$("seloAdmin").addEventListener("click", () => sairModoAdmin(false));
 $("dNovo").addEventListener("click", () => abrirFicha(null));
 $("dExport").addEventListener("click", exportarEquipe);
 $("dImport").addEventListener("click", () => $("imp").click());

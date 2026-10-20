@@ -311,7 +311,8 @@ function abrirMenuCard(it, ancora) {
     if (it.modeloDono) m.appendChild(btn("mi", "x", "Parar de compartilhar", () => { fecharMenus(); pararCompartilhar(atual(it) || it); }));
     else m.appendChild(btn("mi", "share", "Compartilhar meu card", cur((c) => compartilharMeuCard(c))));
   }
-  if (it.arquivado_em) {
+  if (it.arquivado_em && compartilhado(it) && !podeAdminEquipe()) m.appendChild(el("p", "mi-dica", "🔒 Reativar e excluir: " + DICA_ADMIN));
+  else if (it.arquivado_em) {
     m.appendChild(btn("mi ok", "restore", "Reativar", cur((c) => { c.arquivado_em = null; save(); toast("Card reativado"); avisarDuplicadosReativados([c]); })));
     m.appendChild(btn("mi warn", "trash", "Excluir", cur((c) => excluir([c]))));
   }
