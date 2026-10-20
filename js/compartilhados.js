@@ -95,7 +95,7 @@ function verModelo(d, origem) {
 }
 async function compartilharMeuCard(card) {
   if (!card || card.visibilidade !== "Individual") return;
-  if (!podeAdminEquipe()) { toast("Só o admin compartilha cards com a equipe. Seus cards de Meus ficam só com você."); return; } // v2.3.0 (item 9)
+  if (!podeAdminEquipe()) { toast("Só o Administrador compartilha cards com a equipe. Seus cards de Meus ficam só com você."); return; } // v2.3.0 (item 9)
   if (!syncEstado.vinculado) { toast("Para compartilhar, vincule a pasta da equipe em Mais › Arquivo da equipe."); return; }
   if (!autor()) { toast("Salve seu nome em Mais › Arquivo da equipe antes de compartilhar."); return; }
   const tid = card.modeloDono || ("m-" + card.id);

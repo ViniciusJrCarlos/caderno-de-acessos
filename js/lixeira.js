@@ -90,7 +90,7 @@ function blocoLixeira(box) {
   const eq = lerLixeiraEq().itens, meus = lerLixeiraMeus();
   const c = el("article", "card painel-mais lixeira"); c.id = "blocoLixeira";
   c.appendChild(el("h3", "", "🗑️ Lixeira" + (eq.length + meus.length ? " (" + (eq.length + meus.length) + ")" : "")));
-  c.appendChild(el("p", "meta", "Cards excluídos ficam aqui por " + DIAS_LIXEIRA + " dias. Os da Equipe podem ser restaurados " + (perfisAtivos() ? "pelo admin" : "por qualquer analista") + " e voltam para o Arquivo de todos. Os Meus ficam só neste aparelho e voltam com usuário e senha."));
+  c.appendChild(el("p", "meta", (perfisAtivos() && papelAtual() !== "admin" ? "Cards excluídos ficam aqui por " + DIAS_LIXEIRA + " dias. Os seus (Meus) ficam só neste aparelho e voltam com usuário e senha." : "Cards excluídos ficam aqui por " + DIAS_LIXEIRA + " dias. Os da Equipe podem ser restaurados " + (perfisAtivos() ? "pelo Administrador" : "por qualquer analista") + " e voltam para o Arquivo de todos. Os Meus ficam só neste aparelho e voltam com usuário e senha.")));
   const todos = eq.map((e) => ({ e: e, equipe: true })).concat(meus.map((e) => ({ e: e, equipe: false }))).sort((a, b) => String(b.e.excluidoEm).localeCompare(String(a.e.excluidoEm)));
   if (!todos.length) c.appendChild(el("p", "meta vazio-lix", "A Lixeira está vazia."));
   else {

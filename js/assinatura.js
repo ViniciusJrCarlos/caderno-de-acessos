@@ -59,8 +59,8 @@ async function prepararChaveAdmin(p, senha, novaSenha) {
   let aberto = await abrirPriv(p, senha), campos = null;
   if (aberto && pins[p.id] && pins[p.id] !== p.chavePub) aberto = null; // chave trocada no arquivo: não usa
   if (!aberto) {
-    if (pins[p.id] && p.chavePub && pins[p.id] !== p.chavePub) return { erro: "A chave de admin deste perfil no arquivo não confere com a que este aparelho conhece." };
-    if (pins[p.id] && !p.chavePriv) return { erro: "A chave de admin deste perfil ainda não chegou neste aparelho. Sincronize e tente de novo." };
+    if (pins[p.id] && p.chavePub && pins[p.id] !== p.chavePub) return { erro: "A chave de Administrador deste perfil no arquivo não confere com a que este aparelho conhece." };
+    if (pins[p.id] && !p.chavePriv) return { erro: "A chave de Administrador deste perfil ainda não chegou neste aparelho. Sincronize e tente de novo." };
     campos = await gerarChavesAdmin(novaSenha || senha);
     aberto = await abrirPriv(Object.assign({}, p, campos), novaSenha || senha);
     const pn = pinsChaves(); pn[p.id] = campos.chavePub; localStorage.setItem(CHAVES_PIN_KEY, JSON.stringify(pn));
@@ -124,4 +124,59 @@ async function assinarPendentes() {
   localStorage.setItem(ASSINAR_PEND_KEY, JSON.stringify([...pend]));
   if (mudou) localStorage.setItem(KEY, JSON.stringify(itens));
   return mudou;
+}
+/* ---------- v2.4.0: perfis assinados pelo Administrador ----------
+ * Toda mudança de perfil feita com a chave do Administrador aberta (Gestão, Entrar como administrador) leva "assinP" sobre os campos
+ * que dão poder (nome, papel, ativo, bloqueado, senha pessoal, senha temporária, hash e chave de Administrador).
+ * Na sincronização, uma mudança de perfil SEM assinatura válida de um Administrador que este aparelho já conhece é desfeita, a não ser
+ * que seja uma das mudanças que a própria pessoa pode fazer: trocar a senha temporária pela sua (senhaTemp passa a falso) ou a conta
+ * ficar bloqueada por 5 erros. Perfil novo sem assinatura também não entra. Aparelho sem perfis (primeira vez) aceita a lista (TOFU),
+ * e Administradores ainda sem chave (vindos da v2.2.0) seguem a regra antiga até o primeiro "Entrar como administrador". */
+function msgPerfil(p) {
+  return "p|" + [p.id, p.updatedAt || "", p.nome || "", p.papel || "", p.ativo === false ? 0 : 1, p.bloqueado ? 1 : 0, p.senhaHash || "", p.senhaTemp ? 1 : 0, p.adminHash || "", p.chavePub || "", p.trocarSenha ? 1 : 0].join("|");
+}
+async function assinarPerfil(p) {
+  delete p.assinP;
+  if (!chaveAdmin) return false;
+  try { p.assinP = await assinar(msgPerfil(p)); return true; } catch (e) { return false; }
+}
+const CAMPOS_PERFIL_PODER = ["nome", "papel", "ativo", "bloqueado", "senhaHash", "senhaSalt", "senhaIter", "senhaTemp", "adminHash", "adminSalt", "adminIter", "chavePub", "chavePriv", "chaveSalt", "trocarSenha"];
+function difPerfil(a, b) { return CAMPOS_PERFIL_PODER.filter((k) => JSON.stringify(a[k] === undefined ? null : a[k]) !== JSON.stringify(b[k] === undefined ? null : b[k])); }
+function mudancaPropria(a, b) {
+  const d = difPerfil(a, b); if (!d.length) return true;
+  const so = (lista) => d.every((k) => lista.indexOf(k) >= 0);
+  if (a.senhaTemp && !b.senhaTemp && b.senhaHash && so(["senhaHash", "senhaSalt", "senhaIter", "senhaTemp"])) return true; // trocou a temporária
+  if (!a.bloqueado && b.bloqueado && so(["bloqueado"])) return true;                                                            // 5 erros: bloqueou
+  // Administrador legado (sem chave): cria a própria chave e troca a senha temporária no "Entrar como administrador"
+  if (a.papel === "admin" && b.papel === "admin" && !a.chavePub && !pinsChaves()[a.id] && so(["chavePub", "chavePriv", "chaveSalt", "adminHash", "adminSalt", "adminIter", "trocarSenha"])) return true;
+  return false;
+}
+/* cache: lista que este aparelho já aceitou; l: lista mesclada com o arquivo. Devolve { itens, desfeitos:[nomes] } */
+async function filtrarPerfisRemoto(cache, l) {
+  const out = { itens: l, desfeitos: [] };
+  if (!cache || !cache.length || !adminsAtivos(cache).length) return out;
+  const legado = !adminsAtivos(cache).some((p) => p.chavePub || pinsChaves()[p.id]);
+  if (legado) return out;
+  const ant = new Map(cache.map((p) => [p.id, p]));
+  const res = [];
+  for (const p of l) {
+    const a = ant.get(p.id);
+    if (a && (a.updatedAt === p.updatedAt || !difPerfil(a, p).length)) { res.push(p); continue; }
+    const assinOk = p.assinP && await verificarAssin(p.assinP, msgPerfil(p), cache);
+    if (assinOk) {
+      const signer = p.assinP.slice(0, p.assinP.lastIndexOf(":"));
+      if (p.papel === "admin" && p.chavePub && signer !== p.id) { const pn = pinsChaves(); pn[p.id] = p.chavePub; localStorage.setItem(CHAVES_PIN_KEY, JSON.stringify(pn)); } // reset/novo Administrador: a chave nova vale
+      res.push(p); continue;
+    }
+    if (a && mudancaPropria(a, p)) { res.push(p); continue; }
+    out.desfeitos.push(p.nome || p.id);
+    if (a) {
+      const v = Object.assign({}, a, { ultimoAcesso: p.ultimoAcesso, ultimaSync: p.ultimaSync, versao: p.versao });
+      // no modo Administrador a versão certa volta mais nova e assinada, e corrige também o aparelho que mexeu
+      if (chaveAdmin) { v.updatedAt = new Date().toISOString(); v.updatedBy = autor(); await assinarPerfil(v); }
+      res.push(v);
+    }
+  }
+  out.itens = res;
+  return out;
 }

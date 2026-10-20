@@ -66,7 +66,7 @@ function visiveis() {
     if (aba === "meu" && (it.visibilidade !== "Individual" || arq)) return false;
     if (aba === "vencendo") { let st = ""; try { st = statusDe(it); } catch (e) { st = ""; } if (arq || ["Vencendo", "Vencido"].indexOf(st) < 0) return false; }
     if (aba === "arquivo" && !arq) return false;
-    if (aba === "mais" || aba === "gerador") return false;
+    if (aba === "mais" || aba === "gerador" || aba === "gestao") return false;
     const blob = [it.titulo, it.aplicacao, it.cliente, it.usuario, it.url, it.categoria, it.visibilidade, it.escalonamento, resumoEscalonamentos(niveisDe(it))].join(" ").toLowerCase();
     return !q || blob.indexOf(q) >= 0;
   };
@@ -87,11 +87,13 @@ function render() {
   // v2.3.0 (item 11): cards compartilhados esperando você decidir (adicionar em Meus ou ignorar)
   const cm = document.getElementById("contMais");
   if (cm) { let n = 0; try { n = syncEstado.vinculado ? modelosNovos(false).filter(paraMim).length : 0; } catch (e) { n = 0; } cm.textContent = n ? String(n) : ""; cm.title = n ? n + (n === 1 ? " card compartilhado esperando você (Mais › Cards compartilhados)" : " cards compartilhados esperando você (Mais › Cards compartilhados)") : ""; }
-  const painel = aba === "mais" || aba === "gerador";
+  try { aplicarPapelNaTela(); } catch (e) {} // v2.4.0: menus por papel e aba Gestão
+  const painel = aba === "mais" || aba === "gerador" || aba === "gestao";
   document.getElementById("buscaWrap").classList.toggle("oculto", painel);
   document.getElementById("novo").classList.toggle("oculto", painel);
   box.classList.toggle("mais", painel);
   if (aba === "mais") { renderMais(box); return; }
+  if (aba === "gestao") { renderGestao(box); return; }
   if (aba === "gerador") { renderGerador(box); return; }
   if (aba === "equipe") { try { faixaAvisos(box); } catch (e) { /* aviso é melhor esforço */ } }
   const list = visiveis();

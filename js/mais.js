@@ -27,7 +27,7 @@ async function vincularPasta() {
       const comPerfis = perfisAtivos() || perfisNoArquivo();
       if (comPerfis && papelAtual() !== "admin") {
         await a.desvincular(); await atualizarEstadoSync();
-        aviso("Esta pasta não tem o arquivo da equipe", "Com os perfis configurados, só o admin cria um arquivo da equipe novo. Confira se escolheu a pasta certa (json-caderno-acessos) ou peça ao admin.");
+        aviso("Esta pasta não tem o arquivo da equipe", "Com os perfis configurados, só o Administrador cria um arquivo da equipe novo. Confira se escolheu a pasta certa (json-caderno-acessos) ou peça ao Administrador.");
         if (aba === "mais") render();
         return;
       }
@@ -45,7 +45,7 @@ async function vincularPasta() {
 }
 async function criarArquivoEquipe() {
   if (!exigirNome()) return;
-  if ((perfisAtivos() || perfisNoArquivo()) && papelAtual() !== "admin") { toast("Com os perfis configurados, só o admin cria um arquivo da equipe novo."); return; } // v2.3.0 (item 12)
+  if ((perfisAtivos() || perfisNoArquivo()) && papelAtual() !== "admin") { toast("Com os perfis configurados, só o Administrador cria um arquivo da equipe novo."); return; } // v2.3.0 (item 12)
   try {
     await syncArquivo.criar(SYNC_ARQUIVO);
     carimbarSemData();
@@ -81,7 +81,10 @@ async function sugerirPasta() {
   const ok = await dialogo({ titulo: "Vincular a pasta da equipe", texto: "Para evitar as cópias de conflito do OneDrive (caderno-equipe-NOMEDOPC.json), vincule a PASTA json-caderno-acessos em vez de só o arquivo. O Caderno passa a juntar essas cópias sozinho e a gravar um log de erros na pasta.", ok: "Vincular a pasta", cancelar: "Agora não" });
   if (ok) vincularPasta();
 }
-function blocoArquivoEquipe(box, bloco) {
+/* v2.4.0: modo "gestao" (aba Gestão do Administrador, ou sem perfis): tudo, com senha da equipe e Histórico.
+ * Com perfis, no Mais: só Vincular, Sincronizar, Digitar/Ver senha da equipe e Desvincular (o resto foi para a Gestão). */
+function blocoArquivoEquipe(box, bloco, modo) {
+  const completo = modo === "gestao" || !comPerfis();
   if (!syncEstado.suportado) {
     bloco("Arquivo da equipe", "Este navegador não permite usar a pasta sincronizada (comum no celular e no Firefox). Continue usando Exportar/Importar JSON normalmente.", []);
     return;
@@ -95,17 +98,17 @@ function blocoArquivoEquipe(box, bloco) {
   const linhaNome = el("div", "sync-nome"); linhaNome.appendChild(nome); linhaNome.appendChild(salvarNome);
   // v2.3.0 (item 5): com perfil, o nome vem do perfil (só o admin renomeia, no Painel de perfis)
   const meu = perfisAtivos() ? meuPerfil() : null;
-  if (meu) { nome.disabled = true; salvarNome.disabled = true; nome.title = salvarNome.title = "O seu nome vem do seu perfil. Só o admin renomeia (Painel de perfis)."; linhaNome.hidden = true; }
+  if (meu) { nome.disabled = true; salvarNome.disabled = true; nome.title = salvarNome.title = "O seu nome vem do seu perfil. Só o Administrador renomeia (Painel de perfis)."; linhaNome.hidden = true; }
   let botoes;
   if (syncEstado.vinculado) {
     botoes = [btn("btn pri", "refresh", "Sincronizar agora", () => sincronizar(true))];
     if (syncEstado.modo === "arquivo" && syncEstado.pastaSuportada) botoes.push(btn("btn", "folder", "Vincular a pasta da equipe", vincularPasta));
-    botoesSenhaEquipe().forEach((b) => botoes.push(b));
+    botoesSenhaEquipe().filter((b) => completo || /Digitar senha da equipe|Ver senha da equipe/.test(b.textContent)).forEach((b) => botoes.push(b));
     botoes.push(btn("btn", "x", "Desvincular", desvincularArquivo));
   } else if (syncEstado.pastaSuportada) {
     botoes = [btn("btn pri", "folder", "Vincular a pasta da equipe", vincularPasta)];
   } else {
-    botoes = [btn("btn pri", "download", "Criar arquivo da equipe", criarArquivoEquipe), btn("btn", "upload", "Usar arquivo existente", usarArquivoEquipe)];
+    botoes = completo ? [btn("btn pri", "download", "Criar arquivo da equipe", criarArquivoEquipe), btn("btn", "upload", "Usar arquivo existente", usarArquivoEquipe)] : [btn("btn pri", "upload", "Usar arquivo existente", usarArquivoEquipe)];
   }
   const ult = syncMeta().ultimaSync;
   bloco("Arquivo da equipe", syncEstado.vinculado
@@ -114,7 +117,8 @@ function blocoArquivoEquipe(box, bloco) {
       ? "Escolha a pasta do OneDrive da equipe (json-caderno-acessos). O Caderno usa o arquivo caderno-equipe.json (se a pasta não tiver, pergunta antes de criar), junta as cópias de conflito do OneDrive e grava um log de erros na pasta. Só cards de Equipe vão para o arquivo."
       : "Use um arquivo na pasta do OneDrive (ex.: json-caderno-acessos). Uma pessoa cria o arquivo; as outras usam o arquivo existente. Só cards de Equipe vão para o arquivo.",
     [linhaNome].concat(botoes));
-  blocoHistorico(box);
+  if (completo) blocoHistorico(box); // v2.4.0: com perfis, o Histórico fica na Gestão
+  if (modo === "gestao" && comPerfis()) return;
   const le = lerJSON(LOGERR_KEY, []);
   const c2 = el("article", "card painel-mais historico log-erros");
   c2.appendChild(el("h3", "", "Log de erros"));
@@ -151,20 +155,28 @@ function renderMais(box) {
   blocoNovidades(box);
   bloco("Tema", "Aparência só deste aparelho. Vale também para a tela de login.", bt);
   try { blocoAvisos(box); } catch (e) {}
-  blocoArquivoEquipe(box, bloco);
-  try { blocoPerfis(box); } catch (e) {}
+  const equipe = podeArquivosEquipe() && !comPerfis(); // v2.4.0: sem perfis, tudo como antes; com perfis, os itens da equipe estão na Gestão
+  if (comPerfis()) { try { blocoPerfis(box); } catch (e) {} }
+  blocoArquivoEquipe(box, bloco, comPerfis() ? "mais" : "");
+  if (!comPerfis()) { try { blocoPerfis(box); } catch (e) {} }
   blocoModelos(box);
   try { blocoLixeira(box); } catch (e) {}
-  bloco("Compartilhar com a equipe", "Gera o JSON para os outros analistas. Cards Individuais vão sem usuário e sem senha (só título, aplicação, cliente, URL etc.).",
+  if (equipe) bloco("Compartilhar com a equipe", "Gera o JSON para os outros analistas. Cards Individuais vão sem usuário e sem senha (só título, aplicação, cliente, URL etc.).",
     [btn("btn pri", "download", "Exportar JSON", exportarEquipe)]);
+  bloco("Novo acesso", "Cria um card seu em Meus" + (equipe ? " ou da Equipe." : ". Login e senha ficam só neste aparelho."), [btn("btn", "plus", "Novo acesso", () => abrirFicha(null))]);
   bloco("Backup pessoal (inclui minhas senhas)", "Arquivo completo, com os usuários e senhas dos seus acessos Individuais. Use só para levar para outro aparelho seu. Não compartilhe.",
     [btn("btn", "lock", "Backup pessoal (inclui minhas senhas)", backupPessoal)]);
-  bloco("Importar", "Junta os cards do arquivo com os deste aparelho, só pelo id (cards diferentes com o mesmo nome não se juntam). Cards que só existem aqui continuam. Se o arquivo tiver uma versão mais antiga de um card seu, o app pergunta antes (o padrão é manter o seu). Um usuário ou senha vazio no arquivo nunca apaga o que você já tem; um preenchido substitui o seu se você escolher substituir.",
+  if (equipe) bloco("Importar", "Junta os cards do arquivo com os deste aparelho, só pelo id (cards diferentes com o mesmo nome não se juntam). Cards que só existem aqui continuam. Se o arquivo tiver uma versão mais antiga de um card seu, o app pergunta antes (o padrão é manter o seu). Um usuário ou senha vazio no arquivo nunca apaga o que você já tem; um preenchido substitui o seu se você escolher substituir.",
     [btn("btn", "upload", "Importar JSON", () => document.getElementById("imp").click()),
      btn("btn", "table", "Importar planilha Excel", escolherPlanilha)]);
-  bloco("Planilha Excel", "“Excel para importar”: formato simples em abas (externos, internos, arquivados e escalonamento), para subir em “Importar planilha”. “Excel para consulta”: com navegação e escalonamento em blocos, somente leitura. Senhas individuais saem em branco.",
+  else bloco("Importar backup", "Traz os cards de um backup pessoal seu para Meus. Cards da Equipe do arquivo ficam de fora (chegam pela sincronização).",
+    [btn("btn", "upload", "Importar backup", () => document.getElementById("imp").click())]);
+  if (equipe) bloco("Planilha Excel", "“Excel para importar”: formato simples em abas (externos, internos, arquivados e escalonamento), para subir em “Importar planilha”. “Excel para consulta”: com navegação e escalonamento em blocos, somente leitura. Senhas individuais saem em branco.",
     [btn("btn", "table", "Excel para importar", exportarExcelImportar, null, "Formato simples para importar no app"),
      btn("btn", "book", "Excel para consulta", exportarExcelConsulta, null, "Com navegação e escalonamento, somente leitura")]);
+  else bloco("Planilha Excel (Meus)", "Só os seus cards (Meus). “Para importar”: formato simples em abas. “Para consulta”: com navegação e escalonamento, somente leitura.",
+    [btn("btn", "table", "Excel dos meus cards (para importar)", exportarExcelImportar),
+     btn("btn", "book", "Excel dos meus cards (para consulta)", exportarExcelConsulta)]);
   const minAtual = minutosBloqueio();
   const bb = BLOQ_OPCOES.map((n) => {
     const b = btn("btn tema-op" + (n === minAtual ? " on" : ""), null, n ? n + " min" : "Nunca", () => definirBloqueio(n));
@@ -174,8 +186,8 @@ function renderMais(box) {
   bloco("Bloqueio automático", "Volta para a tela de login depois de um tempo sem uso. Vale só para este aparelho.", bb);
   bloco("Senha deste aparelho", "Altera a senha de acesso salva só neste navegador. Outros aparelhos continuam com a senha padrão até alguém trocar lá também.",
     [btn("btn", "lock", "Trocar senha", abrirTrocaSenha)]);
-  bloco("Offline e instalação", "Abra o link no Chrome uma vez com internet (fora da VPN) e use “Instalar app”. Depois funciona sem internet; quando houver internet, a versão nova chega sozinha.",
-    [btn("btn", "logout", "Sair (bloquear)", sair)]);
+  bloco("Offline e instalação", "Instale o app uma vez com internet (fora da VPN). Depois funciona sem internet; quando houver internet, a versão nova chega sozinha.",
+    [btn("btn", "download", appJaInstalado() ? "App instalado" : "Como instalar", () => abrirInstalar(true)), btn("btn", "logout", "Sair (bloquear)", sair)]);
 }
 function novidadesItens(n, box) {
   const ul = el("ul", "");

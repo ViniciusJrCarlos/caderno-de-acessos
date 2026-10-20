@@ -7,22 +7,29 @@ document.addEventListener("pointerdown", () => { ignorarClique = false; }, true)
 document.addEventListener("click", (ev) => { if (!ev.target.closest(".menu-card")) fecharMenus(); });
 document.addEventListener("click", () => { if (renderPendente) setTimeout(renderSePendente, 50); });
 /* ---------- v1.9.3+: Novidades (texto vai junto com o app; mais recente primeiro) ---------- */
-const APP_VERSAO = "2.3.0";
+const APP_VERSAO = "2.4.0";
 const NOVIDADES_VISTA = "caderno-novidades-vista";
 const NOVIDADES = [
+  { v: "2.4.0", data: "20/10/2026", itens: [
+    "Nova aba Gestão, só para o Administrador (aparece depois de “Entrar como administrador”): pessoas com situação ativo, bloqueado ou desativado, Novo analista, Resetar senha, Desbloquear, Tornar ou Remover administrador, Desativar e Reativar.",
+    "Cada analista entra com a própria senha pessoal. A senha temporária é trocada no primeiro acesso, e 5 senhas erradas bloqueiam a conta até o Administrador desbloquear.",
+    "Mais do analista mais enxuto: Exportar JSON da equipe, Importar para a Equipe, Excel da equipe, Histórico e a senha da equipe foram para a Gestão. O analista importa o backup só em Meus e exporta o Excel só dos próprios cards.",
+    "O perfil de gestão passa a se chamar “Administrador” em todas as telas.",
+    "Tela nova de instalação: reconhece Android, computador e iPhone/iPad, mostra o passo a passo do seu aparelho primeiro e o botão “Instalar agora” quando o navegador permite."
+  ], fazer: "Analista: em Mais › Meu perfil, escolha o seu nome e digite a senha que o Administrador passar. Administrador: defina a senha temporária de quem ainda não tem (Gestão › pessoa › Resetar senha)." },
   { v: "2.3.0", data: "20/10/2026", itens: [
-    "Só o admin arquiva, compartilha e sugere cards à equipe. O analista cuida dos próprios cards em Meus e atualiza senha, datas, ciclo e escalonamento da Equipe.",
-    "As ações de admin saem assinadas com a chave do admin: na sincronização, o nome sozinho não dá permissão. Exclusões e ações na Lixeira de quem não é admin são desfeitas, inclusive vindas de apps antigos.",
-    "O analista não troca mais de nome, e ninguém usa o nome de um admin sem a senha de admin.",
-    "Senha de admin com confirmação, medidor de força e botão de olho para mostrar ou ocultar.",
+    "Só o Administrador arquiva, compartilha e sugere cards à equipe. O analista cuida dos próprios cards em Meus e atualiza senha, datas, ciclo e escalonamento da Equipe.",
+    "As ações de Administrador saem assinadas com a chave do Administrador: na sincronização, o nome sozinho não dá permissão. Exclusões e ações na Lixeira de quem não é Administrador são desfeitas, inclusive vindas de apps antigos.",
+    "O analista não troca mais de nome, e ninguém usa o nome de um Administrador sem a senha de Administrador.",
+    "Senha de Administrador com confirmação, medidor de força e botão de olho para mostrar ou ocultar.",
     "Card compartilhado chega em Mais › Cards compartilhados, com contador na aba Mais. A lista “Só para…” mostra todos os perfis ativos.",
-    "Pasta sem o arquivo da equipe: o app pergunta antes de criar um novo (com perfis, só o admin cria).",
+    "Pasta sem o arquivo da equipe: o app pergunta antes de criar um novo (com perfis, só o Administrador cria).",
     "Quando chega uma versão nova, as abas abertas recarregam sozinhas."
   ] },
   { v: "2.2.0", data: "19/10/2026", itens: [
-    "Perfis Admin e Analista nos cards da Equipe (Mais › Perfis da equipe). Sem perfis configurados, tudo funciona como antes.",
-    "Admin: cria cards da Equipe, muda link e identificação, reativa, exclui, resolve conflitos, troca a senha da equipe e cuida dos perfis (Entrar como admin).",
-    "Analista: atualiza senha, data da troca, ciclo e escalonamento e arquiva. Campos bloqueados aparecem com cadeado: Só o admin pode alterar.",
+    "Perfis Administrador e Analista nos cards da Equipe (Mais › Perfis da equipe). Sem perfis configurados, tudo funciona como antes.",
+    "Administrador: cria cards da Equipe, muda link e identificação, reativa, exclui, resolve conflitos, troca a senha da equipe e cuida dos perfis (Entrar como administrador).",
+    "Analista: atualiza senha, data da troca, ciclo e escalonamento e arquiva. Campos bloqueados aparecem com cadeado: Só o Administrador pode alterar.",
     "Proteção de tela, não um controle forte: apps antigos não respeitam as permissões. Peça para todos atualizarem."
   ] },
   { v: "2.1.0", data: "19/10/2026", itens: ["Organização interna do código para facilitar as próximas melhorias; nada muda no uso."] },
@@ -216,6 +223,7 @@ window.addEventListener("beforeinstallprompt", (ev) => {
   ev.preventDefault();
   deferredInstall = ev;
   atualizarLinkInstalar();
+  if ($("dlgInstalar").classList.contains("on")) desenharInstalar(); // v2.4.0: o botão vira "Instalar agora"
 });
 window.addEventListener("appinstalled", () => {
   deferredInstall = null;
@@ -223,44 +231,4 @@ window.addEventListener("appinstalled", () => {
   fecharSheet("dlgInstalar");
   atualizarLinkInstalar();
 });
-(function ligarInstalarUI() {
-  const dlg = document.getElementById("dlgInstalar");
-  const btnEntendi = document.getElementById("instEntendi");
-  const btnEntendi2 = document.getElementById("instEntendi2");
-  const btnPasso = document.getElementById("instPassoAPasso");
-  const btnVoltar = document.getElementById("instVoltar");
-  const btnFooter = document.getElementById("btnInstalarApp");
-  if (!dlg || !btnEntendi) return;
-
-  async function onEntendi() {
-    await tentarPromptInstalar();
-    fecharInstalar(true);
-  }
-  btnEntendi.addEventListener("click", onEntendi);
-  if (btnEntendi2) btnEntendi2.addEventListener("click", onEntendi);
-  if (btnPasso) btnPasso.addEventListener("click", () => mostrarTelaInstalar(2));
-  if (btnVoltar) btnVoltar.addEventListener("click", () => mostrarTelaInstalar(1));
-  if (btnFooter) btnFooter.addEventListener("click", async () => {
-    if (deferredInstall) {
-      await tentarPromptInstalar();
-      marcarInstallHint();
-      return;
-    }
-    abrirInstalar(true);
-  });
-  dlg.addEventListener("click", (ev) => {
-    if (cliqueNoFundo(ev, dlg)) fecharInstalar(true);
-  });
-  document.addEventListener("keydown", (ev) => {
-    if (ev.key === "Escape" && dlg.classList.contains("on")) {
-      ev.stopPropagation();
-      fecharInstalar(true);
-    }
-  }, true);
-
-  atualizarLinkInstalar();
-  // Mostra uma vez (até Entendi), só se ainda não for PWA instalado.
-  if (!appJaInstalado() && !installHintVisto()) {
-    setTimeout(() => abrirInstalar(false), 400);
-  }
-})();
+ligarInstalar(); // v2.4.0: tela nova de instalação (js/instalar.js)

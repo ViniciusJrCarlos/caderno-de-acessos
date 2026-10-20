@@ -1,4 +1,4 @@
-# Arquitetura do Caderno de Acessos (v2.3.0)
+# Arquitetura do Caderno de Acessos (v2.4.0)
 
 O app é um site estático (PWA) sem servidor e sem ferramenta de build. O navegador baixa os arquivos como estão e o service worker (`sw.js`) os guarda para funcionar offline. Os dados ficam no aparelho (localStorage). Os cards da Equipe também vão para o arquivo da equipe (`caderno-equipe.json`), numa pasta do OneDrive escolhida por cada analista.
 
@@ -26,6 +26,7 @@ O app é um site estático (PWA) sem servidor e sem ferramenta de build. O naveg
 | `js/senha-equipe.js` | Arquivo da equipe cifrado: abrir, fechar, proteger, pedir e ver a senha. |
 | `js/assinatura.js` | v2.3.0: assinatura ECDSA P-256 das ações de admin (card, tombstone, ação na Lixeira), chave pública fixada no aparelho (TOFU), verificação no merge (`ehAdminRemoto`, `papelRemoto`), fila de pendentes (`marcarAssinar`, `assinarPendentes`). Carregado antes do `js/perfis.js`. |
 | `js/perfis.js` | v2.2.0: perfis Admin e Analista nos cards da Equipe: lista `perfis` (no arquivo cifrado e no cofre local cifrado), Configurar perfis, Entrar como admin (modo admin em memória), painel de perfis, escolha do nome, regras de permissão no `save()` (`guardarPermissoes`), no merge (`filtrarPermissoesRemoto`, `mesclarPerfisSync`) e na importação, cadeados da ficha. |
+| `js/gestao.js` | v2.4.0: aba Gestão (só modo Administrador): cartões de pessoas (iniciais, nome, perfil, selo ativo/bloqueado/desativado), Novo analista, ações por pessoa (Resetar, Desbloquear, Tornar/Remover Administrador — o último é protegido —, Desativar/Reativar), bloco "Equipe" (fornecedor/exportar/importar da equipe), senha pessoal do analista (`confirmarSenhaPessoal`), `aplicarPapelNaTela`, guardas `podeArquivosEquipe`/`itensExportaveis` e helpers do diálogo padrão (`dlgPadrao`, `campoPadrao`…). Carregado depois do `js/perfis.js`. |
 | `js/compartilhados.js` | "Compartilhar meu card" (modelos sem login e senha), "Só para…", adoção, Card parecido, tela Cards compartilhados. |
 | `js/mais.js` | Aba Mais: vincular/criar/usar/desvincular o arquivo, `renderMais`, funções das novidades. |
 | `js/gerador.js` | Gerador de senhas. |
@@ -33,7 +34,7 @@ O app é um site estático (PWA) sem servidor e sem ferramenta de build. O naveg
 | `js/planilhas.js` | Excel: exportar, importar (formato do Caderno e de suporte), menu Excel ▾. |
 | `js/ficha.js` | Ficha Novo/Editar, limites de texto, Descartar, trava "um link = um card", outra operação, Salvar em Meus e sugerir. |
 | `js/login-bloqueio.js` | Login do aparelho, troca obrigatória de senha, sessão, bloqueio por inatividade. |
-| `js/instalar.js` | Aviso para instalar o app. |
+| `js/instalar.js` | v2.4.0: tela de instalação: `detectarAparelho` (Android Chrome/Edge/Samsung, PC Edge/Chrome, iOS Safari + aviso nos outros navegadores do iOS), botão principal "Instalar agora" (com `beforeinstallprompt`) ou "Ver como instalar", passos do aparelho atual primeiro (selo "este aparelho"), "Agora não" adia 7 dias (`caderno-instalar-adiado-ate`), estado "já instalado" em modo standalone. |
 | `js/app.js` | `APP_VERSAO`, `NOVIDADES`, `LOGIN_PADRAO`, `ACOES` e toda a ligação de eventos e a inicialização (na ordem de sempre). |
 
 **CSS**, em ordem (é a mesma ordem do antigo `app.css`, que foi cortado em pedaços sem mudar uma linha):
@@ -73,6 +74,16 @@ Em CSS vale a última regra de mesma força, por isso **não mude a ordem dos ar
 - **Limites:** (1) quem tem o arquivo e a senha da equipe ainda pode editar o arquivo por fora e, por exemplo, criar um perfil admin falso com chave própria; aparelhos que ainda não fixaram as chaves (aparelho novo) aceitariam. (2) apps antigos (v2.2.0 ou anterior) não verificam nada e regravam o arquivo sem `assin`; mudanças do admin que passem por eles antes de chegar a um aparelho v2.3.0 são tratadas como de analista. Todos precisam atualizar. (3) a chave privada fica só em memória: se a página recarregar antes da sincronização, a mudança do admin sai sem assinatura e os outros aparelhos a desfazem (sincronize antes de fechar). (4) a proteção forte de verdade só vem com o servidor (versão web).
 - **Nome:** o nome de um admin nunca é associado sozinho (`meuPerfil`); escolher o nome de um admin pede a senha de admin dele (`escolherPerfil`, `confirmarSenhaDoAdmin`). O analista já identificado não troca de nome. O último acesso de um admin só é atualizado por aparelho confirmado com a senha (`caderno-perfil-admin-confirmado`).
 - **Componentes novos (BEM):** `.campo-senha` / `.campo-senha__linha` / `.campo-senha__olho`, `.forca-senha` / `__barra` / `__texto` / `--fraca|--media|--forte`, `.sel-bar__dica`, `.cont--compartilhados`.
+
+## Gestão e senha pessoal (v2.4.0)
+- Cada perfil pode ter `senhaSalt`/`senhaIter`/`senhaHash` (PBKDF2-SHA256, 310000 iterações), `senhaTemp` e `bloqueado`. O hash fica só no arquivo cifrado da equipe e no cofre local cifrado; a cópia pública dos perfis guarda apenas sal/iterações.
+- Analista escolhe o nome → pede a senha pessoal. Senha temporária obriga a criar uma nova ("Crie sua senha"). 5 tentativas erradas bloqueiam (perfil `bloqueado`, papel vira leitura); só o Administrador desbloqueia (Gestão › Desbloquear, que gera nova temporária).
+- O aparelho lembra a confirmação em `caderno-perfil-pessoal-confirmado` (`id|senhaSalt`); um reset troca o sal e pede a senha de novo. Não há mais associação só pelo nome.
+- Migração da v2.3.0: perfis sem senha pessoal ficam "sem nome" até o Administrador definir uma temporária (Gestão › Resetar senha) e o analista fazer o primeiro acesso.
+- Perfis assinados: `assinarPerfil` assina os campos de poder (`CAMPOS_PERFIL_PODER`); `filtrarPerfisRemoto` aceita mudança assinada pelo Administrador, a troca da própria senha temporária e o bloqueio por tentativas; o resto é desfeito (no modo Administrador a reversão é reassinada e propagada) e registrado no Histórico.
+- Limites: é uma proteção de app sem servidor. Quem edita o próprio armazenamento local consegue mudar a cópia do próprio aparelho (não se propaga); a senha pessoal protege a identidade/autoria, não cifra os cards Individuais (previsto para v2.5.0); o bloqueio por tentativas é por perfil e depende de sincronizar.
+- Mais do analista é enxuto; itens da equipe (exportar/importar/planilha da equipe) ficam no bloco "Equipe" da Gestão e também são barrados no código (`podeArquivosEquipe`).
+- Todos os diálogos seguem o padrão "Crie sua senha" (`.dlg.dlg-senha.dlg-padrao`) com BEM `.dlg-padrao__*`; cartões `.gestao-pessoa*`; passos de instalação `.inst-passos*`.
 
 ## Convenção para código novo
 - **Onde colocar:** no arquivo do assunto. Se não houver, crie um arquivo novo e inclua-o **no `index.html` (antes do `js/app.js`) e na lista `FILES` do `sw.js`**, subindo a versão do cache (`caderno-web-vNN`). Sem isso, o app offline quebra.

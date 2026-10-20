@@ -170,6 +170,12 @@
     const cp = txt(p.chavePub, 400), cv = txt(p.chavePriv, 600), cs = txt(p.chaveSalt, 64);
     if (o.papel === "admin" && cp && /^[A-Za-z0-9_\-.]+$/.test(cp)) o.chavePub = cp;
     if (o.papel === "admin" && cv && /^[A-Za-z0-9+\/=.]+$/.test(cv) && cs && HEX.test(cs)) { o.chavePriv = cv; o.chaveSalt = cs; }
+    // v2.4.0: senha pessoal (PBKDF2, só o hash) de cada pessoa, temporária, bloqueio e a assinatura do Administrador no perfil
+    const shh = txt(p.senhaHash, 128), ssa = txt(p.senhaSalt, 64), sit = parseInt(p.senhaIter, 10);
+    if (ssa && HEX.test(ssa)) { o.senhaSalt = ssa; o.senhaIter = sit > 0 && sit <= 5e6 ? sit : 310000; if (shh && HEX.test(shh)) o.senhaHash = shh; } // o sal fica na cópia pública (marca a senha atual)
+    if (p.senhaTemp === true) o.senhaTemp = true;
+    if (p.bloqueado === true) o.bloqueado = true;
+    const ap = txt(p.assinP, 200); if (ap && /^[A-Za-z0-9_\-]+:[A-Za-z0-9+\/=]+$/.test(ap)) o.assinP = ap;
     return o;
   }
   function limparPerfis(l) {
@@ -189,6 +195,7 @@
       // cópia local sem hash (aparelho sem a chave do cofre) nunca apaga o hash do admin: o hash só sai quando o papel deixa de ser admin
       if (novo.papel === "admin" && !novo.adminHash && outro.adminHash) { novo.adminHash = outro.adminHash; novo.adminSalt = outro.adminSalt; novo.adminIter = outro.adminIter; }
       if (novo.papel === "admin" && !novo.chavePub && outro.chavePub) novo.chavePub = outro.chavePub;
+      if (!novo.senhaHash && outro.senhaHash && novo.updatedAt === outro.updatedAt) { novo.senhaHash = outro.senhaHash; novo.senhaSalt = outro.senhaSalt; novo.senhaIter = outro.senhaIter; }
       if (novo.papel === "admin" && !novo.chavePriv && outro.chavePriv && (!novo.chavePub || novo.chavePub === outro.chavePub)) { novo.chavePriv = outro.chavePriv; novo.chaveSalt = outro.chaveSalt; }
       novo.ultimaSync = vivo.ultimaSync; novo.versao = vivo.versao;
       novo.ultimoAcesso = ts(p.ultimoAcesso) > ts(a.ultimoAcesso) ? p.ultimoAcesso : a.ultimoAcesso;

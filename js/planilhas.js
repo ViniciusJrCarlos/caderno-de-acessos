@@ -23,7 +23,7 @@ function ordenarCards(lista) {
   return lista.slice().sort((a, b) => String(a.aplicacao || a.titulo || "").localeCompare(String(b.aplicacao || b.titulo || "")) || String(a.cliente || "").localeCompare(String(b.cliente || "")) || String(a.titulo || "").localeCompare(String(b.titulo || "")));
 }
 function abasPlanilha() {
-  return ABAS_PLAN.map((a) => ({ nome: a.nome, sempre: !!a.sempre, arquivo: /arquivad/.test(a.nome), lista: ordenarCards(itens.filter(a.filtro)) }))
+  return ABAS_PLAN.map((a) => ({ nome: a.nome, sempre: !!a.sempre, arquivo: /arquivad/.test(a.nome), lista: ordenarCards(itensExportaveis().filter(a.filtro)) }))
     .filter((a) => a.sempre || a.lista.length);
 }
 function dataBR(iso) {
@@ -338,19 +338,21 @@ function montarPlanilhaConsulta(ExcelJS) {
   return wb;
 }
 async function exportarExcelImportar() {
+  const soMeus = !podeArquivosEquipe(); // v2.4.0: o analista só exporta os próprios cards (Meus)
   try {
     const ExcelJS = await carregarExcelJS();
     await baixarWorkbook(montarPlanilhaImportar(ExcelJS), "caderno-acessos-importar-" + hoje() + ".xlsx");
-    toast("Excel para importar exportado (sem senhas individuais)");
+    toast(soMeus ? "Excel dos seus cards (Meus) exportado" : "Excel para importar exportado (sem senhas individuais)");
   } catch (e) {
     aviso("Falha ao exportar", "Não foi possível gerar a planilha. Recarregue a página e tente de novo.");
   }
 }
 async function exportarExcelConsulta() {
+  const soMeus = !podeArquivosEquipe();
   try {
     const ExcelJS = await carregarExcelJS();
     await baixarWorkbook(montarPlanilhaConsulta(ExcelJS), "caderno-acessos-consulta-" + hoje() + ".xlsx");
-    toast("Excel para consulta exportado (sem senhas individuais)");
+    toast(soMeus ? "Excel dos seus cards (Meus) exportado" : "Excel para consulta exportado (sem senhas individuais)");
   } catch (e) {
     aviso("Falha ao exportar", "Não foi possível gerar a planilha. Recarregue a página e tente de novo.");
   }
@@ -611,6 +613,7 @@ function cardsDeWorkbook(wb, XLSX) {
 async function importarPlanilha(ev) {
   const f = ev.target.files && ev.target.files[0];
   if (!f) return;
+  if (!podeArquivosEquipe()) { ev.target.value = ""; negarArquivosEquipe("importa planilhas para a Equipe"); return; } // v2.4.0
   if (f.size > IMPORT_MAX_BYTES) { aviso("Arquivo grande demais", "O limite é 5 MB por importação. Nada foi importado."); ev.target.value = ""; return; }
   let lista;
   // v2.0.0: erro de LEITURA da planilha ≠ erro depois de salvar (a v1.9.9 dizia "Falha na importação" com os cards já gravados)
@@ -630,7 +633,7 @@ async function importarPlanilha(ev) {
   try { await importarComPrevia(lista, "Importar planilha?"); }
   catch (e) { registrarErro("importar planilha", "", e, null); aviso("Falha na importação", "Não foi possível importar a planilha. Nada foi alterado."); }
 }
-function escolherPlanilha() { $("impXls").click(); }
+function escolherPlanilha() { if (!podeArquivosEquipe()) return negarArquivosEquipe("importa planilhas para a Equipe"); $("impXls").click(); }
 /* ---------- Menu "Excel ▾" do topo ---------- */
 function ligarMenuExcel() {
   const bt = $("dExcel"), menu = $("excelMenu");

@@ -18,6 +18,7 @@ function semSegredoIndividual(it) {
   return c;
 }
 function exportarEquipe() {
+  if (!podeArquivosEquipe()) return negarArquivosEquipe("exporta o JSON da equipe"); // v2.4.0: guarda também no código
   download("caderno-acessos-equipe-" + hoje() + ".json", JSON.stringify({ versao: "web-2", tipo: "equipe", gerado_em: hoje(), itens: itens.map(semSegredoIndividual) }, null, 2), "application/json");
   toast("JSON da equipe exportado (sem senhas individuais)");
 }
@@ -98,7 +99,7 @@ async function importarComPrevia(listaBruta, titulo) {
   if (listaBruta.length > IMPORT_MAX_CARDS) { aviso("Arquivo grande demais", "O arquivo tem " + listaBruta.length + " cards. O limite é " + IMPORT_MAX_CARDS + " por importação. Nada foi importado."); return false; }
   const prep = prepararImportacao(listaBruta);
   const fe = filtrarImportacaoEquipe(prep.itens); prep.itens = fe.itens; // v2.2.0: só o admin importa para a Equipe
-  if (fe.fora) toast(fe.fora + " card(s) da Equipe ficaram de fora: só o admin importa para a Equipe.");
+  if (fe.fora) toast(fe.fora + " card(s) da Equipe ficaram de fora: o analista importa só para Meus (backup pessoal).");
   if (!prep.itens.length) { aviso("Nada importado", "Nenhum card válido no arquivo" + (prep.invalidos.length ? " (" + prep.invalidos.length + " ignorado(s) por formato errado)" : "") + "."); return false; }
   const sim = mesclar(prep.itens.map((x) => Object.assign({}, x)), itens.map((x) => Object.assign({}, x)), "manter");
   const modo = await janela("dlgVer", (box, fim) => {

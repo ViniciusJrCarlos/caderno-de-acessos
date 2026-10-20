@@ -61,7 +61,7 @@ function valorVer(c, k) {
   return c[k] == null ? "" : String(c[k]);
 }
 function verConflito(id) {
-  if (!podeAdminEquipe()) { toast("O admin vai resolver este conflito de edição."); return Promise.resolve(false); }
+  if (!podeAdminEquipe()) { toast("O Administrador vai resolver este conflito de edição."); return Promise.resolve(false); }
   const c = lerConflitos().itens.find((x) => x.id === id);
   if (!c) { toast("Esse conflito já foi resolvido"); return Promise.resolve(false); }
   const vivo = itens.find((x) => x.id === c.cardId);

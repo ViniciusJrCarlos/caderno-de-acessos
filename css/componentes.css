@@ -363,3 +363,35 @@ body.travado .login { animation:caderno-fade .2s ease; }
 .forca-senha--forte .forca-senha__barra { box-shadow:inset 90px 0 0 #16a34a; }
 .sel-bar__dica { font-size:12px; opacity:.85; }
 .cont--compartilhados { background:var(--pri); margin-left:4px; }
+/* v2.4.0 — diálogo padrão (o mesmo da tela "Crie sua senha"), aba Gestão e tela de instalação (BEM, só variáveis do tema) */
+.abas button[hidden] { display:none; }
+.dlg-padrao .dlg-padrao__texto { color:var(--muted); font-size:15px; margin:0 0 14px; }
+.dlg-padrao .dlg-padrao__select { border:1px solid var(--line); border-radius:8px; padding:11px 12px; font-size:16px; width:100%; background:var(--input); color:var(--text); font-family:inherit; }
+.dlg-padrao .dlg-padrao__select:focus { outline:none; border-color:var(--teal); box-shadow:0 0 0 3px var(--focus); }
+.dlg-padrao .dlg-botoes .dlg-padrao__unico { grid-column:1 / -1; }
+.dlg-padrao .erro-form:empty { min-height:0; margin:0; }
+.gestao-pessoas { list-style:none; margin:12px 0 0; padding:0; display:grid; gap:10px; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); }
+.gestao-pessoa { width:100%; display:flex; align-items:center; gap:12px; text-align:left; background:var(--surface); color:var(--text); border:1px solid var(--line); border-radius:12px; padding:12px; font-family:inherit; cursor:pointer; }
+.gestao-pessoa:hover { background:var(--hover); }
+.gestao-pessoa:focus-visible { outline:2px solid var(--teal); outline-offset:2px; }
+.gestao-pessoa--desativado { opacity:.75; }
+.gestao-pessoa__avatar { flex:none; width:42px; height:42px; border-radius:50%; background:var(--pri); color:#fff; display:inline-flex; align-items:center; justify-content:center; font-weight:700; font-size:15px; }
+.gestao-pessoa__info { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.gestao-pessoa__nome { color:var(--head); font-size:15px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.gestao-pessoa__perfil { color:var(--text2); font-size:13px; font-weight:600; }
+.gestao-pessoa__sub { color:var(--muted); font-size:12px; }
+.gestao-pessoa__selo { flex:none; font-size:12px; font-weight:700; border-radius:999px; padding:3px 10px; border:1px solid transparent; }
+.gestao-pessoa__selo--ativo { background:var(--st-ok-bg); color:var(--green); border-color:var(--line); }
+.gestao-pessoa__selo--bloqueado { background:var(--ylw-bg); color:var(--ylw); border-color:var(--ylw-bd); }
+.gestao-pessoa__selo--desativado { background:var(--st-arq-bg); color:var(--st-arq); }
+.gestao-acoes__lista { display:flex; flex-direction:column; gap:8px; margin:0 0 14px; }
+.gestao-acoes__lista .btn { width:100%; padding:12px; font-size:15px; }
+.gestao__nota { margin:12px 4px; }
+.inst-passos { display:flex; flex-direction:column; gap:10px; margin:0 0 10px; }
+.inst-passos__grupo { border:1px solid var(--line); border-radius:10px; padding:10px 12px; background:var(--surface2); }
+.inst-passos__grupo--atual { border-color:var(--teal); box-shadow:0 0 0 1px var(--teal); background:var(--surface); }
+.dlg .inst-passos__titulo { margin:0 0 6px; color:var(--head); font-size:14px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.inst-passos__selo { background:var(--teal); color:#fff; font-size:11px; font-weight:700; padding:1px 8px; border-radius:99px; }
+.inst-passos__lista { margin:0; padding-left:20px; color:var(--text); font-size:14px; line-height:1.45; }
+.inst-passos__lista li + li { margin-top:4px; }
+:root[data-tema="escuro"] .inst-passos__selo { color:#0B1626; }
