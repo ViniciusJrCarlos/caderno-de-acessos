@@ -8,9 +8,9 @@ const GEN_PAD = { modo: "aleatoria", tam: 16, mai: true, min: true, num: true, s
 const GEN_SETS = { mai: "ABCDEFGHIJKLMNOPQRSTUVWXYZ", min: "abcdefghijklmnopqrstuvwxyz", num: "0123456789", sim: "!@#$%&*?-_=+.:;" };
 const PARECIDOS = /[O0oIl1|]/g;
 function genOpcoes() {
-  try { return Object.assign({}, GEN_PAD, JSON.parse(localStorage.getItem(GEN_KEY) || "{}")); } catch (e) { return Object.assign({}, GEN_PAD); }
+  try { return Object.assign({}, GEN_PAD, JSON.parse(Dados.texto(GEN_KEY) || "{}")); } catch (e) { return Object.assign({}, GEN_PAD); }
 }
-function genSalvar(o) { const c = Object.assign({}, o); delete c.palavra; localStorage.setItem(GEN_KEY, JSON.stringify(c)); }
+function genSalvar(o) { const c = Object.assign({}, o); delete c.palavra; Dados.gravarTexto(GEN_KEY, JSON.stringify(c)); }
 function rnd(n) {
   const lim = Math.floor(0x100000000 / n) * n; const a = new Uint32Array(1);
   do { crypto.getRandomValues(a); } while (a[0] >= lim);

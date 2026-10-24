@@ -42,13 +42,13 @@ function lerLixeiraEq() {
   const removidos = CadernoSync.mesclarRemocoes([CadernoSync.limparRemocoes(o.removidos)]);
   return { itens: CadernoSync.mesclarLixeira([CadernoSync.limparLixeira(o.itens)], removidos), removidos: removidos };
 }
-function gravarLixeiraEq(l) { localStorage.setItem(LIX_EQ_KEY, JSON.stringify({ itens: (l.itens || []).filter((e) => e && e.card && compartilhado(e.card)), removidos: l.removidos || [] })); }
+function gravarLixeiraEq(l) { Dados.gravarTexto(LIX_EQ_KEY, JSON.stringify({ itens: (l.itens || []).filter((e) => e && e.card && compartilhado(e.card)), removidos: l.removidos || [] })); }
 function lerLixeiraMeus() {
   const lim = Date.now() - DIAS_LIXEIRA * 864e5;
   const l = lerJSON(LIX_MEUS_KEY, []);
   return (Array.isArray(l) ? l : []).filter((e) => e && e.id && e.card && typeof e.card === "object" && new Date(e.excluidoEm).getTime() >= lim);
 }
-function gravarLixeiraMeus(l) { localStorage.setItem(LIX_MEUS_KEY, JSON.stringify(l)); }
+function gravarLixeiraMeus(l) { Dados.gravarTexto(LIX_MEUS_KEY, JSON.stringify(l)); }
 function restaurarDaLixeira(ids) {
   const lixEq = lerLixeiraEq(); let lixMeus = lerLixeiraMeus();
   if (!podeAdminEquipe() && lixEq.itens.some((e) => ids.indexOf(e.id) >= 0)) { toast(DICA_ADMIN + " (Lixeira da Equipe)."); return false; }

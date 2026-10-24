@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#1B365D">
+<meta name="theme-color" content="#0A1424">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
 <script src="js/tema-init.js"></script>
 <title>Caderno de Acessos</title>
@@ -20,81 +20,89 @@
 <link rel="stylesheet" href="css/cards.css">
 <link rel="stylesheet" href="css/telas.css">
 <link rel="stylesheet" href="css/componentes.css">
+<link rel="stylesheet" href="css/shell.css">
 </head>
 <body class="travado">
 <section id="login" class="login">
   <form id="loginForm" class="login-box" autocomplete="off">
+    <img src="icons/icon-192.png" alt="" class="login-logo" width="56" height="56">
     <h1>Caderno de Acessos</h1>
-    <span class="senha-campo login-senha">
-      <input id="loginSenha" type="password" placeholder="Senha de acesso" autocomplete="current-password" aria-label="Senha de acesso">
-      <button type="button" class="olho" id="loginOlho" aria-label="Mostrar senha" data-alvo="loginSenha" data-ic="eye"></button>
-    </span>
+    <p class="login-sub" id="loginSub">Digite a senha deste aparelho.</p>
+    <div id="loginPasso1">
+      <label class="login-campo" id="loginMatWrap" hidden><span class="login-rot">Matrícula</span>
+        <span class="senha-campo"><input id="loginMatricula" type="text" placeholder="Ex.: A1023" autocomplete="username" autocapitalize="characters" spellcheck="false" maxlength="40" aria-label="Matrícula"></span>
+      </label>
+      <label class="login-campo"><span class="login-rot" id="loginDica" hidden>Senha pessoal</span>
+        <span class="senha-campo login-senha">
+          <input id="loginSenha" type="password" placeholder="Senha de acesso" autocomplete="current-password" aria-label="Senha de acesso">
+          <button type="button" class="olho" id="loginOlho" aria-label="Mostrar senha" data-alvo="loginSenha" data-ic="eye"></button>
+        </span>
+      </label>
+    </div>
+    <div id="loginPasso2" hidden>
+      <h2 class="login-passo2-tit" id="lnTitulo">Crie sua senha</h2>
+      <p class="login-sub">Você entrou com uma senha temporária. Crie agora a sua senha pessoal.</p>
+      <label class="login-campo"><span class="login-rot">Nova senha</span>
+        <span class="senha-campo"><input id="lnNova" type="password" autocomplete="new-password" aria-label="Nova senha"><button type="button" class="olho" aria-label="Mostrar senha" data-alvo="lnNova" data-ic="eye"></button></span>
+      </label>
+      <label class="login-campo"><span class="login-rot">Confirmar nova senha</span>
+        <span class="senha-campo"><input id="lnConf" type="password" autocomplete="new-password" aria-label="Confirmar nova senha"><button type="button" class="olho" aria-label="Mostrar senha" data-alvo="lnConf" data-ic="eye"></button></span>
+      </label>
+      <p class="hint login-regras">Mínimo de 8 caracteres, com letra maiúscula, minúscula, número e símbolo.</p>
+    </div>
     <button type="submit" id="loginBtn">Abrir caderno</button>
+    <button type="button" class="link-discreto login-voltar" id="loginVoltar" hidden>‹ Voltar</button>
     <p id="loginErro" class="login-erro" role="alert"></p>
-    <p class="login-rodape" id="loginRodape">Caderno de Acessos v2.4.0 · © Todos os direitos reservados · Desenv. WebDev</p>
+    <p class="login-rodape" id="loginRodape">Caderno de Acessos v2.5.0 · © Todos os direitos reservados · Desenv. WebDev</p>
     <p class="login-instalar" id="loginInstalarWrap" hidden><button type="button" class="link-instalar" id="btnInstalarApp">Instalar app</button></p>
   </form>
 </section>
 <div id="app">
 <header class="topo">
-  <button type="button" class="ico-btn so-mobile" id="btnMenu" aria-label="Menu" title="Menu" data-ic="menu"></button>
+  <button type="button" class="voltar-cards so-mobile" id="btnVoltarCards" data-ir="equipe"><span data-ic="back"></span>Cards</button>
   <div class="marca">
-    <img src="icons/icon-192.png" alt="" class="logo so-desktop" width="32" height="32">
-    <h1>Caderno de Acessos</h1>
-    <span class="tag-off so-desktop">offline</span>
+    <img src="icons/icon-192.png" alt="" class="logo" width="32" height="32">
+    <div class="marca__tx"><h1>Caderno de Acessos</h1><small class="sync-topo" id="syncTopo"></small></div>
   </div>
-  <div class="topo-acoes so-desktop">
-    <button type="button" class="tb-btn pri" id="dNovo" title="Criar um novo acesso"><span data-ic="plus"></span>Novo</button>
-    <button type="button" class="tb-btn" data-so-equipe id="dExport" title="Baixar o JSON da equipe (sem senhas individuais)">Exportar JSON</button>
-    <button type="button" class="tb-btn" id="dImport" title="Juntar os cards de um arquivo JSON">Importar JSON</button>
-    <button type="button" class="tb-btn" data-so-equipe id="dImportXls" title="Importar cards de uma planilha Excel (.xlsx)">Importar planilha</button>
-    <div class="tb-drop" id="excelDrop">
-      <button type="button" class="tb-btn" id="dExcel" aria-haspopup="menu" aria-expanded="false" aria-controls="excelMenu" title="Exportar os cards para Excel">Excel<span class="tb-seta" aria-hidden="true">▾</span></button>
-      <div class="tb-menu" id="excelMenu" role="menu" aria-labelledby="dExcel" hidden>
-        <button type="button" class="tb-mi" role="menuitem" data-excel="importar" title="Planilha simples em abas, pronta para subir em “Importar planilha”"><span class="tb-mi-ic" data-ic="table"></span><span class="tb-mi-txt"><strong>Excel para importar</strong><small>Formato simples para importar no app</small></span></button>
-        <button type="button" class="tb-mi" role="menuitem" data-excel="consulta" title="Planilha com botões de navegação e escalonamento em blocos, só para ler"><span class="tb-mi-ic" data-ic="book"></span><span class="tb-mi-txt"><strong>Excel para consulta</strong><small>Com navegação e escalonamento, somente leitura</small></span></button>
-        <p class="tb-menu-nota" id="excelNota" role="note">Senhas individuais saem em branco.</p>
-      </div>
-    </div>
-  </div>
-  <button type="button" class="selo-admin" id="seloAdmin" hidden title="Sair do modo Administrador"><span>🛡️ Modo Adm.</span><small>Sair do modo Administrador</small></button>
+  <span class="chip-sover" id="chipSoVer" hidden><span data-ic="eye"></span>Só ver</span>
   <button type="button" class="sync-btn" id="btnSync" hidden><span data-ic="refresh"></span><span class="sync-txt"><strong>Sincronizar</strong><small id="syncInfo">Ainda não sincronizado</small></span></button>
-  <button type="button" class="ico-btn" id="btnInfo" aria-label="Sobre" title="Sobre o Caderno" data-ic="info"></button>
+  <div class="conta">
+    <button type="button" class="conta-btn" id="btnConta" aria-haspopup="menu" aria-expanded="false" aria-controls="contaMenu"><span class="conta-av" id="contaAv">?</span><span class="conta-nome" id="contaNome">Conta</span><span class="conta-seta" aria-hidden="true">▾</span></button>
+    <div class="conta-menu" id="contaMenu" role="menu" hidden></div>
+  </div>
 </header>
-<nav class="abas" id="abas">
-  <button type="button" data-aba="equipe" class="on">Equipe</button>
-  <button type="button" data-aba="meu">Meus</button>
-  <button type="button" data-aba="vencendo">Vencendo <span class="cont" id="contVenc"></span></button>
-  <button type="button" data-aba="arquivo">Arquivo</button>
-  <button type="button" data-aba="gerador">Gerador</button>
-  <button type="button" data-aba="mais">Mais <span class="cont cont--compartilhados" id="contMais"></span></button>
-  <button type="button" data-aba="gestao" id="abaGestao" hidden>Gestão</button>
+<nav class="abas" id="abas" aria-label="Navegação">
+  <div class="nav-grupo nav-cards">
+    <p class="nav-tit">Cards</p>
+    <button type="button" data-aba="equipe" class="on"><span data-ic="users"></span><span class="nav-rot">Equipe</span></button>
+    <button type="button" data-aba="meu"><span data-ic="user"></span><span class="nav-rot">Meus</span></button>
+    <button type="button" data-aba="vencendo"><span data-ic="clock"></span><span class="nav-rot">Vencendo</span> <span class="cont" id="contVenc"></span></button>
+    <button type="button" data-aba="arquivo"><span data-ic="archive"></span><span class="nav-rot">Arquivo</span></button>
+    <button type="button" data-aba="gerador"><span data-ic="key"></span><span class="nav-rot">Gerador</span></button>
+  </div>
+  <div class="nav-grupo nav-adm" id="navArea" hidden>
+    <p class="nav-tit">Administrador</p>
+    <button type="button" data-aba="adm-pessoas"><span data-ic="users"></span><span class="nav-rot">Pessoas</span></button>
+    <button type="button" data-aba="adm-perfis"><span data-ic="shield"></span><span class="nav-rot">Perfis</span></button>
+    <button type="button" data-aba="adm-logs"><span data-ic="list"></span><span class="nav-rot">Logs</span></button>
+    <button type="button" data-aba="adm-config"><span data-ic="gear"></span><span class="nav-rot">Configurações</span></button>
+    <button type="button" data-aba="adm-novidades"><span data-ic="star"></span><span class="nav-rot">Novidades</span></button>
+    <button type="button" class="nav-voltar" data-ir="equipe"><span data-ic="back"></span><span class="nav-rot">Voltar aos cards</span></button>
+  </div>
+  <button type="button" class="nav-rodape" id="navRodape" title="Sincronizar agora"><span class="nav-rodape__dot" aria-hidden="true"></span><span class="nav-rodape__tx"><b id="navSync">Só neste aparelho</b><small id="navSyncSub" hidden></small></span></button>
 </nav>
-<div class="busca-wrap" id="buscaWrap">
-  <span class="busca-ic" data-ic="search"></span>
-  <input id="busca" type="search" placeholder="Buscar acessos..." aria-label="Buscar acessos">
+<div class="barra-busca" id="barraBusca">
+  <div class="busca-wrap" id="buscaWrap">
+    <span class="busca-ic" data-ic="search"></span>
+    <input id="busca" type="search" placeholder="Buscar acessos..." aria-label="Buscar acessos">
+  </div>
+  <button type="button" class="tb-btn pri so-desktop" id="dNovo" title="Criar um novo acesso"><span data-ic="plus"></span>Novo</button>
 </div>
 <main id="lista"></main>
 <button class="fab so-mobile" id="novo" type="button" aria-label="Novo acesso" title="Novo acesso" data-ic="plus"></button>
 <input type="file" id="imp" accept=".json,application/json" hidden>
 <input type="file" id="impXls" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden>
-
-<div class="drawer" id="drawer" aria-hidden="true">
-  <div class="drawer-panel">
-    <div class="drawer-topo"><strong>Caderno de Acessos</strong><button type="button" class="ico-btn escuro" data-fecha="drawer" aria-label="Fechar" data-ic="x"></button></div>
-    <button type="button" class="dr-item" data-acao="novo" title="Criar um novo acesso"><span data-ic="plus"></span>Novo acesso</button>
-    <button type="button" class="dr-item" data-so-equipe data-acao="exportar" title="Baixar o JSON da equipe (sem senhas individuais)"><span data-ic="download"></span>Exportar JSON (equipe)</button>
-    <button type="button" class="dr-item" data-acao="backup" title="Arquivo completo com as suas senhas, só para você"><span data-ic="lock"></span>Backup pessoal (inclui minhas senhas)</button>
-    <button type="button" class="dr-item" data-acao="importar" title="Juntar os cards de um arquivo JSON"><span data-ic="upload"></span><span class="dr-rot">Importar JSON</span></button>
-    <button type="button" class="dr-item" data-so-equipe data-acao="importar-xls" title="Importar cards de uma planilha Excel (.xlsx)"><span data-ic="table"></span>Importar planilha Excel</button>
-    <button type="button" class="dr-item dr-sub" data-acao="excel-importar" title="Planilha simples em abas, pronta para subir em “Importar planilha”"><span data-ic="table"></span><span class="dr-txt">Excel para importar<small>Formato simples para importar no app</small></span></button>
-    <button type="button" class="dr-item dr-sub" data-acao="excel-consulta" title="Planilha com botões de navegação e escalonamento em blocos, só para ler"><span data-ic="book"></span><span class="dr-txt">Excel para consulta<small>Com navegação e escalonamento, somente leitura</small></span></button>
-    <p class="dr-nota" id="drExcelNota">Senhas individuais saem em branco.</p>
-    <button type="button" class="dr-item" data-acao="tema"><span data-ic="palette"></span>Tema: <span class="dr-tema">Claro</span></button>
-    <button type="button" class="dr-item" data-acao="trocar"><span data-ic="lock"></span>Trocar senha</button>
-    <button type="button" class="dr-item" data-acao="sair"><span data-ic="logout"></span>Sair (bloquear)</button>
-  </div>
-</div>
+<input type="file" id="impEquipe" accept=".json,application/json" hidden>
 
 <div class="sheet" id="sheet" aria-hidden="true">
   <form class="panel" id="ficha" autocomplete="off" novalidate>
@@ -155,9 +163,11 @@
   <div class="panel pequeno">
     <div class="panel-topo"><h3>Sobre</h3><button type="button" class="ico-btn escuro" data-fecha="sobre" aria-label="Fechar" data-ic="x"></button></div>
     <div class="panel-corpo">
-      <p class="meta">Caderno de Acessos v2.4.0 · © Todos os direitos reservados · Desenv. WebDev</p>
+      <p class="meta">Caderno de Acessos v2.5.0 · © Todos os direitos reservados · Desenv. WebDev</p>
+      <h4 class="sobre-tit">Novidades</h4>
+      <div class="sobre-novidades" id="sobreNovidades"></div>
       <h4 class="sobre-tit">Perfis Administrador e Analista</h4>
-      <p class="meta" id="sobrePerfis">Com os perfis configurados, o Administrador cuida da equipe na aba Gestão (só aparece depois de “Entrar como administrador”): pessoas, senhas, arquivo e senha da equipe, exportações e Histórico. Cada analista entra com a própria senha pessoal e cuida dos próprios cards em Meus; nos cards da Equipe, atualiza senha, datas, ciclo e escalonamento. As ações do Administrador saem assinadas: o nome sozinho não dá permissão. Ainda é uma proteção de tela, não um controle forte: quem tem o arquivo e a senha da equipe consegue mexer nele por fora, e apps antigos não conferem as assinaturas. Peça para todos atualizarem.</p>
+      <p class="meta" id="sobrePerfis">Com os perfis configurados, cada pessoa entra com a matrícula e a própria senha. O Administrador cuida da equipe na área do Administrador (menu “Administrador ▾”): Pessoas, Perfis, Logs e Configurações. O analista vê os cards da Equipe (só leitura), cuida dos próprios cards em Meus e só recebe o arquivo da equipe. As ações do Administrador saem assinadas: o nome sozinho não dá permissão. Ainda é uma proteção de tela, não um controle forte: quem tem o arquivo e a senha da equipe consegue mexer nele por fora, e apps antigos não conferem as assinaturas. Peça para todos atualizarem.</p>
       <h4 class="sobre-tit">Para que serve</h4>
       <p class="meta">Caderno de uso interno da equipe de suporte para guardar acessos a sistemas e fornecedores: link, login, senha, ciclo de troca e escalonamento. Funciona offline e fica salvo neste navegador, sem banco de dados.</p>
       <h4 class="sobre-tit">Como usar</h4>
@@ -236,6 +246,7 @@
 </div>
 <script src="js/sync.js"></script>
 <script src="js/cripto-equipe.js"></script>
+<script src="js/dados.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/armazenamento.js"></script>
 <script src="js/cards.js"></script>
@@ -257,6 +268,7 @@
 <script src="js/ficha.js"></script>
 <script src="js/login-bloqueio.js"></script>
 <script src="js/instalar.js"></script>
+<script src="js/area.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

@@ -8,12 +8,12 @@ const WRAP_SALT_KEY = "caderno-acessos-olho-salt";
 const seEstado = { protegido: !!lerJSON(SE_KEY, {}).atual, precisaSenha: false, env: null, pendente: null, dispensado: false, abrindo: false };
 let chaveLoginSessao = null;
 function lerSE() { return lerJSON(SE_KEY, {}); }
-function wrapSalt() { let s = localStorage.getItem(WRAP_SALT_KEY); if (!s) { s = CadernoCripto.b64(CadernoCripto.aleatorio(16)); localStorage.setItem(WRAP_SALT_KEY, s); } return s; }
+function wrapSalt() { let s = Dados.texto(WRAP_SALT_KEY); if (!s) { s = CadernoCripto.b64(CadernoCripto.aleatorio(16)); Dados.gravarTexto(WRAP_SALT_KEY, s); } return s; }
 function lembrarChaveLogin(senha) { if (window.CadernoCripto) CadernoCripto.chaveDeLogin(senha, wrapSalt()).then((k) => { chaveLoginSessao = k; }).catch(() => {}); }
 async function guardarOlho(senhaEquipe, salt, chaveLogin) {
   if (!chaveLogin) return;
   const o = await CadernoCripto.embrulhar(chaveLogin, salt, senhaEquipe);
-  localStorage.setItem(SE_OLHO_KEY, JSON.stringify({ salt: salt, iv: o.iv, ct: o.ct }));
+  Dados.gravarTexto(SE_OLHO_KEY, JSON.stringify({ salt: salt, iv: o.iv, ct: o.ct }));
 }
 async function reembrulharOlho(antiga, nova) {
   const rec = lerJSON(SE_OLHO_KEY, null);
@@ -22,7 +22,7 @@ async function reembrulharOlho(antiga, nova) {
     if (!rec) return;
     const senha = await CadernoCripto.desembrulhar(await CadernoCripto.chaveDeLogin(antiga, wrapSalt()), rec.salt, rec);
     await guardarOlho(senha, rec.salt, kNova);
-  } catch (e) { localStorage.removeItem(SE_OLHO_KEY); }
+  } catch (e) { Dados.remover(SE_OLHO_KEY); }
 }
 function erroSE(nome, env) { const e = new Error("O arquivo da equipe está protegido com a senha da equipe."); e.name = nome; e.env = env; return e; }
 async function abrirDocEquipe(d, copia) {
@@ -34,7 +34,7 @@ async function abrirDocEquipe(d, copia) {
     seEstado.protegido = true; seEstado.precisaSenha = false;
     const se = lerSE();
     if (se.atual !== d.kdf.salt && !(se.atual && CadernoSync.ts(se.em) > CadernoSync.ts(d.senha_em) && await CadernoCripto.chaveGuardada(se.atual)))
-      localStorage.setItem(SE_KEY, JSON.stringify({ atual: d.kdf.salt, por: d.senha_por || "", em: d.senha_em || "", acao: d.senha_acao || "" }));
+      Dados.gravarTexto(SE_KEY, JSON.stringify({ atual: d.kdf.salt, por: d.senha_por || "", em: d.senha_em || "", acao: d.senha_acao || "" }));
   }
   return doc;
 }
@@ -55,10 +55,10 @@ async function fecharDocEquipe(doc, bruto) {
 async function concluirSenhaPendente(a) {
   const p = seEstado.pendente; if (!p) return;
   seEstado.pendente = null; seEstado.protegido = true; seEstado.precisaSenha = false;
-  localStorage.setItem(SE_KEY, JSON.stringify({ atual: p.salt, por: p.info.por, em: p.info.em, acao: p.info.acao }));
+  Dados.gravarTexto(SE_KEY, JSON.stringify({ atual: p.salt, por: p.info.por, em: p.info.em, acao: p.info.acao }));
   const txt = (p.info.acao === "ativada" ? "Arquivo da equipe protegido com senha da equipe por " : "Senha da equipe trocada por ") + p.info.por + " em " + dataHoraBR(p.info.em);
   registrarHistorico([txt]);
-  try { addHist({ id: "se-" + p.salt, tipo: p.info.acao === "ativada" ? "se-ativada" : "se-trocada", card: "Arquivo da equipe", quem: p.info.por, quando: p.info.em, escopo: "Equipe" }); if (aba === "mais") render(); } catch (e) {}
+  try { addHist({ id: "se-" + p.salt, tipo: p.info.acao === "ativada" ? "se-ativada" : "se-trocada", card: "Arquivo da equipe", quem: p.info.por, quando: p.info.em, escopo: "Equipe" }); if (emPainel()) render(); } catch (e) {}
   try { if (a && a.registrarLog) await a.registrarLog([new Date().toLocaleString("pt-BR"), p.info.por, p.info.acao === "ativada" ? "senha da equipe ativada" : "senha da equipe trocada", "", ""]); } catch (e) {}
 }
 function textoSenhaEquipe() {
@@ -140,7 +140,7 @@ async function pedirSenhaEquipe(env) {
         const chave = await CadernoCripto.abrirComSenha(env, s.value);
         await CadernoCripto.guardarChave(env.kdf.salt, { chave: chave, iter: env.kdf.iter, verif: env.verif });
         if (chaveLoginSessao) await guardarOlho(s.value, env.kdf.salt, chaveLoginSessao);
-        localStorage.setItem(SE_KEY, JSON.stringify({ atual: env.kdf.salt, por: env.senha_por || "", em: env.senha_em || "", acao: env.senha_acao || "" }));
+        Dados.gravarTexto(SE_KEY, JSON.stringify({ atual: env.kdf.salt, por: env.senha_por || "", em: env.senha_em || "", acao: env.senha_acao || "" }));
         if (env.senha_por) addHist({ id: "se-" + env.kdf.salt, tipo: env.senha_acao === "ativada" ? "se-ativada" : "se-trocada", card: "Arquivo da equipe", quem: env.senha_por, quando: env.senha_em || new Date().toISOString(), escopo: "Equipe" });
         if (env.senha_por) registrarHistorico([(env.senha_acao === "ativada" ? "Arquivo da equipe protegido com senha da equipe por " : "Senha da equipe trocada por ") + env.senha_por + (env.senha_em ? " em " + dataHoraBR(env.senha_em) : "")]);
         s.value = ""; fim(true);
@@ -153,7 +153,7 @@ async function pedirSenhaEquipe(env) {
   });
   seEstado.abrindo = false;
   if (desbloqueou) { seEstado.precisaSenha = false; seEstado.dispensado = false; await sincronizar(true); toast("Arquivo da equipe desbloqueado neste aparelho"); }
-  if (aba === "mais") render();
+  if (emPainel()) render();
 }
 function verSenhaEquipe() {
   let timer = null;

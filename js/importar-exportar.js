@@ -123,17 +123,17 @@ async function importarComPrevia(listaBruta, titulo) {
   });
   if (!modo) { toast("Importação cancelada"); return false; }
   histLote = { n: 0 };
-  let res; const antesLS = localStorage.getItem(KEY);
+  let res; const antesLS = Dados.texto(KEY);
   try { res = mesclar(prep.itens, itens, modo); save(); }
   catch (e) {
-    if (!res || localStorage.getItem(KEY) === antesLS) { try { itens = JSON.parse(antesLS || "[]"); } catch (x) {} histLote = null; throw e; }
+    if (!res || Dados.texto(KEY) === antesLS) { try { itens = JSON.parse(antesLS || "[]"); } catch (x) {} histLote = null; throw e; }
     registrarErro("importar", "", e, null); // os cards já foram gravados: segue com o aviso de sucesso
   } finally { histLote = null; }
   // v2.0.0: daqui em diante os cards JÁ estão salvos: um erro não pode mais dizer "Falha na importação"
   try {
     addHist({ tipo: "importado", card: res.novos + " novo(s), " + res.atualizados + " atualizado(s)" + (res.mantidos ? ", " + res.mantidos + " mantido(s)" : ""), escopo: "Meu", local: true });
     fotoMeus = fotoIndividuais();
-    if (aba === "mais") render();
+    if (emPainel()) render();
   } catch (e) { registrarErro("importar (depois de salvar)", "", e, null); }
   const resumo = "Importação concluída: " + res.novos + " novo(s), " + res.atualizados + " atualizado(s)" + (res.mantidos ? ", " + res.mantidos + " mantido(s) (os seus eram mais novos)" : "") + ". Total: " + itens.length + " card(s).";
   const extras = [];

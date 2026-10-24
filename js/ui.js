@@ -3,6 +3,12 @@
  * Script clássico (sem módulos): tudo fica no escopo global, carregado em ordem pelo index.html. Ver docs/ARQUITETURA.md. */
 /* ---------- Ícones SVG inline (funcionam offline) ---------- */
 const IC = {
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+  grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+  star: '<path d="M12 2l3 7 7 .6-5.3 4.7 1.6 7.2L12 17.8 5.7 21.5l1.6-7.2L2 9.6 9 9z"/>',
+  back: '<path d="M15 18l-6-6 6-6"/>',
   menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
   folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
@@ -141,11 +147,11 @@ function dialogo(op) {
 }
 function aviso(titulo, texto) { return dialogo({ titulo: titulo, texto: texto, ok: "OK", cancelar: false }); }
 /* ---------- Temas ---------- */
-const TEMAS = { claro: { nome: "Claro", cor: "#1B365D" }, escuro: { nome: "Escuro", cor: "#0B1626" }, suave: { nome: "Suave", cor: "#2C4766" } };
+const TEMAS = { marinho: { nome: "Marinho", cor: "#0A1424" }, claro: { nome: "Claro", cor: "#1B365D" }, escuro: { nome: "Escuro", cor: "#0B1626" }, suave: { nome: "Suave", cor: "#2C4766" } };
 const TEMA_KEY = "caderno-tema";
-function temaAtual() { const t = localStorage.getItem(TEMA_KEY); return TEMAS[t] ? t : "claro"; }
+function temaAtual() { const t = Dados.texto(TEMA_KEY); return TEMAS[t] ? t : "marinho"; }
 function aplicarTema(t) {
-  if (!TEMAS[t]) t = "claro";
+  if (!TEMAS[t]) t = "marinho";
   document.documentElement.setAttribute("data-tema", t);
   const m = document.querySelector('meta[name="theme-color"]');
   if (m) m.setAttribute("content", TEMAS[t].cor);
@@ -153,9 +159,9 @@ function aplicarTema(t) {
   if (dr) dr.textContent = TEMAS[t].nome;
 }
 function definirTema(t) {
-  localStorage.setItem(TEMA_KEY, t);
+  Dados.gravarTexto(TEMA_KEY, t);
   aplicarTema(t);
-  if (aba === "mais") render();
+  if (emPainel()) render();
 }
 function copiar(texto, rotuloMsg) {
   if (!texto) { toast("Nada para copiar"); return; }

@@ -18,6 +18,7 @@ function bloquear(auto) {
   try { document.querySelectorAll("#app .linha-val.aberto").forEach((n) => { n.classList.remove("aberto"); n.textContent = MASCARA; }); } catch (e) {}
   const er = $("loginErro");
   if (er) er.textContent = auto ? "Bloqueado por inatividade. Digite a senha para continuar" + (fichaSuja() ? " — o card que você estava editando continua aberto." : ".") : "";
+  try { prepararTelaLogin(); } catch (e) {}
   const inp = $("loginSenha"); if (inp) { inp.value = ""; setTimeout(() => { try { inp.focus(); } catch (e) {} }, 30); }
 }
 function sair() {
@@ -30,16 +31,16 @@ const BLOQ_KEY = "caderno-acessos-bloqueio-min";
 const BLOQ_OPCOES = [1, 5, 10, 15, 30, 0]; // 0 = Nunca
 const ATIVIDADE_KEY = "caderno-acessos-ultima-atividade";
 function minutosBloqueio() {
-  const v = localStorage.getItem(BLOQ_KEY);
+  const v = Dados.texto(BLOQ_KEY);
   if (v == null) return 5;
   const n = parseInt(v, 10);
   return BLOQ_OPCOES.includes(n) ? n : 5;
 }
 function definirBloqueio(n) {
-  localStorage.setItem(BLOQ_KEY, String(n));
+  Dados.gravarTexto(BLOQ_KEY, String(n));
   marcarAtividade(true);
   toast(n ? "Bloqueio automático: " + n + " min" : "Bloqueio automático desativado");
-  if (aba === "mais") render();
+  if (emPainel()) render();
 }
 let ultimaAtividade = Date.now();
 function marcarAtividade(forcar) {
@@ -76,7 +77,7 @@ function senhaForte(senha) {
 }
 function lerAuthLocal() {
   try {
-    const o = JSON.parse(localStorage.getItem(AUTH_KEY) || "null");
+    const o = JSON.parse(Dados.texto(AUTH_KEY) || "null");
     if (!o || !o.hash || !o.salt || !o.iter) return null;
     return o;
   } catch (e) { return null; }
@@ -92,6 +93,7 @@ async function derivarSenha(senha, saltHex, iter) {
   return bytesParaHex(bits);
 }
 async function conferirSenha(senha) {
+  if (typeof sessaoPerfilId !== "undefined" && sessaoPerfilId) return conferirSenhaPerfil(senha); // v2.5.0: senha pessoal do perfil
   const auth = loginAtivo();
   const hex = await derivarSenha(senha, auth.salt, auth.iter);
   return hashIguais(hex, auth.hash);
@@ -100,7 +102,7 @@ function tokenSessao() { return loginAtivo().hash.slice(0, 16); }
 function abrirSessao() { sessionStorage.setItem(SESSAO, tokenSessao()); }
 let trocaObrigatoria = false;
 function entrar() {
-  if (!loginAtivo().custom) { exigirTrocaSenha(); return; }
+  if (!loginAtivo().custom && !sessaoPerfilId) { exigirTrocaSenha(); return; }
   if (travadoEmMemoria) {
     // v2.0.0: desbloqueio do bloqueio em memória: nada é recarregado; a ficha aberta (e o rascunho) volta como estava
     travadoEmMemoria = false;
@@ -177,7 +179,7 @@ async function salvarTrocaSenha(ev) {
     }
     const salt = saltAleatorio();
     const hash = await derivarSenha(nova, salt, LOGIN_PADRAO.iter);
-    localStorage.setItem(AUTH_KEY, JSON.stringify({
+    Dados.gravarTexto(AUTH_KEY, JSON.stringify({
       versao: 1,
       iter: LOGIN_PADRAO.iter,
       salt: salt,

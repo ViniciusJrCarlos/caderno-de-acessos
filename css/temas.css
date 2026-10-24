@@ -1,8 +1,8 @@
 /* Caderno de Acessos — css/temas.css
- * Temas Claro (padrão), Escuro e Suave: só as variáveis de cor (:root[data-tema=…]).
+ * Temas Marinho (padrão desde a v2.5.0), Claro, Escuro e Suave: só as variáveis de cor (:root[data-tema=…]).
  * Carregado em ordem pelo index.html (temas → base → layout → cards → telas → componentes): a ordem é a mesma do antigo app.css. */
 /* Temas: Claro (padrão), Escuro, Suave — tudo por variáveis */
-:root, :root[data-tema="claro"] {
+:root[data-tema="claro"] {
   color-scheme:light;
   --brand:#1B365D; --on-brand:#fff; --head:#1B365D; --pri:#1B365D; --pri-h:#142a4a; --tb-pri:#2a4a78; --tb-pri-h:#34598f;
   --teal:#0F6B8A; --bg:#F4F6F8; --surface:#fff; --surface2:#F9FAFB; --input:#fff; --hover:#F4F6F8;
@@ -36,3 +36,17 @@
   --focus:rgba(45,110,126,.2); --overlay:rgba(46,42,37,.45); --shadow:rgba(70,55,35,.18); --shadow-s:rgba(70,55,35,.05); --toast:#3B352E; --sel:#2D6E7E;
 }
 
+
+/* v2.5.0: Marinho (padrão) — azul-marinho escuro do novo visual */
+:root, :root[data-tema="marinho"] {
+  color-scheme:dark;
+  --brand:#0A1424; --on-brand:#F2F6FC; --head:#F2F6FC; --pri:#2F6FE0; --pri-h:#3D7CEB; --tb-pri:#2F6FE0; --tb-pri-h:#3D7CEB;
+  --teal:#5BC0DE; --bg:#0A1424; --surface:#0F1D33; --surface2:#0C182B; --input:#0C182B; --hover:#16325E;
+  --text:#E6EAF0; --text2:#C9D1DC; --muted:#8C9AB0; --icon:#AAB5C5; --placeholder:#7D8899; --line:#1F3150; --line2:#18283F;
+  --red:#F87171; --danger:#C93A2E; --danger-h:#DB4A3E; --green:#4ADE80;
+  --ylw-bg:#3A2E0B; --ylw:#FBBF24; --ylw-bd:#6B5413; --red-bg:#3D1518; --red-bd:#5A2530;
+  --chip-int-bg:#1A2A44; --chip-int:#C9D1DC; --chip-ext-bg:#3D2A1A; --chip-ext:#F4B37E;
+  --st-ok-bg:#16325E; --st-ok:#BFD6FF; --st-arq-bg:#1A2A44; --st-arq:#C1CAD6; --info-bg:#10284D; --info:#BFD6FF;
+  --focus:rgba(47,111,224,.3); --overlay:rgba(0,0,0,.6); --shadow:rgba(0,0,0,.45); --shadow-s:rgba(0,0,0,.25); --toast:#1F3150; --sel:#5BC0DE;
+  --nav-on:#16325E;
+}

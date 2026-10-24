@@ -47,7 +47,7 @@ function painelDuplicados() {
         ac.appendChild(botaoDlg("pequeno", "Arquivar", () => { const x = atual(c); if (x) { x.arquivado_em = hoje(); save(); toast("Card arquivado"); } fim(true); if (gruposDuplicados().length) setTimeout(painelDuplicados, 60); }));
         row.appendChild(ac); sec.appendChild(row);
       });
-      const bm = botaoDlg("pequeno", g.cards.length > 2 ? "Manter todos" : "Manter os dois", () => { const d = lerJSON(DUP_DEC_KEY, {}); d[g.chave] = "manter"; localStorage.setItem(DUP_DEC_KEY, JSON.stringify(d)); toast("Decisão guardada"); fim(true); render(); if (gruposDuplicados().length) setTimeout(painelDuplicados, 60); });
+      const bm = botaoDlg("pequeno", g.cards.length > 2 ? "Manter todos" : "Manter os dois", () => { const d = lerJSON(DUP_DEC_KEY, {}); d[g.chave] = "manter"; Dados.gravarTexto(DUP_DEC_KEY, JSON.stringify(d)); toast("Decisão guardada"); fim(true); render(); if (gruposDuplicados().length) setTimeout(painelDuplicados, 60); });
       bm.classList.add("dup-manter"); sec.appendChild(bm);
       box.appendChild(sec);
     });

@@ -10,7 +10,7 @@ function lerConflitos() {
   const resolvidos = CadernoSync.mesclarRemocoes([CadernoSync.limparRemocoes(o.resolvidos)]);
   return { itens: CadernoSync.mesclarConflitos([CadernoSync.limparConflitos(o.itens)], resolvidos), resolvidos: resolvidos };
 }
-function gravarConflitos(c) { localStorage.setItem(CONF_KEY, JSON.stringify({ itens: (c.itens || []).filter((x) => x && x.perdedora && compartilhado(x.perdedora)), resolvidos: c.resolvidos || [] })); }
+function gravarConflitos(c) { Dados.gravarTexto(CONF_KEY, JSON.stringify({ itens: (c.itens || []).filter((x) => x && x.perdedora && compartilhado(x.perdedora)), resolvidos: c.resolvidos || [] })); }
 function tituloConflito(c) {
   const a = c.perdedorPor || "Alguém", b = c.vencedorPor || "outra pessoa";
   return a === b ? "⚠️ " + a + " editou o mesmo card em dois aparelhos" : "⚠️ " + a + " e " + b + " editaram o mesmo card";

@@ -175,6 +175,9 @@
     if (ssa && HEX.test(ssa)) { o.senhaSalt = ssa; o.senhaIter = sit > 0 && sit <= 5e6 ? sit : 310000; if (shh && HEX.test(shh)) o.senhaHash = shh; } // o sal fica na cópia pública (marca a senha atual)
     if (p.senhaTemp === true) o.senhaTemp = true;
     if (p.bloqueado === true) o.bloqueado = true;
+    // v2.5.0: matrícula (login) e exclusão definitiva (marca: o perfil some das telas, mas a lista nunca apaga ninguém)
+    const mt = txt(p.matricula, 20).trim().toUpperCase(); if (mt && /^[A-Z0-9._\-]+$/.test(mt)) o.matricula = mt;
+    if (p.excluido === true) { o.excluido = true; o.ativo = false; }
     const ap = txt(p.assinP, 200); if (ap && /^[A-Za-z0-9_\-]+:[A-Za-z0-9+\/=]+$/.test(ap)) o.assinP = ap;
     return o;
   }

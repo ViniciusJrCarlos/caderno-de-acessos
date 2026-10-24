@@ -10,7 +10,7 @@ function exigirNome() {
 function carimbarSemData() {
   const agora = new Date().toISOString();
   itens.filter(compartilhado).forEach((it) => { if (!it.updatedAt) { it.updatedAt = agora; it.updatedBy = autor(); } });
-  localStorage.setItem(KEY, JSON.stringify(itens));
+  Dados.gravarTexto(KEY, JSON.stringify(itens));
   const meta = syncMeta(); meta.ultimaSync = ""; gravarMeta(meta);
 }
 /* v2.3.0 (item 12): a pasta escolhida tem o arquivo da equipe? (sem criar nada) */
@@ -28,20 +28,20 @@ async function vincularPasta() {
       if (comPerfis && papelAtual() !== "admin") {
         await a.desvincular(); await atualizarEstadoSync();
         aviso("Esta pasta não tem o arquivo da equipe", "Com os perfis configurados, só o Administrador cria um arquivo da equipe novo. Confira se escolheu a pasta certa (json-caderno-acessos) ou peça ao Administrador.");
-        if (aba === "mais") render();
+        if (emPainel()) render();
         return;
       }
       const criar = await dialogo({ titulo: "Esta pasta não tem o arquivo da equipe. Criar um novo?", texto: "Na pasta escolhida não existe o " + SYNC_ARQUIVO + ". Se a equipe já usa um arquivo, cancele e escolha a pasta certa. Criar um novo começa um arquivo da equipe vazio nesta pasta, com os cards da Equipe deste aparelho.", ok: "Criar um novo", cancelar: "Cancelar" });
-      if (!criar) { await a.desvincular(); await atualizarEstadoSync(); toast("Nada foi vinculado"); if (aba === "mais") render(); return; }
+      if (!criar) { await a.desvincular(); await atualizarEstadoSync(); toast("Nada foi vinculado"); if (emPainel()) render(); return; }
     }
     if (!window.__syncAdaptadorTeste && syncArquivo && await syncArquivo.vinculado()) await syncArquivo.desvincular(); // migra do modo arquivo
-    localStorage.setItem(MIGRAR_KEY, "1");
+    Dados.gravarTexto(MIGRAR_KEY, "1");
     carimbarSemData();
     await atualizarEstadoSync();
     const ok = await sincronizar(true);
     if (ok) toast("Pasta da equipe vinculada: " + syncEstado.nome);
   } catch (e) { if (!e || e.name !== "AbortError") toast("Não foi possível vincular a pasta (" + ((e && e.name) || "erro") + ")."); }
-  if (aba === "mais") render();
+  if (emPainel()) render();
 }
 async function criarArquivoEquipe() {
   if (!exigirNome()) return;
@@ -52,7 +52,7 @@ async function criarArquivoEquipe() {
     await atualizarEstadoSync();
     await sincronizar(true);
   } catch (e) { if (!e || e.name !== "AbortError") toast("Não foi possível criar o arquivo."); }
-  if (aba === "mais") render();
+  if (emPainel()) render();
 }
 async function usarArquivoEquipe() {
   if (!exigirNome()) return;
@@ -62,13 +62,13 @@ async function usarArquivoEquipe() {
     await atualizarEstadoSync();
     await sincronizar(true);
   } catch (e) { if (!e || e.name !== "AbortError") toast("Não foi possível abrir o arquivo."); }
-  if (aba === "mais") render();
+  if (emPainel()) render();
 }
 async function desvincularArquivo() {
   const ok = await dialogo({ titulo: "Desvincular a pasta/arquivo da equipe?", texto: "Os cards continuam neste aparelho. Nada é apagado na pasta.", ok: "Desvincular", cancelar: "Cancelar" });
   if (!ok) return;
   const a = adaptador(); if (a) await a.desvincular();
-  localStorage.removeItem(PERFIS_NO_ARQUIVO_KEY); // v2.3.0: outra pasta pode não ter perfis
+  Dados.remover(PERFIS_NO_ARQUIVO_KEY); // v2.3.0: outra pasta pode não ter perfis
   syncEstado.pendente = false;
   await atualizarEstadoSync();
   render();
@@ -76,15 +76,15 @@ async function desvincularArquivo() {
 }
 /* v1.9 → v1.9.1: quem só tinha o ARQUIVO vinculado recebe, uma vez, o convite para vincular a PASTA. */
 async function sugerirPasta() {
-  if (!syncEstado.vinculado || syncEstado.modo !== "arquivo" || !syncEstado.pastaSuportada || localStorage.getItem(MIGRAR_KEY)) return;
-  localStorage.setItem(MIGRAR_KEY, "1");
+  if (!syncEstado.vinculado || syncEstado.modo !== "arquivo" || !syncEstado.pastaSuportada || Dados.texto(MIGRAR_KEY)) return;
+  Dados.gravarTexto(MIGRAR_KEY, "1");
   const ok = await dialogo({ titulo: "Vincular a pasta da equipe", texto: "Para evitar as cópias de conflito do OneDrive (caderno-equipe-NOMEDOPC.json), vincule a PASTA json-caderno-acessos em vez de só o arquivo. O Caderno passa a juntar essas cópias sozinho e a gravar um log de erros na pasta.", ok: "Vincular a pasta", cancelar: "Agora não" });
   if (ok) vincularPasta();
 }
 /* v2.4.0: modo "gestao" (aba Gestão do Administrador, ou sem perfis): tudo, com senha da equipe e Histórico.
  * Com perfis, no Mais: só Vincular, Sincronizar, Digitar/Ver senha da equipe e Desvincular (o resto foi para a Gestão). */
 function blocoArquivoEquipe(box, bloco, modo) {
-  const completo = modo === "gestao" || !comPerfis();
+  const completo = modo === "gestao" || modo === "config" || !comPerfis();
   if (!syncEstado.suportado) {
     bloco("Arquivo da equipe", "Este navegador não permite usar a pasta sincronizada (comum no celular e no Firefox). Continue usando Exportar/Importar JSON normalmente.", []);
     return;
@@ -93,7 +93,7 @@ function blocoArquivoEquipe(box, bloco, modo) {
   const salvarNome = btn("btn", "check", "Salvar nome", () => {
     const v = nome.value.trim(); if (!v) { toast("Digite seu nome"); return; }
     if (!nomeLivre(v)) return; // v2.3.0 (item 5)
-    localStorage.setItem(AUTOR_KEY, v); toast("Nome salvo"); render();
+    Dados.gravarTexto(AUTOR_KEY, v); toast("Nome salvo"); render();
   });
   const linhaNome = el("div", "sync-nome"); linhaNome.appendChild(nome); linhaNome.appendChild(salvarNome);
   // v2.3.0 (item 5): com perfil, o nome vem do perfil (só o admin renomeia, no Painel de perfis)
@@ -117,7 +117,7 @@ function blocoArquivoEquipe(box, bloco, modo) {
       ? "Escolha a pasta do OneDrive da equipe (json-caderno-acessos). O Caderno usa o arquivo caderno-equipe.json (se a pasta não tiver, pergunta antes de criar), junta as cópias de conflito do OneDrive e grava um log de erros na pasta. Só cards de Equipe vão para o arquivo."
       : "Use um arquivo na pasta do OneDrive (ex.: json-caderno-acessos). Uma pessoa cria o arquivo; as outras usam o arquivo existente. Só cards de Equipe vão para o arquivo.",
     [linhaNome].concat(botoes));
-  if (completo) blocoHistorico(box); // v2.4.0: com perfis, o Histórico fica na Gestão
+  if (completo && modo !== "config") blocoHistorico(box); // v2.4.0: com perfis, o Histórico fica na Gestão
   if (modo === "gestao" && comPerfis()) return;
   const le = lerJSON(LOGERR_KEY, []);
   const c2 = el("article", "card painel-mais historico log-erros");
@@ -129,7 +129,7 @@ function blocoArquivoEquipe(box, bloco, modo) {
     le.slice(0, 20).forEach((x) => { const li = el("li"); li.appendChild(el("span", "hist-quando", dataHoraBR(x[0]))); li.appendChild(el("span", "", x[1] + " · " + x[2] + (x[3] ? " · " + x[3] : "") + " — " + x[4])); ul.appendChild(li); });
     c2.appendChild(ul);
     const row = el("div", "acoes-mais");
-    row.appendChild(btn("btn", "trash", "Limpar log deste aparelho", () => { localStorage.removeItem(LOGERR_KEY); render(); }));
+    row.appendChild(btn("btn", "trash", "Limpar log deste aparelho", () => { Dados.remover(LOGERR_KEY); render(); }));
     c2.appendChild(row);
   }
   box.appendChild(c2);
@@ -216,7 +216,7 @@ function blocoNovidades(box) {
 }
 function mostrarNovidadesSePendente() {
   let vista = null;
-  try { vista = localStorage.getItem(NOVIDADES_VISTA); } catch (e) {}
+  try { vista = Dados.texto(NOVIDADES_VISTA); } catch (e) {}
   if (vista === APP_VERSAO) return;
   if (trocaObrigatoria || document.body.classList.contains("travado")) return;
   if ($("dlgInstalar").classList.contains("on") || $("dlgSenha").classList.contains("on")) return;
@@ -226,7 +226,7 @@ function mostrarNovidadesSePendente() {
   const corpo = $("nvCorpo");
   corpo.textContent = "";
   novidadesItens(n, corpo);
-  try { localStorage.setItem(NOVIDADES_VISTA, APP_VERSAO); } catch (e) {}
+  try { Dados.gravarTexto(NOVIDADES_VISTA, APP_VERSAO); } catch (e) {}
   abrirSheet("dlgNovidades");
   setTimeout(() => $("nvEntendi").focus(), 40);
 }

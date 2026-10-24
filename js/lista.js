@@ -66,12 +66,12 @@ function visiveis() {
     if (aba === "meu" && (it.visibilidade !== "Individual" || arq)) return false;
     if (aba === "vencendo") { let st = ""; try { st = statusDe(it); } catch (e) { st = ""; } if (arq || ["Vencendo", "Vencido"].indexOf(st) < 0) return false; }
     if (aba === "arquivo" && !arq) return false;
-    if (aba === "mais" || aba === "gerador" || aba === "gestao") return false;
+    if (emPainel()) return false;
     const blob = [it.titulo, it.aplicacao, it.cliente, it.usuario, it.url, it.categoria, it.visibilidade, it.escalonamento, resumoEscalonamentos(niveisDe(it))].join(" ").toLowerCase();
     return !q || blob.indexOf(q) >= 0;
   };
   const S = (v) => { try { return String(v == null ? "" : v); } catch (e) { return ""; } };
-  return itens.filter((it) => { try { return filtro(it); } catch (e) { return !q && aba !== "mais" && aba !== "gerador" && aba !== "vencendo"; } }).sort((a, b) => S(a.aplicacao || a.titulo).localeCompare(S(b.aplicacao || b.titulo)) || S(a.cliente).localeCompare(S(b.cliente)) || S(a.titulo).localeCompare(S(b.titulo)));
+  return itens.filter((it) => { try { return filtro(it); } catch (e) { return !q && !emPainel() && aba !== "vencendo"; } }).sort((a, b) => S(a.aplicacao || a.titulo).localeCompare(S(b.aplicacao || b.titulo)) || S(a.cliente).localeCompare(S(b.cliente)) || S(a.titulo).localeCompare(S(b.titulo)));
 }
 function render() {
   const box = document.getElementById("lista");
@@ -88,12 +88,14 @@ function render() {
   const cm = document.getElementById("contMais");
   if (cm) { let n = 0; try { n = syncEstado.vinculado ? modelosNovos(false).filter(paraMim).length : 0; } catch (e) { n = 0; } cm.textContent = n ? String(n) : ""; cm.title = n ? n + (n === 1 ? " card compartilhado esperando você (Mais › Cards compartilhados)" : " cards compartilhados esperando você (Mais › Cards compartilhados)") : ""; }
   try { aplicarPapelNaTela(); } catch (e) {} // v2.4.0: menus por papel e aba Gestão
-  const painel = aba === "mais" || aba === "gerador" || aba === "gestao";
-  document.getElementById("buscaWrap").classList.toggle("oculto", painel);
-  document.getElementById("novo").classList.toggle("oculto", painel);
+  if (aba === "mais" || aba === "gestao") aba = podeAdminEquipe() ? "adm-pessoas" : "conta-arquivo"; // v2.5.0: a aba Mais saiu
+  try { aplicarShell(); } catch (e) {}
+  const painel = emPainel();
+  document.getElementById("barraBusca").classList.toggle("oculto", painel);
+  document.getElementById("novo").classList.toggle("oculto", painel || aba === "arquivo" || (aba === "equipe" && !podeAdminEquipe()));
   box.classList.toggle("mais", painel);
-  if (aba === "mais") { renderMais(box); return; }
-  if (aba === "gestao") { renderGestao(box); return; }
+  box.classList.remove("area-pag");
+  if (aba !== "gerador" && painel) { renderArea(box); return; }
   if (aba === "gerador") { renderGerador(box); return; }
   if (aba === "equipe") { try { faixaAvisos(box); } catch (e) { /* aviso é melhor esforço */ } }
   const list = visiveis();
@@ -316,7 +318,8 @@ function abrirMenuCard(it, ancora) {
   m.setAttribute("role", "menu");
   const id = it.id;
   const cur = (fn) => () => { fecharMenus(); const c = atual({ id: id }); if (!c) { toast("Este card não existe mais"); render(); return; } fn(c); };
-  m.appendChild(btn("mi", "edit", "Editar", cur((c) => abrirFicha(c)), null, "Editar este acesso"));
+  const soVer = compartilhado(it) && !podeAdminEquipe() && perfisAtivos(); // v2.5.0: analista só vê os cards da Equipe
+  m.appendChild(btn("mi", soVer ? "eye" : "edit", soVer ? "Ver detalhes" : "Editar", cur((c) => abrirFicha(c)), null, soVer ? "Ver este acesso (só leitura)" : "Editar este acesso"));
   m.appendChild(btn("mi", "copy", "Copiar usuário", cur((c) => copiar(c.usuario, "Usuário"))));
   if (it.visibilidade === "Individual" && !it.arquivado_em) {
     if (it.modeloDono) m.appendChild(btn("mi", "x", "Parar de compartilhar", () => { fecharMenus(); pararCompartilhar(atual(it) || it); }));

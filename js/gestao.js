@@ -63,12 +63,10 @@ function aplicarPapelNaTela() {
   const di = document.querySelector('.dr-item[data-acao="importar"] .dr-rot'); if (di) di.textContent = so ? "Importar backup (Meus)" : "Importar JSON";
   const nota = $("excelNota"); if (nota) nota.textContent = so ? "Só os seus cards (Meus). Senhas individuais saem em branco." : "Senhas individuais saem em branco.";
   const dn = $("drExcelNota"); if (dn) dn.textContent = so ? "Excel: só os seus cards (Meus). Senhas individuais saem em branco." : "Senhas individuais saem em branco.";
-  const ab = $("abaGestao"); if (ab) ab.hidden = papelAtual() !== "admin";
-  if (aba === "gestao" && papelAtual() !== "admin") { aba = "equipe"; document.querySelectorAll("#abas button").forEach((x) => x.classList.toggle("on", x.dataset.aba === "equipe")); }
 }
 /* ---------- Senha pessoal do analista ---------- */
 function tentativasDe(id) { return (lerJSON(TENTATIVAS_KEY, {})[id]) || 0; }
-function gravarTentativas(id, n) { const o = lerJSON(TENTATIVAS_KEY, {}); if (n) o[id] = n; else delete o[id]; localStorage.setItem(TENTATIVAS_KEY, JSON.stringify(o)); }
+function gravarTentativas(id, n) { const o = lerJSON(TENTATIVAS_KEY, {}); if (n) o[id] = n; else delete o[id]; Dados.gravarTexto(TENTATIVAS_KEY, JSON.stringify(o)); }
 function confirmarSenhaPessoal(p0) {
   const p = lerPerfis().find((x) => x.id === p0.id) || p0;
   if (p.bloqueado) return aviso("Conta bloqueada", "A conta de " + p.nome + " foi bloqueada depois de " + MAX_TENTATIVAS + " senhas erradas. Peça ao Administrador para desbloquear.").then(() => false);
@@ -131,8 +129,8 @@ function confirmarSenhaPessoal(p0) {
     const concluir = (c) => {
       const atual = lerPerfis().find((x) => x.id === c.id) || c;
       if (modoAdmin) sairModoAdmin(true);
-      localStorage.setItem(PERFIL_ID_KEY, c.id); localStorage.setItem(PESSOAL_CONF_KEY, c.id + "|" + (atual.senhaSalt || ""));
-      localStorage.setItem(AUTOR_KEY, c.nome);
+      Dados.gravarTexto(PERFIL_ID_KEY, c.id); Dados.gravarTexto(PESSOAL_CONF_KEY, c.id + "|" + (atual.senhaSalt || ""));
+      Dados.gravarTexto(AUTOR_KEY, c.nome);
       histPerfil("Perfil confirmado com a senha pessoal: " + c.nome);
       fim(true); toast("Você entrou como " + c.nome); render();
     };
@@ -144,8 +142,7 @@ function iniciais(n) { const p = String(n || "").trim().split(/\s+/).filter(Bool
 function situacaoDe(p) { return !p.ativo ? "desativado" : p.bloqueado ? "bloqueado" : "ativo"; }
 function abrirGestao() {
   if (papelAtual() !== "admin") { toast("Entre como administrador para abrir a Gestão"); return Promise.resolve(false); }
-  aba = "gestao"; document.querySelectorAll("#abas button").forEach((x) => x.classList.toggle("on", x.dataset.aba === "gestao"));
-  render(); window.scrollTo(0, 0); return Promise.resolve(true);
+  irPara("adm-pessoas"); return Promise.resolve(true);
 }
 function renderGestao(box) {
   if (papelAtual() !== "admin") { aba = "equipe"; render(); return; }
@@ -212,10 +209,12 @@ function novoAnalista() {
   return janela("dlgPerfis", (box, fim) => {
     dlgPadrao(box, "Novo analista", "Cadastre a pessoa e passe a senha temporária pessoalmente, nunca por e-mail ou chat.");
     const nome = campoPadrao(box, "gNome", "Nome", { placeholder: "Nome do colaborador", max: 40, auto: "off" });
+    const mat = campoPadrao(box, "gMatricula", "Matrícula", { placeholder: "Ex.: A1023", max: 20, auto: "off" });
+    mat.addEventListener("input", () => { mat.value = mat.value.toUpperCase(); });
     const perfil = selectPadrao(box, "gPerfil", "Perfil", [["analista", "Analista"], ["admin", "Administrador"]]);
     const s = campoPadrao(box, "gSenha", "Senha temporária", { senha: true, valor: gerarSenhaTemporaria(), auto: "new-password" });
     const av = avisoPadrao(box, "O analista troca a senha no primeiro acesso.");
-    perfil.addEventListener("change", () => { av.textContent = perfil.value === "admin" ? "O Administrador troca a senha no primeiro “Entrar como administrador”." : "O analista troca a senha no primeiro acesso."; });
+    perfil.addEventListener("change", () => { av.textContent = perfil.value === "admin" ? "O Administrador troca a senha no primeiro acesso." : "O analista troca a senha no primeiro acesso."; });
     regrasPadrao(box);
     const er = erroPadrao(box);
     const ok = botoesPadrao(box, "Cancelar", "Salvar", () => fim(false), async () => {
@@ -223,16 +222,19 @@ function novoAnalista() {
       const v = nome.value.trim();
       if (!v) { er.textContent = "Digite o nome."; nome.focus(); return; }
       if (perfilPorNome(v)) { er.textContent = "Já existe um perfil com esse nome."; return; }
+      const m = normMat(mat.value);
+      if (!matriculaValida(m)) { er.textContent = "Matrícula: de 2 a 20 letras, números, ponto, hífen ou sublinhado."; mat.focus(); return; }
+      if (matriculaEmUso(m, "")) { er.textContent = "Essa matrícula já é de outra pessoa."; mat.focus(); return; }
       if (!senhaForte(s.value)) { er.textContent = REGRAS_SENHA; return; }
       ok.disabled = true;
       try {
         const agora = new Date().toISOString(), eu = autor();
-        const p = { id: novoIdPerfil(), nome: v, papel: perfil.value === "admin" ? "admin" : "analista", ativo: true, criadoPor: eu, criadoEm: agora, updatedAt: agora, updatedBy: eu };
+        const p = { id: novoIdPerfil(), nome: v, papel: perfil.value === "admin" ? "admin" : "analista", ativo: true, matricula: m, criadoPor: eu, criadoEm: agora, updatedAt: agora, updatedBy: eu };
         if (p.papel === "admin") Object.assign(p, await hashAdmin(s.value), await gerarChavesAdmin(s.value), { trocarSenha: true });
         else Object.assign(p, await hashPessoal(s.value), { senhaTemp: true });
         await assinarPerfil(p);
         const l = await perfisCompletos(); l.push(p);
-        if (p.papel === "admin" && p.chavePub) { const pn = pinsChaves(); pn[p.id] = p.chavePub; localStorage.setItem(CHAVES_PIN_KEY, JSON.stringify(pn)); }
+        if (p.papel === "admin" && p.chavePub) { const pn = pinsChaves(); pn[p.id] = p.chavePub; Dados.gravarTexto(CHAVES_PIN_KEY, JSON.stringify(pn)); }
         await gravarPerfis(l);
         histPerfil((p.papel === "admin" ? "Administrador cadastrado: " : "Analista cadastrado: ") + v);
         s.value = ""; fim(true); agendarSync(); render();
@@ -272,7 +274,7 @@ function resetarSenha(p) {
   return janela("dlgSE", (box, fim) => {
     dlgPadrao(box, "Resetar senha de " + p.nome, "A senha atual de " + p.nome + " deixa de valer, a conta é desbloqueada e os aparelhos de " + p.nome + " pedem a senha de novo.");
     const s = campoPadrao(box, "gResetSenha", "Senha temporária", { senha: true, valor: gerarSenhaTemporaria(), auto: "new-password" });
-    avisoPadrao(box, (p.papel === "admin" ? "O Administrador troca a senha no primeiro “Entrar como administrador”." : "O analista troca a senha no primeiro acesso.") + " Passe a senha pessoalmente, nunca por e-mail ou chat.");
+    avisoPadrao(box, (p.papel === "admin" ? "O Administrador troca a senha no primeiro acesso." : "O analista troca a senha no primeiro acesso.") + " Passe a senha pessoalmente, nunca por e-mail ou chat.");
     regrasPadrao(box);
     const er = erroPadrao(box);
     const ok = botoesPadrao(box, "Cancelar", "Salvar", () => fim(false), async () => {

@@ -94,3 +94,11 @@ Em CSS vale a última regra de mesma força, por isso **não mude a ordem dos ar
 - **Segurança:** nada Individual no arquivo da equipe; modelos só com os campos de `CAMPOS_MODELO`; nada externo (CSP `'self'`).
 - **Classes CSS (BEM, só para componentes novos):** `bloco`, `bloco__elemento`, `bloco--variante`, por exemplo `.painel-x`, `.painel-x__titulo`, `.painel-x--alerta`. As classes que já existem (`.card`, `.dlg`, `.rc-item`, `.lix-tag` etc.) **não** são renomeadas: testes e código dependem delas. O CSS de um componente novo vai no fim de `css/componentes.css`, ou num arquivo novo carregado depois dele.
 - **Versão:** `APP_VERSAO` e `NOVIDADES` (em `js/app.js`), o rodapé e o Sobre (`index.html`) e o `CACHE` do `sw.js` mudam juntos.
+
+## v2.5.0 — casca nova, área do Administrador e login por matrícula
+
+- **Arquivos novos:** `js/dados.js` (camada única de armazenamento `Dados.*`), `js/area.js` (navegação, menu da conta, login por matrícula, área do Administrador: Pessoas, Perfis, Logs, Configurações, Novidades; arquivo da equipe para o celular), `css/shell.css` (topo, barra lateral ≥1000px, barra de baixo no celular). Tema padrão `marinho`.
+- **Login:** matrícula + senha pessoal. Senha temporária abre o passo 2 (criar senha pessoal). 5 erros bloqueiam a conta neste aparelho; perfil desativado/excluído não entra e, se estiver com a sessão aberta, ela termina na próxima sincronização.
+- **Analista:** só recebe o arquivo da equipe (nunca grava). Cards da Equipe em ficha só leitura; Meus ficam só no aparelho. Mudanças sem assinatura do Administrador são recusadas com o aviso "Dados recusados". No celular: Arquivo e backup › Receber arquivo da equipe (o Administrador gera em Configurações; exige senha da equipe).
+- **Limitação conhecida:** como o analista não grava, bloqueio por senhas erradas e último acesso do analista não chegam ao Administrador. Resetar senha também desbloqueia.
+- Service worker: cache `v39`.

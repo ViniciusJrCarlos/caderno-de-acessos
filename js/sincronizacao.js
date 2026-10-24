@@ -20,9 +20,9 @@ const syncFila = window.CadernoSync ? CadernoSync.Fila() : null;
 const syncEstado = { suportado: false, pastaSuportada: false, vinculado: false, modo: "", nome: "", pendente: false, rodando: false, agendado: false, acoes: [] };
 let syncAtivo = null;
 function adaptador() { return window.__syncAdaptadorTeste || syncAtivo; }
-function autor() { return (localStorage.getItem(AUTOR_KEY) || "").trim(); }
+function autor() { return (Dados.texto(AUTOR_KEY) || "").trim(); }
 function syncMeta() { return lerJSON(SYNC_META_KEY, { ultimaSync: "", marcas: null }); }
-function gravarMeta(m) { localStorage.setItem(SYNC_META_KEY, JSON.stringify(m)); }
+function gravarMeta(m) { Dados.gravarTexto(SYNC_META_KEY, JSON.stringify(m)); }
 function removidosLocais() { return lerJSON(REMOVIDOS_KEY, []); }
 /* Mesma regra do JSON da equipe: só cards de Equipe; Individuais nunca saem. */
 function compartilhado(it) { return !!it && it.visibilidade !== "Individual"; }
@@ -67,7 +67,7 @@ function carimbarMudancas() {
   const antes = rem.length;
   rem = rem.filter((t) => !(t.id in novas) || CadernoSync.ts(t.deletedAt) >= CadernoSync.ts((itens.find((x) => x.id === t.id) || {}).updatedAt));
   if (rem.length !== antes) mudou = true;
-  localStorage.setItem(REMOVIDOS_KEY, JSON.stringify(rem));
+  Dados.gravarTexto(REMOVIDOS_KEY, JSON.stringify(rem));
   itens.filter(compartilhado).forEach((it) => { novas[it.id] = marcaDe(it); });
   meta.marcas = novas; gravarMeta(meta);
   if (atualizarMeusModelos()) mudou = true;
@@ -90,7 +90,7 @@ function registrarHistorico(textos) {
   const h = lerJSON(HIST_KEY, []);
   const agora = new Date().toISOString();
   textos.forEach((t) => h.unshift({ em: agora, texto: t }));
-  localStorage.setItem(HIST_KEY, JSON.stringify(h.slice(0, 60))); // formato antigo mantido (volta para a v1.9.6)
+  Dados.gravarTexto(HIST_KEY, JSON.stringify(h.slice(0, 60))); // formato antigo mantido (volta para a v1.9.6)
 }
 let syncTimer = null;
 /* Várias gravações seguidas viram uma só (espera 1,5 s sem novas alterações). */
@@ -107,9 +107,15 @@ function sincronizar(interativo) {
   syncEstado.agendado = p;
   return p;
 }
-async function sincronizarAgora(interativo) {
-  const a = adaptador();
-  if (!a || !syncEstado.vinculado || document.body.classList.contains("travado")) return false;
+/* v2.5.0: com perfis, quem não é Administrador só RECEBE: nunca grava no arquivo (nem cópias, nem log), aceita só o que o
+ * Administrador assinou e nunca apaga o que já tem. "fixo": adaptador de memória (arquivo recebido no celular / gerado para enviar). */
+let syncSoLeituraAtual = false;
+function syncSoLeitura() { return comPerfis() && papelAtual() !== "admin"; }
+async function sincronizarAgora(interativo, fixo) {
+  const a = fixo || adaptador();
+  if (!a || (!fixo && !syncEstado.vinculado) || document.body.classList.contains("travado")) return false;
+  const soLeitura = syncSoLeitura(); syncSoLeituraAtual = soLeitura;
+  let recusados = 0;
   syncEstado.rodando = true; desenharBotaoSync();
   const acoes = syncEstado.acoes.splice(0);
   try {
@@ -136,7 +142,7 @@ async function sincronizarAgora(interativo) {
         try { const d = await abrirDocEquipe(c.doc, true); if (CadernoSync.docValido(d)) { const lc = CadernoSync.limparDoc(d); lc.invalidos.forEach((x) => invalidos.push({ origem: c.nome, x: x })); copias.push({ nome: c.nome, doc: lc.doc }); } }
         catch (e) { copiasFechadas.push(c.nome); } // cópia cifrada com uma senha que este aparelho não conhece: fica na pasta
       }
-      if (!localStorage.getItem(PRIMEIRO_KEY) && autor()) addHist({ id: "pa-" + idAparelho(), tipo: "primeiro", card: "", escopo: "Equipe" });
+      if (!Dados.texto(PRIMEIRO_KEY) && autor()) addHist({ id: "pa-" + idAparelho(), tipo: "primeiro", card: "", escopo: "Equipe" });
       carimbarMudancas();
       await assinarPendentes(); // v2.3.0 (item 6): o que foi feito no modo admin sai assinado
       const meta = syncMeta();
@@ -162,21 +168,23 @@ async function sincronizarAgora(interativo) {
       if (pf.precisa) precisa = true;
       const perm = await filtrarPermissoesRemoto(r, base, pf.itens, !meta.ultimaSync, { remoto: remoto, copias: copias, remAqui: remAqui, voltaram: voltaram });
       if (perm.mudou) { precisa = true; localMudou = true; }
+      recusados = (perm.recusados || 0) + (pf.desfeitos || 0);
       const ex = mesclarExtras(remoto, copias, r, conf, remAqui, voltaram);
       if (ex.precisa) precisa = true;
       const histLocal = lerHist();
       const histEq = CadernoSync.mesclarHistorico([remoto ? remoto.historico : [], ...copias.map((c) => c.doc.historico), histLocal.filter((e) => e.escopo === "Equipe" && !e.local), mud.map(histDeMudanca), ex.hist, perm.hist], CadernoSync.HIST_MAX);
       const idsRem = new Set(((remoto && remoto.historico) || []).map((e) => e.id));
       if (histEq.some((e) => !idsRem.has(e.id))) precisa = true;
-      if (precisa) await a.gravar(await fecharDocEquipe(CadernoSync.montarDoc(r.itens, r.removidos, autor(), compartilhado, { modelos: rm.itens, modelosRemovidos: rm.removidos, historico: histEq, lixeira: ex.lixeira, lixeiraRemovidos: ex.lixRem, conflitos: ex.conflitos, conflitosResolvidos: ex.confRes, perfis: pf.gravar ? pf.itens : [] }), bruto));
+      if (precisa && !soLeitura) await a.gravar(await fecharDocEquipe(CadernoSync.montarDoc(r.itens, r.removidos, autor(), compartilhado, { modelos: rm.itens, modelosRemovidos: rm.removidos, historico: histEq, lixeira: ex.lixeira, lixeiraRemovidos: ex.lixRem, conflitos: ex.conflitos, conflitosResolvidos: ex.confRes, perfis: pf.gravar ? pf.itens : [] }), bruto));
       resultado = { r: r, mud: mud, conf: ex.novosConf, localMudou: localMudou, rm: rm, histEq: histEq, ex: ex, perfis: pf.itens };
       copiasMescladas = copias.map((c) => c.nome);
     }, { aoFalhar: () => { syncEstado.pendente = true; desenharBotaoSync(); } });
-    await concluirSenhaPendente(a);
+    if (!soLeitura) await concluirSenhaPendente(a);
+    const aLog = soLeitura ? null : a;
     gravarHist(CadernoSync.mesclarHistorico([resultado.histEq, lerHist()], 100));
-    if (!localStorage.getItem(PRIMEIRO_KEY) && autor()) localStorage.setItem(PRIMEIRO_KEY, new Date().toISOString());
-    for (const v of invalidos.slice(0, 20)) await registrarErro("ignorar card inválido", (v.x.titulo ? v.x.titulo + " " : "") + "(posição " + (v.x.pos + 1) + " em " + v.origem + ")", { name: "CardInvalido", message: "card com formato errado foi ignorado e não foi aplicado" }, a);
-    for (const nome of copiasFechadas) await registrarErro("juntar cópia de conflito", nome, { name: "SenhaEquipe", message: "cópia protegida com outra senha da equipe; ficou na pasta" }, a);
+    if (!Dados.texto(PRIMEIRO_KEY) && autor()) Dados.gravarTexto(PRIMEIRO_KEY, new Date().toISOString());
+    for (const v of invalidos.slice(0, 20)) await registrarErro("ignorar card inválido", (v.x.titulo ? v.x.titulo + " " : "") + "(posição " + (v.x.pos + 1) + " em " + v.origem + ")", { name: "CardInvalido", message: "card com formato errado foi ignorado e não foi aplicado" },aLog);
+    for (const nome of copiasFechadas) await registrarErro("juntar cópia de conflito", nome, { name: "SenhaEquipe", message: "cópia protegida com outra senha da equipe; ficou na pasta" },aLog);
     gravarModelosLocais({ itens: resultado.rm.itens.map(CadernoSync.limparModelo), removidos: resultado.rm.removidos });
     adotarModelosOrfaos();
     gravarLixeiraEq({ itens: resultado.ex.lixeira, removidos: resultado.ex.lixRem });
@@ -184,11 +192,12 @@ async function sincronizarAgora(interativo) {
     await concluirPerfisSync(resultado.perfis);
     aplicarResultado(resultado.r);
     // só apaga as cópias depois da gravação verificada do arquivo principal
-    for (const nome of copiasMescladas) {
+    for (const nome of (soLeitura ? [] : copiasMescladas)) {
       try { await CadernoSync.comRetentativa(() => a.apagarCopia(nome), { tentativas: 3, atrasos: [500, 1500] }); registrarHistorico(["Cópia de conflito " + nome + " juntada ao arquivo da equipe e apagada"]); addHist({ tipo: "copia", card: nome, quem: "", escopo: "Equipe", local: true }); }
       catch (e) { await registrarErro("apagar cópia de conflito", nome, e, a); }
     }
     syncEstado.pendente = false;
+    if (recusados && soLeitura) setTimeout(() => aviso("Dados recusados", "O arquivo da equipe tem " + recusados + (recusados === 1 ? " alteração" : " alterações") + " sem a assinatura do Administrador. " + (recusados === 1 ? "Ela foi recusada" : "Elas foram recusadas") + " e os seus dados continuam como estavam. Avise o Administrador."), 0);
     const textos = resultado.mud.map(textoMudanca);
     resultado.conf.forEach((c) => textos.push(tituloConflito(c) + ": " + c.titulo + ". Ficou a versão mais recente; a outra está guardada (Mais › Conflitos de edição)."));
     registrarHistorico(textos);
@@ -198,9 +207,10 @@ async function sincronizarAgora(interativo) {
     else if (dupNovos) { /* toast de duplicados já mostrado */ }
     else if (copiasMescladas.length) toast(copiasMescladas.length + (copiasMescladas.length === 1 ? " cópia de conflito do OneDrive juntada" : " cópias de conflito do OneDrive juntadas") + " ao arquivo da equipe");
     else if (textos.length === 1) toast(textos[0]);
-    else if (textos.length > 1) toast(textos.length + " alterações da equipe recebidas (veja o Histórico em Mais)");
+    else if (textos.length > 1) toast(textos.length + " alterações da equipe recebidas");
     else if (interativo) toast("Arquivo da equipe sincronizado");
     setTimeout(() => verificarModelos(false), 0);
+    if (typeof verificarSessaoAtiva === "function") setTimeout(verificarSessaoAtiva, 0);
     return true;
   } catch (e) {
     syncEstado.pendente = true;
@@ -208,12 +218,12 @@ async function sincronizarAgora(interativo) {
     if (e && e.name === "SenhaEquipeNecessaria") {
       seEstado.protegido = true; seEstado.precisaSenha = true; seEstado.env = e.env;
       if (interativo || !seEstado.dispensado) setTimeout(() => pedirSenhaEquipe(e.env), 0);
-      if (aba === "mais") render();
+      if (emPainel()) render();
       return false;
     }
     const msg = e && e.name === "ArquivoInvalido" ? e.message : descreverErro(e);
     const ult = acoes[acoes.length - 1];
-    await registrarErro(ult ? ult.acao : "sincronizar", acoes.map((x) => x.card).filter(Boolean).slice(-5).join(", "), e, a);
+    await registrarErro(ult ? ult.acao : "sincronizar", acoes.map((x) => x.card).filter(Boolean).slice(-5).join(", "), e,syncSoLeituraAtual ? null : a);
     toast(msg + " Suas alterações estão salvas neste aparelho.");
     return false;
   } finally {
@@ -238,7 +248,7 @@ function aplicarResultado(r0) {
   // Alterações feitas enquanto o arquivo era gravado não se perdem: mescla de novo o que está na tela com o que foi gravado.
   carimbarMudancas();
   const r = CadernoSync.mesclar({ itens: itens.filter(compartilhado).map(itemParaEquipe), removidos: removidosLocais() }, { tipo: CadernoSync.TIPO, itens: r0.itens, removidos: r0.removidos }, "");
-  if ((r.remotoPrecisa || modelosPendentesEnvio) && syncMeta().ultimaSync) setTimeout(agendarSync, 0);
+  if ((r.remotoPrecisa || modelosPendentesEnvio) && syncMeta().ultimaSync && !syncSoLeituraAtual) setTimeout(agendarSync, 0);
   modelosPendentesEnvio = false;
   // Individuais ficam intactos; cards de equipe passam a ser os do merge
   const porId = new Map(r.itens.map((it) => [it.id, it]));
@@ -250,8 +260,8 @@ function aplicarResultado(r0) {
   });
   porId.forEach((it) => { const l = locaisPorId.get(it.id); novaLista.push(l && !compartilhado(l) ? l : it); });
   itens = novaLista;
-  localStorage.setItem(KEY, JSON.stringify(itens));
-  localStorage.setItem(REMOVIDOS_KEY, JSON.stringify(r.removidos));
+  Dados.gravarTexto(KEY, JSON.stringify(itens));
+  Dados.gravarTexto(REMOVIDOS_KEY, JSON.stringify(r.removidos));
   const marcas = {}, bases = {}; itens.filter(compartilhado).forEach((it) => { marcas[it.id] = marcaDe(it); bases[it.id] = it.updatedAt || ""; });
   gravarMeta(Object.assign({}, syncMeta(), { ultimaSync: new Date().toISOString(), marcas: marcas, bases: bases, marcaV: 3 }));
   fotoMeus = fotoIndividuais();

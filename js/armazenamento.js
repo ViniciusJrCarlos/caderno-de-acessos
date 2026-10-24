@@ -54,7 +54,7 @@ function exemplos() {
   ];
 }
 function load() {
-  try { itens = JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) { itens = []; }
+  try { itens = JSON.parse(Dados.texto(KEY) || "[]"); } catch (e) { itens = []; }
   if (!Array.isArray(itens)) itens = [];
   // v2.0.0: descarta lixo (não objeto / sem id) e saneia datas e ciclo dos cards guardados (cliente já quebrado pela v1.9.9 se recupera)
   itens = itens.filter((it) => it && typeof it === "object" && !Array.isArray(it) && it.id != null && it.id !== "");
@@ -67,13 +67,13 @@ function load() {
   // Remove exemplos de versões anteriores (só se ainda estiverem com a senha de exemplo original).
   itens = itens.filter((it) => !(["j1", "j2", "a1", "f1", "f2", "f3"].includes(it.id) && it.senha === "exemplo"));
   const removeuAntigos = itens.length < antes;
-  if (localStorage.getItem(KEY) === null || removeuAntigos) {
+  if (Dados.texto(KEY) === null || removeuAntigos) {
     const ids = new Set(itens.map((it) => it.id));
     exemplos().forEach((it) => { if (!ids.has(it.id)) itens.push(it); });
   }
   // Exemplos novos entram uma única vez em quem já tem cards (se apagar, não volta).
   let entregues = [];
-  try { entregues = JSON.parse(localStorage.getItem(KEY + "_exemplos") || "[]"); } catch (e) { entregues = []; }
+  try { entregues = JSON.parse(Dados.texto(KEY + "_exemplos") || "[]"); } catch (e) { entregues = []; }
   let mudou = removeuAntigos;
   exemplos().forEach((it) => {
     if (!entregues.includes(it.id)) {
@@ -81,7 +81,7 @@ function load() {
       entregues.push(it.id);
     }
   });
-  localStorage.setItem(KEY + "_exemplos", JSON.stringify(entregues));
+  Dados.gravarTexto(KEY + "_exemplos", JSON.stringify(entregues));
   itens.forEach((it) => {
     if (!Array.isArray(it.escalonamentos)) it.escalonamentos = [];
     if (!it.escalonamentos.length && it.escalonamento) {
@@ -101,7 +101,7 @@ function load() {
     if (!it.escalonamento) it.escalonamento = ex.escalonamento || resumoEscalonamentos(it.escalonamentos);
     mudou = true;
   });
-  if (mudou || saneou) localStorage.setItem(KEY, JSON.stringify(itens));
+  if (mudou || saneou) Dados.gravarTexto(KEY, JSON.stringify(itens));
   if (window.CadernoSync && !syncMeta().marcas) carimbarMudancas();
   else if (window.CadernoSync) migrarMarcas(marcasAntes);
   if (typeof fotografarEquipe === "function") fotografarEquipe();
@@ -125,9 +125,9 @@ function save() {
   if (window.CadernoSync) carimbarMudancas();
   registrarMeus();
   restaurando.clear(); paraLixeira.clear(); paraLixeiraMeus.clear(); restaurandoMeus.clear();
-  localStorage.setItem(KEY, JSON.stringify(itens));
+  Dados.gravarTexto(KEY, JSON.stringify(itens));
   if (typeof fotografarEquipe === "function") fotografarEquipe();
   render();
   if (window.CadernoSync) agendarSync();
 }
-function lerJSON(k, pad) { try { const v = JSON.parse(localStorage.getItem(k) || "null"); return v == null ? pad : v; } catch (e) { return pad; } }
+function lerJSON(k, pad) { try { const v = JSON.parse(Dados.texto(k) || "null"); return v == null ? pad : v; } catch (e) { return pad; } }

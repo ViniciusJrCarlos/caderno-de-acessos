@@ -9,12 +9,12 @@ const APARELHO_KEY = "caderno-acessos-aparelho";
 const PRIMEIRO_KEY = "caderno-acessos-primeiro-acesso";
 let histLote = null; // importação: um registro só, em vez de um por card
 function idAparelho() {
-  let v = localStorage.getItem(APARELHO_KEY);
-  if (!v) { v = Date.now().toString(36) + Math.random().toString(36).slice(2, 8); localStorage.setItem(APARELHO_KEY, v); }
+  let v = Dados.texto(APARELHO_KEY);
+  if (!v) { v = Date.now().toString(36) + Math.random().toString(36).slice(2, 8); Dados.gravarTexto(APARELHO_KEY, v); }
   return v;
 }
 function lerHist() { return window.CadernoSync ? CadernoSync.limparHistorico(lerJSON(HIST2_KEY, [])) : []; }
-function gravarHist(l) { localStorage.setItem(HIST2_KEY, JSON.stringify(window.CadernoSync ? CadernoSync.mesclarHistorico([l], 100) : l.slice(0, 100))); }
+function gravarHist(l) { Dados.gravarTexto(HIST2_KEY, JSON.stringify(window.CadernoSync ? CadernoSync.mesclarHistorico([l], 100) : l.slice(0, 100))); }
 function addHist(e) {
   const o = Object.assign({ id: "h-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), card: "", quem: autor(), quando: new Date().toISOString(), escopo: "Equipe" }, e);
   const l = lerHist().filter((x) => x.id !== o.id); l.unshift(o); gravarHist(l);
@@ -60,11 +60,11 @@ function histDeMudanca(m) {
 }
 /* Migração única do histórico antigo (só texto) para o novo formato. */
 function migrarHistorico() {
-  if (localStorage.getItem(HIST2_KEY) != null) return;
+  if (Dados.texto(HIST2_KEY) != null) return;
   const velho = lerJSON(HIST_KEY, []);
   const l = (Array.isArray(velho) ? velho : []).filter((x) => x && x.texto).map((x, i) => ({ id: "v-" + i + "-" + String(x.em || ""), tipo: "texto", texto: String(x.texto).slice(0, 300), card: "", quem: "", quando: String(x.em || ""), escopo: "Equipe", local: true }));
   gravarHist(l);
-  if (syncMeta().ultimaSync) localStorage.setItem(PRIMEIRO_KEY, "migrado"); // quem já usava não ganha "Primeiro acesso" falso
+  if (syncMeta().ultimaSync) Dados.gravarTexto(PRIMEIRO_KEY, "migrado"); // quem já usava não ganha "Primeiro acesso" falso
 }
 function registrarAcao(acao, card) { syncEstado.acoes.push({ acao: acao, card: card }); if (syncEstado.acoes.length > 20) syncEstado.acoes.shift(); }
 function descreverErro(e) {
@@ -79,7 +79,7 @@ function descreverErro(e) {
 /* Log de erros: no aparelho (Mais → Log de erros) e, com a pasta vinculada, em caderno-equipe-log.csv. Nunca inclui senhas. */
 async function registrarErro(acao, card, e, a) {
   const campos = [new Date().toISOString(), autor() || "(sem nome)", acao, card || "", ((e && e.name) || "Erro") + ": " + String((e && e.message) || "").slice(0, 200)];
-  const l = lerJSON(LOGERR_KEY, []); l.unshift(campos); localStorage.setItem(LOGERR_KEY, JSON.stringify(l.slice(0, 100)));
+  const l = lerJSON(LOGERR_KEY, []); l.unshift(campos); Dados.gravarTexto(LOGERR_KEY, JSON.stringify(l.slice(0, 100)));
   const linha = [new Date().toLocaleString("pt-BR")].concat(campos.slice(1));
   try { if (a && a.registrarLog) await CadernoSync.comRetentativa(() => a.registrarLog(linha), { tentativas: 3, atrasos: [400, 900] }); } catch (x) { /* log em arquivo é melhor esforço */ }
 }

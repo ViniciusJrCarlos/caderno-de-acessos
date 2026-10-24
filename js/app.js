@@ -7,9 +7,19 @@ document.addEventListener("pointerdown", () => { ignorarClique = false; }, true)
 document.addEventListener("click", (ev) => { if (!ev.target.closest(".menu-card")) fecharMenus(); });
 document.addEventListener("click", () => { if (renderPendente) setTimeout(renderSePendente, 50); });
 /* ---------- v1.9.3+: Novidades (texto vai junto com o app; mais recente primeiro) ---------- */
-const APP_VERSAO = "2.4.0";
+const APP_VERSAO = "2.5.0";
 const NOVIDADES_VISTA = "caderno-novidades-vista";
 const NOVIDADES = [
+  { v: "2.5.0", data: "24/10/2026", itens: [
+    "Novo visual azul-marinho: barra lateral no computador e barra de baixo no celular.",
+    "Entrada por matrícula e senha pessoal. Só entra quem o Administrador cadastrou e está ativo; perfil desativado não entra.",
+    "Senha temporária: na primeira entrada, o app pede para criar a sua senha ali mesmo.",
+    "Administrador: menu “Administrador ▾” com Pessoas, Perfis, Logs, Configurações e Novidades. A aba Mais e o selo amarelo saíram.",
+    "Pessoas: busca por matrícula, ativar/desativar, Resetar senha, Desbloquear, Editar e Excluir (só depois de desativar).",
+    "Analista: Equipe só para ver; Meus continua só no aparelho. A sincronização só recebe o que o Administrador assinou, recusa e avisa o resto e nunca apaga nada.",
+    "No celular: receba o arquivo que o Administrador envia em Arquivo e backup › Receber arquivo da equipe.",
+    "Nova tela de instalação com o passo a passo do seu aparelho."
+  ], fazer: "Entre com a matrícula que o Administrador cadastrou. Quem veio da v2.4.0 sem matrícula entra digitando o nome no campo Matrícula até o Administrador cadastrar." },
   { v: "2.4.0", data: "20/10/2026", itens: [
     "Nova aba Gestão, só para o Administrador (aparece depois de “Entrar como administrador”): pessoas com situação ativo, bloqueado ou desativado, Novo analista, Resetar senha, Desbloquear, Tornar ou Remover administrador, Desativar e Reativar.",
     "Cada analista entra com a própria senha pessoal. A senha temporária é trocada no primeiro acesso, e 5 senhas erradas bloqueiam a conta até o Administrador desbloquear.",
@@ -114,12 +124,9 @@ document.addEventListener("keydown", (ev) => {
   fecharMenus();
   if (!abertos.length && selecao) sairSelecao();
 });
-$("btnMenu").addEventListener("click", () => abrirSheet("drawer"));
-$("btnInfo").addEventListener("click", () => abrirSheet("sobre"));
 $("btnSync").addEventListener("click", () => sincronizar(true));
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && syncEstado.vinculado) sincronizar(false); });
 const ACOES = { novo: () => abrirFicha(null), exportar: exportarEquipe, backup: backupPessoal, importar: () => $("imp").click(), "importar-xls": escolherPlanilha, "excel-importar": exportarExcelImportar, "excel-consulta": exportarExcelConsulta, sair: sair, trocar: abrirTrocaSenha, tema: () => { const ks = Object.keys(TEMAS); definirTema(ks[(ks.indexOf(temaAtual()) + 1) % ks.length]); } };
-document.querySelectorAll(".dr-item").forEach((b) => b.addEventListener("click", () => { if (b.dataset.acao !== "tema") fecharSheet("drawer"); ACOES[b.dataset.acao](); }));
 $("selExcluir").addEventListener("click", () => excluir(selecionados()));
 $("selReativar").addEventListener("click", () => {
   const l = selecionados();
@@ -131,10 +138,7 @@ $("selReativar").addEventListener("click", () => {
   avisarDuplicadosReativados(l);
 });
 $("selCancelar").addEventListener("click", () => sairSelecao());
-$("seloAdmin").addEventListener("click", () => sairModoAdmin(false));
 $("dNovo").addEventListener("click", () => abrirFicha(null));
-$("dExport").addEventListener("click", exportarEquipe);
-$("dImport").addEventListener("click", () => $("imp").click());
 if ($("dImportXls")) $("dImportXls").addEventListener("click", escolherPlanilha);
 ligarMenuExcel();
 $("imp").addEventListener("change", importarJson);
@@ -146,14 +150,6 @@ $("fGerar").addEventListener("click", () => {
   inp.value = s; inp.type = "text"; setOlho($("fOlho"), true);
   inp.dispatchEvent(new Event("input", { bubbles: true }));
   toast("Senha gerada. Ela será gravada ao salvar o card.");
-});
-document.querySelectorAll("#abas button").forEach((b) => {
-  b.addEventListener("click", () => {
-    aba = b.dataset.aba;
-    document.querySelectorAll("#abas button").forEach((x) => x.classList.toggle("on", x === b));
-    render();
-    window.scrollTo(0, 0);
-  });
 });
 $("busca").addEventListener("input", render);
 (function iniciarBloqueioAuto() {
@@ -187,29 +183,8 @@ if ("serviceWorker" in navigator) {
 }
 // Tela de login: senha padrão (hash no código) ou senha customizada só deste aparelho (localStorage).
 const LOGIN_PADRAO = { iter: 310000, salt: "015d5ac2a5ab08fdac13e98dd8b789fc", hash: "033d6adcf778bd29c7199d684d705ecebbd10bb47d86ecd732a0d225ffa2e9b8" };
-document.getElementById("loginForm").addEventListener("submit", async (ev) => {
-  ev.preventDefault();
-  const inp = document.getElementById("loginSenha");
-  const erro = document.getElementById("loginErro");
-  const btn = document.getElementById("loginBtn");
-  erro.textContent = "";
-  btn.disabled = true;
-  try {
-    if (await conferirSenha(inp.value)) {
-      abrirSessao();
-      lembrarChaveLogin(inp.value);
-      inp.value = "";
-      resetarOlhos(["loginSenha"]);
-      entrar();
-    } else {
-      erro.textContent = "Senha incorreta. Tente novamente.";
-      inp.select();
-    }
-  } catch (e) {
-    erro.textContent = "Não foi possível verificar a senha neste navegador (abra pelo link https).";
-  }
-  btn.disabled = false;
-});
+document.getElementById("loginForm").addEventListener("submit", (ev) => { ev.preventDefault(); enviarLogin(); });
+ligarArea();
 $("formTrocaSenha").addEventListener("submit", salvarTrocaSenha);
 $("tsCancelar").addEventListener("click", () => { if (trocaObrigatoria) sair(); else fecharSheet("dlgSenha"); });
 $("dlgSenha").addEventListener("click", (ev) => { if (cliqueNoFundo(ev, $("dlgSenha")) && !trocaObrigatoria) fecharSheet("dlgSenha"); });
@@ -217,8 +192,9 @@ document.querySelectorAll(".olho[data-alvo]").forEach(ligarOlho);
 aplicarIcones(document.getElementById("login"));
 aplicarIcones(document.getElementById("dlgSenha"));
 $("nvEntendi").addEventListener("click", () => fecharSheet("dlgNovidades"));
-if (sessionStorage.getItem(SESSAO) === tokenSessao()) entrar();
-else document.getElementById("loginSenha").focus();
+if (restaurarSessaoPerfil()) entrar();
+else if (!loginPorPerfil() && sessionStorage.getItem(SESSAO) === tokenSessao()) entrar();
+else document.getElementById(loginPorPerfil() ? "loginMatricula" : "loginSenha").focus();
 window.addEventListener("beforeinstallprompt", (ev) => {
   ev.preventDefault();
   deferredInstall = ev;

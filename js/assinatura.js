@@ -23,7 +23,7 @@ function fixarChaves(l) {
     if (p && p.papel === "admin" && p.chavePub && !pins[p.id]) { pins[p.id] = p.chavePub; mudou = true; }
     else if (p && p.papel !== "admin" && pins[p.id]) { delete pins[p.id]; mudou = true; } // admin retirado: se voltar a ser admin, vem com chave nova
   });
-  if (mudou) localStorage.setItem(CHAVES_PIN_KEY, JSON.stringify(pins));
+  if (mudou) Dados.gravarTexto(CHAVES_PIN_KEY, JSON.stringify(pins));
   return pins;
 }
 async function chaveEmbrulho(senha, saltHex) {
@@ -63,7 +63,7 @@ async function prepararChaveAdmin(p, senha, novaSenha) {
     if (pins[p.id] && !p.chavePriv) return { erro: "A chave de Administrador deste perfil ainda não chegou neste aparelho. Sincronize e tente de novo." };
     campos = await gerarChavesAdmin(novaSenha || senha);
     aberto = await abrirPriv(Object.assign({}, p, campos), novaSenha || senha);
-    const pn = pinsChaves(); pn[p.id] = campos.chavePub; localStorage.setItem(CHAVES_PIN_KEY, JSON.stringify(pn));
+    const pn = pinsChaves(); pn[p.id] = campos.chavePub; Dados.gravarTexto(CHAVES_PIN_KEY, JSON.stringify(pn));
   } else if (novaSenha) campos = await embrulharPriv(aberto.pk8, novaSenha);
   chaveAdmin = aberto ? { pid: p.id, priv: aberto.priv } : null;
   return { campos: campos };
@@ -104,7 +104,7 @@ async function papelRemoto(nome, assin, msg, perfis) {
   return p && !p.ativo ? "leitura" : "analista";
 }
 function pendentesAssin() { return new Set(lerJSON(ASSINAR_PEND_KEY, [])); }
-function marcarAssinar(k) { if (papelAtual() !== "admin") return; const s = pendentesAssin(); s.add(k); localStorage.setItem(ASSINAR_PEND_KEY, JSON.stringify([...s].slice(-2000))); }
+function marcarAssinar(k) { if (papelAtual() !== "admin") return; const s = pendentesAssin(); s.add(k); Dados.gravarTexto(ASSINAR_PEND_KEY, JSON.stringify([...s].slice(-2000))); }
 /* Antes de cada sincronização: assina o que foi feito no modo admin (a chave fica em memória até fechar/recarregar a página). */
 async function assinarPendentes() {
   const pend = pendentesAssin(); if (!pend.size || !chaveAdmin) return false;
@@ -113,16 +113,16 @@ async function assinarPendentes() {
   for (const k of [...pend]) {
     const tipo = k.slice(0, 1), id = k.slice(2);
     if (tipo === "c") { const it = itens.find((x) => x.id === id && compartilhado(x)); if (it && it.updatedBy === quem) { it.assin = await assinar(msgCard(itemParaEquipe(it))); mudou = true; } }
-    else if (tipo === "t") { const rem = removidosLocais(); const t = rem.find((x) => x.id === id); if (t && t.deletedBy === quem) { t.assin = await assinar(msgTomb(t)); localStorage.setItem(REMOVIDOS_KEY, JSON.stringify(rem)); } }
+    else if (tipo === "t") { const rem = removidosLocais(); const t = rem.find((x) => x.id === id); if (t && t.deletedBy === quem) { t.assin = await assinar(msgTomb(t)); Dados.gravarTexto(REMOVIDOS_KEY, JSON.stringify(rem)); } }
     else if (tipo === "l") {
       const o = lerJSON(LIX_EQ_KEY, {}); const rs = (o.removidos || []).filter((x) => x && x.id === id && x.por === quem);
       for (const t of rs) t.assin = await assinar(msgLix(t));
-      if (rs.length) localStorage.setItem(LIX_EQ_KEY, JSON.stringify(o));
+      if (rs.length) Dados.gravarTexto(LIX_EQ_KEY, JSON.stringify(o));
     }
     pend.delete(k);
   }
-  localStorage.setItem(ASSINAR_PEND_KEY, JSON.stringify([...pend]));
-  if (mudou) localStorage.setItem(KEY, JSON.stringify(itens));
+  Dados.gravarTexto(ASSINAR_PEND_KEY, JSON.stringify([...pend]));
+  if (mudou) Dados.gravarTexto(KEY, JSON.stringify(itens));
   return mudou;
 }
 /* ---------- v2.4.0: perfis assinados pelo Administrador ----------
@@ -133,14 +133,14 @@ async function assinarPendentes() {
  * ficar bloqueada por 5 erros. Perfil novo sem assinatura também não entra. Aparelho sem perfis (primeira vez) aceita a lista (TOFU),
  * e Administradores ainda sem chave (vindos da v2.2.0) seguem a regra antiga até o primeiro "Entrar como administrador". */
 function msgPerfil(p) {
-  return "p|" + [p.id, p.updatedAt || "", p.nome || "", p.papel || "", p.ativo === false ? 0 : 1, p.bloqueado ? 1 : 0, p.senhaHash || "", p.senhaTemp ? 1 : 0, p.adminHash || "", p.chavePub || "", p.trocarSenha ? 1 : 0].join("|");
+  return "p|" + [p.id, p.updatedAt || "", p.nome || "", p.papel || "", p.ativo === false ? 0 : 1, p.bloqueado ? 1 : 0, p.senhaHash || "", p.senhaTemp ? 1 : 0, p.adminHash || "", p.chavePub || "", p.trocarSenha ? 1 : 0].join("|") + (p.matricula ? "|m:" + p.matricula : "") + (p.excluido ? "|x" : ""); // v2.5.0: matrícula e exclusão só entram quando existem (assinaturas antigas continuam valendo)
 }
 async function assinarPerfil(p) {
   delete p.assinP;
   if (!chaveAdmin) return false;
   try { p.assinP = await assinar(msgPerfil(p)); return true; } catch (e) { return false; }
 }
-const CAMPOS_PERFIL_PODER = ["nome", "papel", "ativo", "bloqueado", "senhaHash", "senhaSalt", "senhaIter", "senhaTemp", "adminHash", "adminSalt", "adminIter", "chavePub", "chavePriv", "chaveSalt", "trocarSenha"];
+const CAMPOS_PERFIL_PODER = ["nome", "papel", "ativo", "bloqueado", "senhaHash", "senhaSalt", "senhaIter", "senhaTemp", "adminHash", "adminSalt", "adminIter", "chavePub", "chavePriv", "chaveSalt", "trocarSenha", "matricula", "excluido"];
 function difPerfil(a, b) { return CAMPOS_PERFIL_PODER.filter((k) => JSON.stringify(a[k] === undefined ? null : a[k]) !== JSON.stringify(b[k] === undefined ? null : b[k])); }
 function mudancaPropria(a, b) {
   const d = difPerfil(a, b); if (!d.length) return true;
@@ -165,7 +165,7 @@ async function filtrarPerfisRemoto(cache, l) {
     const assinOk = p.assinP && await verificarAssin(p.assinP, msgPerfil(p), cache);
     if (assinOk) {
       const signer = p.assinP.slice(0, p.assinP.lastIndexOf(":"));
-      if (p.papel === "admin" && p.chavePub && signer !== p.id) { const pn = pinsChaves(); pn[p.id] = p.chavePub; localStorage.setItem(CHAVES_PIN_KEY, JSON.stringify(pn)); } // reset/novo Administrador: a chave nova vale
+      if (p.papel === "admin" && p.chavePub && signer !== p.id) { const pn = pinsChaves(); pn[p.id] = p.chavePub; Dados.gravarTexto(CHAVES_PIN_KEY, JSON.stringify(pn)); } // reset/novo Administrador: a chave nova vale
       res.push(p); continue;
     }
     if (a && mudancaPropria(a, p)) { res.push(p); continue; }

@@ -4,10 +4,10 @@
 /* ---------- v1.9.4: "Compartilhar meu card" (modelos sem login/senha) ---------- */
 // Cache local dos modelos da equipe: repõe o que um app antigo apague ao gravar o arquivo.
 function modelosLocais() { const m = lerJSON(MODELOS_KEY, null); return { itens: (m && m.itens) || [], removidos: (m && m.removidos) || [] }; }
-function gravarModelosLocais(m) { localStorage.setItem(MODELOS_KEY, JSON.stringify({ itens: m.itens, removidos: m.removidos })); }
+function gravarModelosLocais(m) { Dados.gravarTexto(MODELOS_KEY, JSON.stringify({ itens: m.itens, removidos: m.removidos })); }
 function meusModelos() { return lerJSON(MEUS_MODELOS_KEY, []); }
 function decisoesModelos() { return lerJSON(MODELOS_DEC_KEY, {}); }
-function gravarDecisoes(d) { localStorage.setItem(MODELOS_DEC_KEY, JSON.stringify(d)); }
+function gravarDecisoes(d) { Dados.gravarTexto(MODELOS_DEC_KEY, JSON.stringify(d)); }
 function modelosAtivos() { const m = modelosLocais(); const rem = new Set(m.removidos.map((t) => t.id)); return m.itens.filter((x) => !rem.has(x.id) || CadernoSync.ts(x.updatedAt) > CadernoSync.ts((m.removidos.find((t) => t.id === x.id) || {}).deletedAt)); }
 /* Só nome, link, sistema, escalonamento e observações. Nunca login nem senha. */
 function conteudoModelo(card) {
@@ -31,7 +31,7 @@ function adotarModelosOrfaos() {
     if (!m || normTxt(m.sharedBy) !== eu) return;
     meus.push(c.modeloDono); base[c.modeloDono] = conteudoModelo(c); n++;
   });
-  if (n) { localStorage.setItem(MEUS_MODELOS_KEY, JSON.stringify(meus)); localStorage.setItem(MODELOS_BASE_KEY, JSON.stringify(base)); }
+  if (n) { Dados.gravarTexto(MEUS_MODELOS_KEY, JSON.stringify(meus)); Dados.gravarTexto(MODELOS_BASE_KEY, JSON.stringify(base)); }
   return n;
 }
 /* v2.0.1 (item 4/6): uma versão antiga (v1.9.9/v2.0.0) apaga sugeridoPara e parecidoCom ao regravar o arquivo. Se o modelo é o
@@ -69,9 +69,9 @@ function atualizarMeusModelos() {
     if (base[tid]) { if (mesmoConteudo(novo, base[tid])) return; delete base[tid]; baseMudou = true; }
     if (!mesmoConteudo(novo, m.itens[i])) { m.itens[i] = Object.assign({}, m.itens[i], novo, { id: tid, updatedAt: agora, updatedBy: quem }); mudou = true; }
   });
-  localStorage.setItem(MEUS_MODELOS_KEY, JSON.stringify(ficam));
+  Dados.gravarTexto(MEUS_MODELOS_KEY, JSON.stringify(ficam));
   Object.keys(base).forEach((k) => { if (ficam.indexOf(k) < 0) { delete base[k]; baseMudou = true; } });
-  if (baseMudou) localStorage.setItem(MODELOS_BASE_KEY, JSON.stringify(base));
+  if (baseMudou) Dados.gravarTexto(MODELOS_BASE_KEY, JSON.stringify(base));
   if (mudou) { gravarModelosLocais(m); modelosPendentesEnvio = true; }
   return mudou;
 }
@@ -150,6 +150,8 @@ async function compartilharMeuCard(card) {
     rTodos.addEventListener("change", troca); rSo.addEventListener("change", troca);
     box.appendChild(fs);
     const er = el("p", "erro-form"); er.id = "modParaErro"; box.appendChild(er);
+    fs.addEventListener("change", () => { er.textContent = ""; }); // v2.5.0: some a mensagem velha ao marcar alguém ou escolher Todos
+    if (inpNome) inpNome.addEventListener("input", () => { er.textContent = ""; });
     const bb = el("div", "dlg-botoes");
     bb.appendChild(botaoDlg("", "Cancelar", () => fim(false)));
     bb.appendChild(botaoDlg("pri", "Compartilhar", () => {
@@ -178,8 +180,8 @@ async function compartilharModelo(card, op) {
   m.itens = m.itens.filter((x) => x.id !== tid).concat([CadernoSync.limparModelo(novo)]);
   m.removidos = m.removidos.filter((t) => t.id !== tid);
   gravarModelosLocais(m);
-  const meus = meusModelos(); if (meus.indexOf(tid) < 0) meus.push(tid); localStorage.setItem(MEUS_MODELOS_KEY, JSON.stringify(meus));
-  const base = lerJSON(MODELOS_BASE_KEY, {}); if (base[tid]) { delete base[tid]; localStorage.setItem(MODELOS_BASE_KEY, JSON.stringify(base)); }
+  const meus = meusModelos(); if (meus.indexOf(tid) < 0) meus.push(tid); Dados.gravarTexto(MEUS_MODELOS_KEY, JSON.stringify(meus));
+  const base = lerJSON(MODELOS_BASE_KEY, {}); if (base[tid]) { delete base[tid]; Dados.gravarTexto(MODELOS_BASE_KEY, JSON.stringify(base)); }
   (atual(card) || card).modeloDono = tid;
   save();
   await sincronizar(true);
