@@ -254,3 +254,32 @@ let fundoDown = null, focoJanelaEm = 0;
 function cliqueNoFundo(ev, fundo) { return ev.target === fundo && fundoDown === fundo && Date.now() - focoJanelaEm > 400; }
 function abrirSheet(id) { $(id).classList.add("on"); $(id).setAttribute("aria-hidden", "false"); document.body.classList.add("sem-scroll"); }
 function fecharSheet(id) { $(id).classList.remove("on"); $(id).setAttribute("aria-hidden", "true"); if (!document.querySelector(".sheet.on, .drawer.on")) { document.body.classList.remove("sem-scroll"); renderSePendente(); } }
+
+/* v2.5.1 (item 8): no celular, a mensagem de erro (role="alert" / .erro-form / #loginErro) fica visível acima do teclado virtual.
+ * Quando um erro aparece, rola até ele; com o teclado aberto (visualViewport menor que a janela), ajusta para que fique dentro da área visível. */
+function mostrarErroVisivel(n) {
+  if (!n || !n.textContent || !n.textContent.trim()) return;
+  if (!(window.matchMedia && matchMedia("(max-width: 999px), (pointer: coarse)").matches)) return;
+  const ajustar = () => {
+    try { n.scrollIntoView({ block: "nearest", inline: "nearest" }); } catch (e) {}
+    const vv = window.visualViewport; if (!vv) return;
+    const r = n.getBoundingClientRect(), base = vv.offsetTop + vv.height - 8, topo = vv.offsetTop + 8;
+    const sc = n.closest(".dlg-box, .dlg, .sheet, .login, .dlg-wrap") || null;
+    const delta = r.bottom > base ? r.bottom - base : r.top < topo ? r.top - topo : 0;
+    if (!delta) return;
+    if (sc && sc.scrollHeight > sc.clientHeight) sc.scrollTop += delta; else window.scrollBy(0, delta);
+  };
+  ajustar(); setTimeout(ajustar, 320); // de novo depois que o teclado termina de abrir
+}
+(function vigiarErros() {
+  if (typeof MutationObserver !== "function") return;
+  const ehErro = (x) => x && x.nodeType === 1 && (x.matches('[role="alert"], .erro-form, #loginErro'));
+  const mo = new MutationObserver((ms) => {
+    const vistos = new Set();
+    ms.forEach((m) => { let t = m.target.nodeType === 3 ? m.target.parentNode : m.target; while (t && !ehErro(t) && t !== document.body) t = t.parentNode; if (ehErro(t)) vistos.add(t); });
+    vistos.forEach(mostrarErroVisivel);
+  });
+  const ligar = () => mo.observe(document.body, { childList: true, characterData: true, subtree: true });
+  if (document.body) ligar(); else document.addEventListener("DOMContentLoaded", ligar);
+  if (window.visualViewport) visualViewport.addEventListener("resize", () => { const a = document.activeElement; const box = a && a.closest && a.closest("form, .dlg-padrao, .login-box"); const er = box && box.querySelector('[role="alert"], .erro-form'); if (er) mostrarErroVisivel(er); });
+})();

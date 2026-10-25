@@ -7,9 +7,20 @@ document.addEventListener("pointerdown", () => { ignorarClique = false; }, true)
 document.addEventListener("click", (ev) => { if (!ev.target.closest(".menu-card")) fecharMenus(); });
 document.addEventListener("click", () => { if (renderPendente) setTimeout(renderSePendente, 50); });
 /* ---------- v1.9.3+: Novidades (texto vai junto com o app; mais recente primeiro) ---------- */
-const APP_VERSAO = "2.5.0";
+const APP_VERSAO = "2.5.1";
 const NOVIDADES_VISTA = "caderno-novidades-vista";
 const NOVIDADES = [
+  { v: "2.5.1", data: "25/10/2026", itens: [
+    "A sincronização nunca troca quem está logado: se os seus dados de acesso mudarem no arquivo da equipe, o app pede para entrar de novo.",
+    "App mais antigo que o arquivo da equipe só lê, nunca grava por cima, e avisa para atualizar.",
+    "O analista agora registra o próprio último acesso no arquivo da equipe (só isso; o resto continua só do Administrador).",
+    "Último acesso atualizado a cada entrada, com no máximo uma gravação a cada 15 minutos.",
+    "Aparelho novo: a primeira tela explica como trazer os cards da equipe (vincular a pasta ou receber o arquivo).",
+    "Pessoas: passo a passo para o analista vindo da v2.4.0 sem matrícula (cadastrar a matrícula e Resetar senha).",
+    "Botão Copiar ao lado do olho na senha temporária (Novo analista e Resetar senha).",
+    "No celular, a mensagem de erro fica visível acima do teclado.",
+    "Temas Claro e Suave: itens do menu lateral e da barra de baixo legíveis sobre o azul."
+  ], fazer: "Nada a fazer: é só atualizar. Peça para todos atualizarem, porque um app antigo passa a só ler o arquivo da equipe." },
   { v: "2.5.0", data: "24/10/2026", itens: [
     "Novo visual azul-marinho: barra lateral no computador e barra de baixo no celular.",
     "Entrada por matrícula e senha pessoal. Só entra quem o Administrador cadastrou e está ativo; perfil desativado não entra.",

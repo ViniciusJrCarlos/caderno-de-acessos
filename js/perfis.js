@@ -21,6 +21,7 @@ const CAMPOS_META = new Set(["id", "updatedAt", "updatedBy", "baseAt", "assin"])
 let modoAdmin = false;          // só em memória: some no bloqueio, no logout e ao fechar/recarregar a página
 let baseEquipe = null;          // foto dos cards da Equipe aceitos (para desfazer o que o analista não pode mudar)
 let tentativasAdmin = 0, esperaAdminAte = 0;
+const PRESENCA_MS = 15 * 6e4;   // v2.5.1 (item 4): no máximo uma gravação de presença a cada 15 min
 
 const SEGREDOS_PERFIL = ["adminHash", "adminSalt", "adminIter", "chavePriv", "chaveSalt", "senhaHash", "senhaIter"]; // v2.4.0: senhaSalt fica na cópia pública (não é segredo; marca a senha atual);
 function semHash(p) { const o = Object.assign({}, p); SEGREDOS_PERFIL.forEach((k) => delete o[k]); return o; }
@@ -216,9 +217,10 @@ async function mesclarPerfisSync(remoto, remoto0, copias) {
   }
   const eu = meuPerfil(l);
   if (eu && (eu.papel !== "admin" || adminConfirmado(eu.id))) { // v2.3.0: ninguém atualiza o último acesso de um admin sem a senha dele
+    // v2.5.1 (item 4): presença a cada login/sincronização, no máximo uma gravação a cada 15 min (antes: 6 h)
     const agora = new Date();
-    if (eu.versao !== APP_VERSAO || agora - CadernoSync.ts(eu.ultimaSync) > 6 * 36e5) { eu.ultimaSync = agora.toISOString(); eu.versao = APP_VERSAO; }
-    if (!eu.ultimoAcesso || agora - CadernoSync.ts(eu.ultimoAcesso) > 6 * 36e5) eu.ultimoAcesso = agora.toISOString();
+    if (eu.versao !== APP_VERSAO || agora - CadernoSync.ts(eu.ultimaSync) > PRESENCA_MS) { eu.ultimaSync = agora.toISOString(); eu.versao = APP_VERSAO; }
+    if (!eu.ultimoAcesso || agora - CadernoSync.ts(eu.ultimoAcesso) > PRESENCA_MS) eu.ultimoAcesso = agora.toISOString();
   }
   if (eu && eu.nome !== autor()) Dados.gravarTexto(AUTOR_KEY, eu.nome); // o admin renomeou: o nome deste aparelho acompanha
   const gravar = !!lerSE().atual; // perfis (com hashes) só vão para um arquivo cifrado

@@ -172,3 +172,28 @@ main.area-pag .painel-mais { margin:0 0 12px; }
 .inst-var__tit { margin:6px 0 2px; font-size:13px; font-weight:700; color:var(--text2); }
 .inst-var--atual .inst-var__tit::after { content:" · seu navegador"; color:var(--info); font-weight:600; }
 .inst-passos { max-height:52vh; overflow:auto; }
+
+/* v2.5.1 (item 5): aparelho novo — como trazer os cards da equipe */
+.login-primeira { text-align:left; background:var(--info-bg); color:var(--info); border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin:0 0 12px; font-size:13px; }
+.login-primeira p { margin:4px 0; }
+.login-primeira ul { margin:4px 0 0; padding-left:18px; display:grid; gap:4px; }
+/* v2.5.1 (item 6): guia do analista migrado sem matrícula */
+.pessoas__guia-passos { margin:4px 0 0; padding-left:20px; display:grid; gap:2px; }
+/* v2.5.1 (item 7): Copiar ao lado do olho */
+.senha-campo.senha-campo--copiar { position:relative; display:block; }
+.dlg-senha .senha-campo.senha-campo--copiar input { padding-right:112px; }
+.senha-campo .btn-copiar { position:absolute; right:44px; top:50%; transform:translateY(-50%); background:var(--surface); border:1px solid var(--line); color:var(--head); border-radius:8px; font-size:13px; font-weight:600; padding:5px 9px; cursor:pointer; min-width:62px; }
+.senha-campo .btn-copiar:hover { background:var(--hover); }
+.senha-campo .btn-copiar.copiado { color:var(--green); border-color:var(--green); }
+/* v2.5.1 (item 9): Claro e Suave — itens inativos do menu lateral (fundo azul) legíveis. Os outros temas não mudam. */
+@media (min-width:1000px) {
+  :root[data-tema="claro"] #app > .abas button:not(.on), :root[data-tema="suave"] #app > .abas button:not(.on) { color:rgba(255,255,255,.86); }
+  :root[data-tema="claro"] #app > .abas button:not(.on) .ic, :root[data-tema="suave"] #app > .abas button:not(.on) .ic { color:rgba(255,255,255,.86); }
+  :root[data-tema="claro"] #app > .abas button:not(.on):hover, :root[data-tema="suave"] #app > .abas button:not(.on):hover { background:rgba(255,255,255,.1); color:#fff; }
+  :root[data-tema="claro"] #app > .abas .nav-tit, :root[data-tema="suave"] #app > .abas .nav-tit { color:rgba(255,255,255,.7); }
+}
+/* v2.5.1 (item 9): no celular, Claro/Suave — item ativo da barra de baixo (fundo azul --nav-on) com texto e ícone claros */
+@media (max-width: 999px) {
+  :root[data-tema="claro"] #app > .abas button.on, :root[data-tema="suave"] #app > .abas button.on,
+  :root[data-tema="claro"] #app > .abas button.on .ic, :root[data-tema="suave"] #app > .abas button.on .ic { color:#fff; }
+}

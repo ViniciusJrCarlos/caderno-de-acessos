@@ -161,6 +161,7 @@ async function filtrarPerfisRemoto(cache, l) {
   const res = [];
   for (const p of l) {
     const a = ant.get(p.id);
+    // v2.5.1 (item 3): mudança só de presença (ultimoAcesso/ultimaSync/versao, fora de CAMPOS_PERFIL_PODER) entra sem assinatura
     if (a && (a.updatedAt === p.updatedAt || !difPerfil(a, p).length)) { res.push(p); continue; }
     const assinOk = p.assinP && await verificarAssin(p.assinP, msgPerfil(p), cache);
     if (assinOk) {

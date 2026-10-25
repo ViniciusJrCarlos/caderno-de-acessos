@@ -7,6 +7,7 @@
  * Script clássico (sem módulos): tudo fica no escopo global, carregado em ordem pelo index.html. Ver docs/ARQUITETURA.md. */
 const ABAS_CARDS = ["equipe", "meu", "vencendo", "arquivo", "gerador"];
 const ABAS_ADMIN = ["adm-pessoas", "adm-perfis", "adm-logs", "adm-config", "adm-novidades"];
+let sessaoPapel = "";               // v2.5.1 (item 1): papel com que a sessão entrou
 let sessaoPerfilId = null;           // perfil que entrou por matrícula nesta aba (null: aparelho sem perfis, senha do aparelho)
 let loginPendente = null;            // { c: perfil completo, senha } enquanto cria a senha nova (senha temporária)
 let tentativasLoginAdmin = 0, esperaLoginAte = 0;
@@ -200,8 +201,13 @@ function prepararTelaLogin() {
   $("loginSenha").placeholder = comP ? "Senha pessoal" : "Senha de acesso";
   $("loginSenha").setAttribute("aria-label", comP ? "Senha pessoal" : "Senha de acesso");
   $("loginDica").hidden = !comP;
+  const pv = $("loginPrimeiraVez"); if (pv) pv.hidden = !aparelhoNovo(); // v2.5.1 (item 5)
   mostrarPassoLogin(1);
   if (comP && sessaoPerfilId) { const p = lerPerfis().find((x) => x.id === sessaoPerfilId); if (p && $("loginMatricula").value === "") $("loginMatricula").value = p.matricula || p.nome; }
+}
+/* v2.5.1 (item 5): aparelho sem nada da equipe ainda (sem perfis, nunca sincronizou, nenhum card da Equipe). */
+function aparelhoNovo() {
+  try { return !perfisAtivos() && !perfisNoArquivo() && !syncMeta().ultimaSync && !(itens || []).some(compartilhado); } catch (e) { return false; }
 }
 function mostrarPassoLogin(n) {
   $("loginPasso1").hidden = n !== 1; $("loginPasso2").hidden = n !== 2; $("loginVoltar").hidden = n !== 2;
@@ -273,7 +279,8 @@ function concluirLoginPerfil(c, admin, senhaFinal) {
   Dados.gravarTexto(PERFIL_ID_KEY, c.id); Dados.gravarTexto(AUTOR_KEY, c.nome);
   if (admin) { Dados.gravarTexto(ADMIN_CONF_KEY, c.id); modoAdmin = true; histPerfil("Entrou como Administrador: " + c.nome); }
   else modoAdmin = false;
-  sessaoPerfilId = c.id;
+  sessaoPerfilId = c.id; sessaoPapel = c.papel;
+  if (syncEstado.vinculado) setTimeout(() => sincronizar(false), 0); // v2.5.1 (item 4): todo login registra o último acesso (máx. 1 gravação a cada 15 min)
   if (trocou && travadoEmMemoria) { travadoEmMemoria = false; try { fecharSheet("sheet"); } catch (e) {} }
   abrirSessaoPerfil(c.id);
   if (senhaFinal) lembrarChaveLogin(senhaFinal);
@@ -284,11 +291,29 @@ function abrirSessaoPerfil(id) {
   const p = lerPerfis().find((x) => x.id === id);
   try { sessionStorage.setItem(SESSAO, "p:" + id + ":" + ((p && p.senhaSalt) || "")); } catch (e) {}
 }
+/* v2.5.1 (item 1): a sincronização nunca troca quem está logado. Foto da identidade antes; depois, o id deste aparelho volta a ser
+ * o da sessão (nunca adota outra pessoa) e, se o papel ou a senha do perfil mudaram, a sessão termina e pede o login de novo. */
+function identidadeSessao() {
+  if (!sessaoPerfilId) return null;
+  let s = ""; try { s = sessionStorage.getItem(SESSAO) || ""; } catch (e) {}
+  return { id: sessaoPerfilId, papel: sessaoPapel, perfilId: Dados.texto(PERFIL_ID_KEY), salt: s.split(":")[2] || "" };
+}
+function manterIdentidade(antes) {
+  if (!antes) return false;
+  let trocou = false;
+  if (Dados.texto(PERFIL_ID_KEY) !== antes.perfilId) { Dados.gravarTexto(PERFIL_ID_KEY, antes.perfilId); trocou = true; }
+  if (sessaoPerfilId !== antes.id) { sessaoPerfilId = antes.id; trocou = true; }
+  const p = lerPerfis().find((x) => x.id === antes.id);
+  if (p && antes.papel && p.papel !== antes.papel) trocou = true;
+  if (p && p.papel !== "admin" && antes.salt !== (p.senhaSalt || "")) trocou = true;
+  if (trocou && modoAdmin) modoAdmin = false;
+  return trocou;
+}
 /* Depois de receber o arquivo: se o Administrador desativou ou excluiu este perfil, a sessão termina. */
-function verificarSessaoAtiva() {
+function verificarSessaoAtiva(trocouIdentidade) {
   if (!sessaoPerfilId || document.body.classList.contains("travado")) return;
   const p = lerPerfis().find((x) => x.id === sessaoPerfilId);
-  const motivo = !p || p.excluido ? "Perfil excluído. Fale com o Administrador." : !p.ativo ? "Perfil desativado. Fale com o Administrador." : "";
+  const motivo = !p || p.excluido ? "Perfil excluído. Fale com o Administrador." : !p.ativo ? "Perfil desativado. Fale com o Administrador." : trocouIdentidade === true ? "Os seus dados de acesso mudaram no arquivo da equipe. Entre de novo." : "";
   if (!motivo) return;
   sessaoPerfilId = null; try { sessionStorage.removeItem(SESSAO); } catch (e) {}
   bloquear(false);
@@ -301,7 +326,7 @@ function restaurarSessaoPerfil() {
   const id = v.split(":")[1]; const p = meuPerfil();
   if (!p || p.id !== id || p.papel === "admin" || !p.ativo || p.bloqueado || p.excluido) { try { sessionStorage.removeItem(SESSAO); } catch (e) {} return false; }
   if (v !== "p:" + id + ":" + (p.senhaSalt || "")) return false;
-  sessaoPerfilId = id; modoAdmin = false;
+  sessaoPerfilId = id; sessaoPapel = p.papel; modoAdmin = false;
   return true;
 }
 async function enviarLogin() {
@@ -425,6 +450,14 @@ function renderPessoas(box) {
   if (adm.length === 1) box.appendChild(el("p", "aviso-forte perfis-um-admin", "Recomendado: ter 2 Administradores. Hoje só " + adm[0].nome + " é Administrador."));
   const semMat = l.filter((p) => !p.matricula);
   if (semMat.length) box.appendChild(el("p", "aviso-forte pessoas__sem-mat", semMat.length + " pessoa(s) sem matrícula (vindas da v2.4.0): " + semMat.map((p) => p.nome).join(", ") + ". Use Editar para cadastrar a matrícula; até lá, essas pessoas entram digitando o nome no campo Matrícula."));
+  const semMatAn = semMat.filter((p) => p.papel !== "admin" && p.ativo); // v2.5.1 (item 6): passo a passo para o analista migrado
+  if (semMatAn.length) {
+    const g = el("div", "info-faixa pessoas__guia"); g.id = "guiaMigrados";
+    g.appendChild(el("b", "", "Analista vindo da v2.4.0 sem matrícula: como liberar o acesso"));
+    const ol = el("ol", "pessoas__guia-passos");
+    ["Clique em Editar na linha da pessoa e cadastre a matrícula.", "Clique em Resetar senha e passe a senha temporária pessoalmente (use Copiar).", "Na entrada, a pessoa digita a matrícula e a senha temporária e cria a própria senha."].forEach((t) => ol.appendChild(el("li", "", t)));
+    g.appendChild(ol); box.appendChild(g);
+  }
   avisosVersaoAntiga().forEach((nome) => box.appendChild(el("p", "aviso-forte perfis-antigo", nome + " ainda está numa versão antiga (não respeita as permissões). Peça para atualizar.")));
   const bw = el("div", "busca-wrap pessoas-busca"); bw.insertAdjacentHTML("beforeend", svg("search", 18));
   const bi = el("input"); bi.type = "search"; bi.id = "pBusca"; bi.placeholder = "Buscar por matrícula ou nome"; bi.setAttribute("aria-label", "Buscar por matrícula ou nome"); bi.value = pessoasBusca;

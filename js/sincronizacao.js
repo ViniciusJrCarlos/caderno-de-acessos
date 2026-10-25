@@ -111,10 +111,45 @@ function sincronizar(interativo) {
  * Administrador assinou e nunca apaga o que já tem. "fixo": adaptador de memória (arquivo recebido no celular / gerado para enviar). */
 let syncSoLeituraAtual = false;
 function syncSoLeitura() { return comPerfis() && papelAtual() !== "admin"; }
+/* v2.5.1 (item 2): app mais antigo que o arquivo nunca grava por cima. O arquivo traz a versão do app que gravou ("app") e o esquema ("versao"). */
+const ESQUEMA_DOC = 1;
+function versaoArquivoNova(d) {
+  if (!d || typeof d !== "object") return "";
+  if (typeof d.app === "string" && /^\d+(\.\d+){0,2}$/.test(d.app) && cmpVersao(d.app, APP_VERSAO) > 0) return d.app;
+  if (Number(d.versao) > ESQUEMA_DOC) return "esquema " + d.versao;
+  return "";
+}
+let avisoAtualizarMostrado = "";
+function avisarAtualizar(v) {
+  syncEstado.appAntigo = v;
+  if (avisoAtualizarMostrado === v) return; avisoAtualizarMostrado = v;
+  setTimeout(() => aviso("Atualize o app", "O arquivo da equipe foi gravado por uma versão mais nova do Caderno (" + v + "). Este aparelho (v" + APP_VERSAO + ") só lê o arquivo, sem gravar nada, até você atualizar: feche e abra o app de novo ou recarregue a página."), 0);
+}
+/* v2.5.1 (item 3): o analista grava SÓ a própria presença (último acesso, última sincronização, versão) no arquivo da equipe.
+ * Parte do arquivo como foi lido (já decifrado), troca só esses 3 campos no perfil dele (pelo id) e grava com a mesma gravação verificada.
+ * Cards, perfis, lixeira e histórico ficam exatamente como estavam; tudo o mais continua protegido pela assinatura ECDSA do Administrador. */
+const CAMPOS_PRESENCA = ["ultimoAcesso", "ultimaSync", "versao"];
+function presencaParaGravar(remoto0, perfis) {
+  if (!remoto0 || !Array.isArray(remoto0.perfis) || !perfis) return null;
+  const eu = meuPerfil(perfis);
+  if (!eu || eu.papel === "admin" || !eu.ativo || eu.excluido || (typeof sessaoPerfilId !== "undefined" && sessaoPerfilId !== eu.id)) return null;
+  const i = remoto0.perfis.findIndex((p) => p && String(p.id) === eu.id);
+  if (i < 0) return null;
+  const rp = remoto0.perfis[i];
+  const mud = {};
+  CAMPOS_PRESENCA.forEach((k) => { if (eu[k] && eu[k] !== rp[k] && (k === "versao" || CadernoSync.ts(eu[k]) > CadernoSync.ts(rp[k]))) mud[k] = eu[k]; });
+  if (!Object.keys(mud).length) return null;
+  const doc = JSON.parse(JSON.stringify(remoto0));
+  Object.assign(doc.perfis[i], mud);
+  delete doc.gravacao;
+  return doc;
+}
 async function sincronizarAgora(interativo, fixo) {
   const a = fixo || adaptador();
   if (!a || (!fixo && !syncEstado.vinculado) || document.body.classList.contains("travado")) return false;
-  const soLeitura = syncSoLeitura(); syncSoLeituraAtual = soLeitura;
+  let soLeitura = syncSoLeitura(); syncSoLeituraAtual = soLeitura;
+  let antigo = ""; syncEstado.appAntigo = "";
+  const idAntes = typeof identidadeSessao === "function" ? identidadeSessao() : null; // v2.5.1 (item 1)
   let recusados = 0;
   syncEstado.rodando = true; desenharBotaoSync();
   const acoes = syncEstado.acoes.splice(0);
@@ -132,6 +167,8 @@ async function sincronizarAgora(interativo, fixo) {
       notarPerfisNoArquivo(bruto); // v2.3.0 (item 1): até os perfis chegarem, este aparelho é analista
       const remoto0 = await abrirDocEquipe(bruto, false); // v1.9.5: decifra se protegido (pede a senha da equipe uma vez por aparelho)
       if (remoto0 && !CadernoSync.docValido(remoto0)) { const e = new Error("O arquivo vinculado não é um arquivo da equipe do Caderno."); e.name = "ArquivoInvalido"; throw e; }
+      antigo = versaoArquivoNova(remoto0); // v2.5.1 (item 2): app mais antigo que o arquivo: só leitura
+      if (antigo) { soLeitura = true; syncSoLeituraAtual = true; }
       // v1.9.7: cada card do arquivo é conferido e limpo; o que estiver estragado é ignorado e vai para o log (não trava o app)
       invalidos = [];
       const lr = remoto0 ? CadernoSync.limparDoc(remoto0) : { doc: null, invalidos: [] };
@@ -175,7 +212,11 @@ async function sincronizarAgora(interativo, fixo) {
       const histEq = CadernoSync.mesclarHistorico([remoto ? remoto.historico : [], ...copias.map((c) => c.doc.historico), histLocal.filter((e) => e.escopo === "Equipe" && !e.local), mud.map(histDeMudanca), ex.hist, perm.hist], CadernoSync.HIST_MAX);
       const idsRem = new Set(((remoto && remoto.historico) || []).map((e) => e.id));
       if (histEq.some((e) => !idsRem.has(e.id))) precisa = true;
-      if (precisa && !soLeitura) await a.gravar(await fecharDocEquipe(CadernoSync.montarDoc(r.itens, r.removidos, autor(), compartilhado, { modelos: rm.itens, modelosRemovidos: rm.removidos, historico: histEq, lixeira: ex.lixeira, lixeiraRemovidos: ex.lixRem, conflitos: ex.conflitos, conflitosResolvidos: ex.confRes, perfis: pf.gravar ? pf.itens : [] }), bruto));
+      if (precisa && !soLeitura) await a.gravar(await fecharDocEquipe(CadernoSync.montarDoc(r.itens, r.removidos, autor(), compartilhado, { modelos: rm.itens, modelosRemovidos: rm.removidos, historico: histEq, lixeira: ex.lixeira, lixeiraRemovidos: ex.lixRem, conflitos: ex.conflitos, conflitosResolvidos: ex.confRes, perfis: pf.gravar ? pf.itens : [], app: APP_VERSAO }), bruto));
+      else if (soLeitura && !antigo && !fixo && pf.gravar) { // v2.5.1 (item 3): gravação restrita do analista (só a presença dele)
+        const pres = presencaParaGravar(remoto0, pf.itens);
+        if (pres) await a.gravar(await fecharDocEquipe(pres, bruto));
+      }
       resultado = { r: r, mud: mud, conf: ex.novosConf, localMudou: localMudou, rm: rm, histEq: histEq, ex: ex, perfis: pf.itens };
       copiasMescladas = copias.map((c) => c.nome);
     }, { aoFalhar: () => { syncEstado.pendente = true; desenharBotaoSync(); } });
@@ -190,6 +231,8 @@ async function sincronizarAgora(interativo, fixo) {
     gravarLixeiraEq({ itens: resultado.ex.lixeira, removidos: resultado.ex.lixRem });
     gravarConflitos({ itens: resultado.ex.conflitos, resolvidos: resultado.ex.confRes });
     await concluirPerfisSync(resultado.perfis);
+    if (antigo) avisarAtualizar(antigo);
+    const trocouIdentidade = idAntes && typeof manterIdentidade === "function" ? manterIdentidade(idAntes) : false; // v2.5.1 (item 1)
     aplicarResultado(resultado.r);
     // só apaga as cópias depois da gravação verificada do arquivo principal
     for (const nome of (soLeitura ? [] : copiasMescladas)) {
@@ -210,7 +253,7 @@ async function sincronizarAgora(interativo, fixo) {
     else if (textos.length > 1) toast(textos.length + " alterações da equipe recebidas");
     else if (interativo) toast("Arquivo da equipe sincronizado");
     setTimeout(() => verificarModelos(false), 0);
-    if (typeof verificarSessaoAtiva === "function") setTimeout(verificarSessaoAtiva, 0);
+    if (typeof verificarSessaoAtiva === "function") setTimeout(() => verificarSessaoAtiva(trocouIdentidade), 0);
     return true;
   } catch (e) {
     syncEstado.pendente = true;

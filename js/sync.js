@@ -157,12 +157,14 @@
   }
   /* v2.2.0: perfis da equipe (admin/analista). Só nomes, papéis e o hash PBKDF2 da senha de admin; viaja só dentro do arquivo cifrado. */
   const HEX = /^[0-9a-f]*$/i;
+  /* v2.5.1: presença (último acesso/sincronização) só aceita data válida e nunca no futuro (mais de 10 min), para ninguém "congelar" a presença de outra pessoa. */
+  function presencaData(v) { const t = isoValido(v); return t && ts(t) <= Date.now() + 10 * 6e4 ? t : ""; }
   function limparPerfil(p) {
     if (!p || typeof p !== "object" || Array.isArray(p) || (typeof p.id !== "string" && typeof p.id !== "number")) return null;
     const nome = txt(p.nome, 60).trim(); if (!nome) return null;
     const o = { id: String(p.id).slice(0, 64), nome: nome, papel: p.papel === "admin" ? "admin" : "analista", ativo: p.ativo !== false,
       criadoPor: txt(p.criadoPor, 120), criadoEm: txt(p.criadoEm, 40), updatedAt: txt(p.updatedAt, 40), updatedBy: txt(p.updatedBy, 120),
-      ultimoAcesso: txt(p.ultimoAcesso, 40), ultimaSync: txt(p.ultimaSync, 40), versao: txt(p.versao, 20) };
+      ultimoAcesso: presencaData(p.ultimoAcesso), ultimaSync: presencaData(p.ultimaSync), versao: /^\d+(\.\d+){0,2}$/.test(txt(p.versao, 20)) ? txt(p.versao, 20) : "" };
     const h = txt(p.adminHash, 128), sa = txt(p.adminSalt, 64), it = parseInt(p.adminIter, 10);
     if (h && HEX.test(h) && sa && HEX.test(sa)) { o.adminHash = h; o.adminSalt = sa; o.adminIter = it > 0 && it <= 5e6 ? it : 310000; }
     if (p.trocarSenha === true) o.trocarSenha = true;
@@ -301,6 +303,7 @@
       d.modelosRemovidos = (extras.modelosRemovidos || []).filter((t) => t && t.id && ts(t.deletedAt) >= lim).map(limparTomb);
     }
     if (extras && Array.isArray(extras.perfis) && extras.perfis.length) d.perfis = limparPerfis(extras.perfis);
+    if (extras && typeof extras.app === "string" && /^\d+(\.\d+){0,2}$/.test(extras.app)) d.app = extras.app; // v2.5.1: versão do app que gravou (app mais antigo só lê)
     if (extras && Array.isArray(extras.historico)) d.historico = extras.historico.filter((e) => e && e.escopo === "Equipe" && !e.local).slice(0, HIST_MAX);
     // v2.0.0: lixeira e conflitos (só cards da Equipe; o filtro garante que nada Individual entra)
     if (extras && Array.isArray(extras.lixeira)) d.lixeira = extras.lixeira.filter((e) => e && e.card && filtro(e.card));

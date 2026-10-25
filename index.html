@@ -28,6 +28,14 @@
     <img src="icons/icon-192.png" alt="" class="login-logo" width="56" height="56">
     <h1>Caderno de Acessos</h1>
     <p class="login-sub" id="loginSub">Digite a senha deste aparelho.</p>
+    <div class="login-primeira" id="loginPrimeiraVez" hidden>
+      <b>Primeira vez neste aparelho?</b>
+      <p>Depois de entrar, traga os cards da equipe de um destes jeitos:</p>
+      <ul>
+        <li><b>No PC ou no Android (Chrome ou Edge):</b> vincule a pasta compartilhada da equipe em Arquivo da equipe › Vincular a pasta da equipe.</li>
+        <li><b>Sem a pasta:</b> peça o arquivo ao Administrador e use Arquivo e backup › Receber arquivo da equipe.</li>
+      </ul>
+    </div>
     <div id="loginPasso1">
       <label class="login-campo" id="loginMatWrap" hidden><span class="login-rot">Matrícula</span>
         <span class="senha-campo"><input id="loginMatricula" type="text" placeholder="Ex.: A1023" autocomplete="username" autocapitalize="characters" spellcheck="false" maxlength="40" aria-label="Matrícula"></span>
@@ -53,7 +61,7 @@
     <button type="submit" id="loginBtn">Abrir caderno</button>
     <button type="button" class="link-discreto login-voltar" id="loginVoltar" hidden>‹ Voltar</button>
     <p id="loginErro" class="login-erro" role="alert"></p>
-    <p class="login-rodape" id="loginRodape">Caderno de Acessos v2.5.0 · © Todos os direitos reservados · Desenv. WebDev</p>
+    <p class="login-rodape" id="loginRodape">Caderno de Acessos v2.5.1 · © Todos os direitos reservados · Desenv. WebDev</p>
     <p class="login-instalar" id="loginInstalarWrap" hidden><button type="button" class="link-instalar" id="btnInstalarApp">Instalar app</button></p>
   </form>
 </section>
@@ -163,7 +171,7 @@
   <div class="panel pequeno">
     <div class="panel-topo"><h3>Sobre</h3><button type="button" class="ico-btn escuro" data-fecha="sobre" aria-label="Fechar" data-ic="x"></button></div>
     <div class="panel-corpo">
-      <p class="meta">Caderno de Acessos v2.5.0 · © Todos os direitos reservados · Desenv. WebDev</p>
+      <p class="meta">Caderno de Acessos v2.5.1 · © Todos os direitos reservados · Desenv. WebDev</p>
       <h4 class="sobre-tit">Novidades</h4>
       <div class="sobre-novidades" id="sobreNovidades"></div>
       <h4 class="sobre-tit">Perfis Administrador e Analista</h4>

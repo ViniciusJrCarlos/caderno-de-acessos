@@ -22,6 +22,7 @@ function campoPadrao(box, id, rot, o) {
   if (o.valor) i.value = o.valor; if (o.placeholder) i.placeholder = o.placeholder; if (o.max) i.maxLength = o.max;
   w.appendChild(i);
   if (o.senha) { const b = el("button", "olho"); b.type = "button"; b.dataset.alvo = id; b.setAttribute("aria-label", "Mostrar senha"); b.dataset.ic = "eye"; w.appendChild(b); setTimeout(() => ligarOlho(b), 0); }
+  if (o.copiar) { const c = el("button", "btn-copiar"); c.type = "button"; c.id = id + "Copiar"; c.textContent = "Copiar"; c.setAttribute("aria-label", "Copiar a senha temporária"); c.addEventListener("click", () => copiarTexto(i.value, c)); w.appendChild(c); w.classList.add("senha-campo--copiar"); } // v2.5.1 (item 7)
   l.appendChild(w); box.appendChild(l);
   return i;
 }
@@ -30,6 +31,17 @@ function selectPadrao(box, id, rot, opcoes) {
   const s = el("select", "dlg-padrao__select"); s.id = id;
   opcoes.forEach(([v, t]) => { const o = el("option", "", t); o.value = v; s.appendChild(o); });
   l.appendChild(s); box.appendChild(l); return s;
+}
+/* v2.5.1 (item 7): copia com a Clipboard API; sem ela (http, navegador antigo), usa um campo oculto + execCommand. Feedback curto "Copiado". */
+async function copiarTexto(txt, botao) {
+  let ok = false;
+  try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(txt); ok = true; } } catch (e) { ok = false; }
+  if (!ok) {
+    const t = document.createElement("textarea"); t.value = txt; t.setAttribute("readonly", ""); t.style.position = "fixed"; t.style.opacity = "0"; t.style.top = "0";
+    document.body.appendChild(t); t.select(); try { ok = document.execCommand("copy"); } catch (e) { ok = false; } t.remove();
+  }
+  if (botao) { const antes = "Copiar"; botao.textContent = ok ? "Copiado" : "Não copiou"; botao.classList.toggle("copiado", ok); clearTimeout(botao._t); botao._t = setTimeout(() => { botao.textContent = antes; botao.classList.remove("copiado"); }, 1800); }
+  return ok;
 }
 function avisoPadrao(box, txt) { const p = el("p", "aviso-forte", txt); box.appendChild(p); return p; }
 function regrasPadrao(box, txt) { const p = el("p", "hint", txt || REGRAS_SENHA); box.appendChild(p); return p; }
@@ -212,7 +224,7 @@ function novoAnalista() {
     const mat = campoPadrao(box, "gMatricula", "Matrícula", { placeholder: "Ex.: A1023", max: 20, auto: "off" });
     mat.addEventListener("input", () => { mat.value = mat.value.toUpperCase(); });
     const perfil = selectPadrao(box, "gPerfil", "Perfil", [["analista", "Analista"], ["admin", "Administrador"]]);
-    const s = campoPadrao(box, "gSenha", "Senha temporária", { senha: true, valor: gerarSenhaTemporaria(), auto: "new-password" });
+    const s = campoPadrao(box, "gSenha", "Senha temporária", { senha: true, valor: gerarSenhaTemporaria(), auto: "new-password", copiar: true });
     const av = avisoPadrao(box, "O analista troca a senha no primeiro acesso.");
     perfil.addEventListener("change", () => { av.textContent = perfil.value === "admin" ? "O Administrador troca a senha no primeiro acesso." : "O analista troca a senha no primeiro acesso."; });
     regrasPadrao(box);
@@ -273,7 +285,7 @@ function confirmarAcao(titulo, texto, rotOk, fn) {
 function resetarSenha(p) {
   return janela("dlgSE", (box, fim) => {
     dlgPadrao(box, "Resetar senha de " + p.nome, "A senha atual de " + p.nome + " deixa de valer, a conta é desbloqueada e os aparelhos de " + p.nome + " pedem a senha de novo.");
-    const s = campoPadrao(box, "gResetSenha", "Senha temporária", { senha: true, valor: gerarSenhaTemporaria(), auto: "new-password" });
+    const s = campoPadrao(box, "gResetSenha", "Senha temporária", { senha: true, valor: gerarSenhaTemporaria(), auto: "new-password", copiar: true });
     avisoPadrao(box, (p.papel === "admin" ? "O Administrador troca a senha no primeiro acesso." : "O analista troca a senha no primeiro acesso.") + " Passe a senha pessoalmente, nunca por e-mail ou chat.");
     regrasPadrao(box);
     const er = erroPadrao(box);
