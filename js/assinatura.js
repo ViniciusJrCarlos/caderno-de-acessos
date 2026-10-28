@@ -133,15 +133,34 @@ async function assinarPendentes() {
  * ficar bloqueada por 5 erros. Perfil novo sem assinatura também não entra. Aparelho sem perfis (primeira vez) aceita a lista (TOFU),
  * e Administradores ainda sem chave (vindos da v2.2.0) seguem a regra antiga até o primeiro "Entrar como administrador". */
 function msgPerfil(p) {
-  return "p|" + [p.id, p.updatedAt || "", p.nome || "", p.papel || "", p.ativo === false ? 0 : 1, p.bloqueado ? 1 : 0, p.senhaHash || "", p.senhaTemp ? 1 : 0, p.adminHash || "", p.chavePub || "", p.trocarSenha ? 1 : 0].join("|") + (p.matricula ? "|m:" + p.matricula : "") + (p.excluido ? "|x" : ""); // v2.5.0: matrícula e exclusão só entram quando existem (assinaturas antigas continuam valendo)
+  const v2 = p.senhaV === 2; // v2.5.3 (item 1): a senha pessoal do dia a dia fica fora da assinatura; entra só o último "Resetar senha" (data + base)
+  return "p|" + [p.id, p.updatedAt || "", p.nome || "", p.papel || "", p.ativo === false ? 0 : 1, p.bloqueado ? 1 : 0, v2 ? "r:" + (p.senhaReset || "") + ":" + (p.senhaBase || "") : p.senhaHash || "", v2 ? "-" : p.senhaTemp ? 1 : 0, p.adminHash || "", p.chavePub || "", p.trocarSenha ? 1 : 0].join("|") + (p.matricula ? "|m:" + p.matricula : "") + (p.excluido ? "|x" : "") + (v2 ? "|s2" : ""); // v2.5.0: matrícula e exclusão só entram quando existem (assinaturas antigas continuam valendo)
 }
 async function assinarPerfil(p) {
   delete p.assinP;
   if (!chaveAdmin) return false;
   try { p.assinP = await assinar(msgPerfil(p)); return true; } catch (e) { return false; }
 }
-const CAMPOS_PERFIL_PODER = ["nome", "papel", "ativo", "bloqueado", "senhaHash", "senhaSalt", "senhaIter", "senhaTemp", "adminHash", "adminSalt", "adminIter", "chavePub", "chavePriv", "chaveSalt", "trocarSenha", "matricula", "excluido"];
-function difPerfil(a, b) { return CAMPOS_PERFIL_PODER.filter((k) => JSON.stringify(a[k] === undefined ? null : a[k]) !== JSON.stringify(b[k] === undefined ? null : b[k])); }
+const CAMPOS_PERFIL_PODER = ["nome", "papel", "ativo", "bloqueado", "senhaHash", "senhaSalt", "senhaIter", "senhaTemp", "adminHash", "adminSalt", "adminIter", "chavePub", "chavePriv", "chaveSalt", "trocarSenha", "matricula", "excluido", "senhaV", "senhaReset", "senhaBase"];
+/* v2.5.3 (item 1): unidade "senha pessoal" — muda sem o Administrador, mas só com prova (HMAC com a base do último Resetar senha). */
+const CAMPOS_SENHA_PROPRIA = ["senhaHash", "senhaSalt", "senhaIter", "senhaTemp", "senhaEm", "senhaProva"];
+function msgSenhaPropria(p) { return "sp|" + [p.id, p.senhaHash || "", p.senhaSalt || "", p.senhaIter || "", p.senhaEm || "", p.senhaReset || ""].join("|"); }
+async function provaSenhaPropria(p) {
+  if (!p.senhaBase) return "";
+  const k = await crypto.subtle.importKey("raw", hexParaBytes(p.senhaBase), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return bytesParaHex(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(msgSenhaPropria(p))));
+}
+/* A senha pessoal deste perfil é a temporária do último Resetar senha (assinado) ou uma troca com prova válida. */
+async function senhaPropriaValida(p) {
+  if (p.excluido || (!p.senhaHash && !p.senhaSalt)) return true;
+  if (p.senhaTemp) return !!p.senhaHash && p.senhaHash === p.senhaBase;
+  if (!p.senhaBase || !p.senhaProva || !p.senhaHash) return false;
+  try { return hashIguais(await provaSenhaPropria(p), p.senhaProva); } catch (e) { return false; }
+}
+function unidadeSenha(q) { const o = {}; CAMPOS_SENHA_PROPRIA.forEach((k) => { o[k] = q[k]; }); return o; }
+function difSenha(a, b) { return CAMPOS_SENHA_PROPRIA.some((k) => JSON.stringify(a[k] === undefined ? null : a[k]) !== JSON.stringify(b[k] === undefined ? null : b[k])); }
+function comSenhaDe(p, a) { const o = Object.assign({}, p); CAMPOS_SENHA_PROPRIA.forEach((k) => { if (a[k] === undefined) delete o[k]; else o[k] = a[k]; }); return o; }
+function difPerfil(a, b) { const v2 = b.senhaV === 2 && a.senhaV === 2; return CAMPOS_PERFIL_PODER.filter((k) => !(v2 && CAMPOS_SENHA_PROPRIA.indexOf(k) >= 0)).filter((k) => JSON.stringify(a[k] === undefined ? null : a[k]) !== JSON.stringify(b[k] === undefined ? null : b[k])); }
 function mudancaPropria(a, b) {
   const d = difPerfil(a, b); if (!d.length) return true;
   const so = (lista) => d.every((k) => lista.indexOf(k) >= 0);
@@ -159,8 +178,15 @@ async function filtrarPerfisRemoto(cache, l) {
   if (legado) return out;
   const ant = new Map(cache.map((p) => [p.id, p]));
   const res = [];
-  for (const p of l) {
-    const a = ant.get(p.id);
+  for (const p0 of l) {
+    const a = ant.get(p0.id);
+    let p = p0;
+    // v2.5.3 (item 1): troca da senha pessoal (unidade própria) é conferida à parte; sem prova válida, fica a senha que este aparelho já tinha
+    if (p.senhaV === 2 && (!a || difSenha(a, p)) && !(await senhaPropriaValida(p))) {
+      if (a && (a.senhaReset || "") === (p.senhaReset || "")) p = comSenhaDe(p, a);
+      else { out.desfeitos.push(p.nome || p.id); if (a) res.push(a); continue; }
+    }
+    if (a && p.senhaV === 2 && (a.senhaReset || "") === (p.senhaReset || "") && difSenha(a, p) && CadernoSync.ts(p.senhaEm) < CadernoSync.ts(a.senhaEm)) p = comSenhaDe(p, a); // o aparelho fica com a senha mais nova
     // v2.5.1 (item 3): mudança só de presença (ultimoAcesso/ultimaSync/versao, fora de CAMPOS_PERFIL_PODER) entra sem assinatura
     if (a && (a.updatedAt === p.updatedAt || !difPerfil(a, p).length)) { res.push(p); continue; }
     const assinOk = p.assinP && await verificarAssin(p.assinP, msgPerfil(p), cache);

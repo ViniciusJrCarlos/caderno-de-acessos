@@ -7,9 +7,16 @@ document.addEventListener("pointerdown", () => { ignorarClique = false; }, true)
 document.addEventListener("click", (ev) => { if (!ev.target.closest(".menu-card")) fecharMenus(); });
 document.addEventListener("click", () => { if (renderPendente) setTimeout(renderSePendente, 50); });
 /* ---------- v1.9.3+: Novidades (texto vai junto com o app; mais recente primeiro) ---------- */
-const APP_VERSAO = "2.5.2";
+const APP_VERSAO = "2.5.3";
 const NOVIDADES_VISTA = "caderno-novidades-vista";
 const NOVIDADES = [
+  { v: "2.5.3", data: "28/10/2026", itens: [
+    "A sua senha pessoal não volta mais para a temporária quando o Administrador edita, desbloqueia, reativa ou muda o seu perfil. Só \u201cResetar senha\u201d cria uma temporária nova.",
+    "A troca da sua senha vai para o arquivo da equipe (com prova de que foi você) e vale nos outros aparelhos depois da sincronização.",
+    "Na entrada, matrícula que não existe e senha errada dão a mesma mensagem, com a mesma contagem de tentativas.",
+    "A matrícula de uma pessoa excluída não pode ser usada de novo.",
+    "Para resetar, desativar, rebaixar, excluir ou desbloquear outro Administrador, o app pede a sua senha."
+  ] },
   { v: "2.5.2", data: "28/10/2026", itens: [
     "Cards individuais (Meus) agora têm dono: cada pessoa só vê os seus, mesmo usando o mesmo navegador. Cards de antes desta versão aparecem uma vez com a pergunta \u201cSão seus?\u201d.",
     "Bloqueio por 5 senhas erradas vale em todos os aparelhos: o Administrador confirma o bloqueio ao entrar e ele vai assinado no arquivo da equipe. Desbloquear também vale para todos.",

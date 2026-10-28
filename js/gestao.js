@@ -131,7 +131,7 @@ function confirmarSenhaPessoal(p0) {
         if (s1.value !== s2.value) { er.textContent = "As duas senhas não são iguais."; return; }
         ok.disabled = true;
         try {
-          const np = await alterarPerfil(c.id, Object.assign(await hashPessoal(s1.value), { senhaTemp: false }), "Senha pessoal criada: " + c.nome);
+          const np = await gravarSenhaPropria(c.id, await hashPessoal(s1.value)); if (np) histPerfil("Senha pessoal criada: " + c.nome); // v2.5.3 (item 1)
           s1.value = s2.value = "";
           if (np) concluir(np);
         } finally { ok.disabled = false; }
@@ -237,13 +237,14 @@ function novoAnalista() {
       const m = normMat(mat.value);
       if (!matriculaValida(m)) { er.textContent = "Matrícula: de 2 a 20 letras, números, ponto, hífen ou sublinhado."; mat.focus(); return; }
       if (matriculaEmUso(m, "")) { er.textContent = "Essa matrícula já é de outra pessoa."; mat.focus(); return; }
+      if (matriculaExcluida(m, "")) { er.textContent = MSG_MAT_EXCLUIDA; mat.focus(); return; } // v2.5.3 (item 4)
       if (!senhaForte(s.value)) { er.textContent = REGRAS_SENHA; return; }
       ok.disabled = true;
       try {
         const agora = new Date().toISOString(), eu = autor();
         const p = { id: novoIdPerfil(), nome: v, papel: perfil.value === "admin" ? "admin" : "analista", ativo: true, matricula: m, criadoPor: eu, criadoEm: agora, updatedAt: agora, updatedBy: eu };
         if (p.papel === "admin") Object.assign(p, await hashAdmin(s.value), await gerarChavesAdmin(s.value), { trocarSenha: true });
-        else Object.assign(p, await hashPessoal(s.value), { senhaTemp: true });
+        else { Object.assign(p, await hashPessoal(s.value), { senhaTemp: true, senhaV: 2, senhaReset: agora, senhaEm: agora }); p.senhaBase = p.senhaHash; } // v2.5.3 (item 1)
         await assinarPerfil(p);
         const l = await perfisCompletos(); l.push(p);
         if (p.papel === "admin" && p.chavePub) { const pn = pinsChaves(); pn[p.id] = p.chavePub; Dados.gravarTexto(CHAVES_PIN_KEY, JSON.stringify(pn)); }
@@ -267,10 +268,10 @@ function acoesPessoa(id) {
     const acao = (rot, fn, o) => { const b = botaoDlg(o && o.perigo ? "perigo" : "", rot, async () => { fim(true); await fn(); render(); }); b.dataset.acao = o && o.id || ""; if (o && o.off) { b.disabled = true; b.title = o.off; } lista.appendChild(b); return b; };
     const souEu = eu && eu.id === p.id;
     acao("Resetar senha", () => resetarSenha(p), { id: "resetar", off: souEu ? "Para trocar a sua senha, use Entrar como administrador" : "" });
-    if (p.bloqueado) acao("Desbloquear", async () => { gravarTentativas(p.id, 0); await alterarPerfil(p.id, { bloqueado: false }, "Conta desbloqueada: " + p.nome); toast(p.nome + " desbloqueado(a)"); }, { id: "desbloquear" });
+    if (p.bloqueado) acao("Desbloquear", () => desbloquearPessoa(p), { id: "desbloquear" }); // v2.5.3 (item 5)
     if (p.papel !== "admin" && p.ativo) acao("Tornar administrador", () => tornarAdmin(p), { id: "tornar" });
     if (p.papel === "admin") acao("Remover administrador", () => removerAdmin(p), { id: "remover", off: ultimoAdmin ? "Não dá para remover o último Administrador" : "" });
-    if (p.ativo) acao("Desativar", () => confirmarAcao("Desativar " + p.nome + "?", "Nos cards da Equipe, " + p.nome + " fica só leitura. Pode ser reativado depois.", "Desativar", () => alterarPerfil(p.id, { ativo: false }, "Perfil desativado: " + p.nome)), { id: "desativar", perigo: true, off: ultimoAdmin ? "Não dá para desativar o último Administrador" : "" });
+    if (p.ativo) acao("Desativar", async () => (await exigirSenhaAdmin(p)) && confirmarAcao("Desativar " + p.nome + "?", "Nos cards da Equipe, " + p.nome + " fica só leitura. Pode ser reativado depois.", "Desativar", () => alterarPerfil(p.id, { ativo: false }, "Perfil desativado: " + p.nome)), { id: "desativar", perigo: true, off: ultimoAdmin ? "Não dá para desativar o último Administrador" : "" });
     else acao("Reativar", () => alterarPerfil(p.id, { ativo: true }, "Perfil reativado: " + p.nome), { id: "reativar" });
     acao("Renomear", async () => { const v = await pedirTexto("Renomear " + p.nome, "Novo nome", p.nome); if (v && v !== p.nome) { if (perfilPorNome(v) && perfilPorNome(v).id !== p.id) toast("Já existe um perfil com esse nome"); else await alterarPerfil(p.id, { nome: v }, "Perfil renomeado: " + p.nome + " → " + v); } }, { id: "renomear" });
     botoesPadrao(box, "Fechar", null, () => fim(false));
@@ -282,7 +283,8 @@ function confirmarAcao(titulo, texto, rotOk, fn) {
     const ok = botoesPadrao(box, "Cancelar", rotOk, () => fim(false), async () => { ok.disabled = true; try { await fn(); } finally { fim(true); } });
   });
 }
-function resetarSenha(p) {
+async function resetarSenha(p) {
+  if (!(await exigirSenhaAdmin(p))) return false; // v2.5.3 (item 5)
   return janela("dlgSE", (box, fim) => {
     dlgPadrao(box, "Resetar senha de " + p.nome, "A senha atual de " + p.nome + " deixa de valer, a conta é desbloqueada e os aparelhos de " + p.nome + " pedem a senha de novo.");
     const s = campoPadrao(box, "gResetSenha", "Senha temporária", { senha: true, valor: gerarSenhaTemporaria(), auto: "new-password", copiar: true });
@@ -305,6 +307,7 @@ function resetarSenha(p) {
 }
 async function removerAdmin(p) {
   if (adminsAtivos().length <= 1 && p.ativo) { toast("Não dá para remover o último Administrador"); return; }
+  if (!(await exigirSenhaAdmin(p))) return; // v2.5.3 (item 5)
   await confirmarAcao("Remover administrador de " + p.nome + "?", p.nome + " passa a ser analista. Para entrar como analista, " + p.nome + " vai precisar de uma senha pessoal (Resetar senha).", "Remover", async () => {
     await alterarPerfil(p.id, { papel: "analista", trocarSenha: false }, "Administrador removido: " + p.nome);
     if (p.id === (meuPerfil() || {}).id) sairModoAdmin(true);
