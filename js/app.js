@@ -7,9 +7,14 @@ document.addEventListener("pointerdown", () => { ignorarClique = false; }, true)
 document.addEventListener("click", (ev) => { if (!ev.target.closest(".menu-card")) fecharMenus(); });
 document.addEventListener("click", () => { if (renderPendente) setTimeout(renderSePendente, 50); });
 /* ---------- v1.9.3+: Novidades (texto vai junto com o app; mais recente primeiro) ---------- */
-const APP_VERSAO = "2.5.1";
+const APP_VERSAO = "2.5.2";
 const NOVIDADES_VISTA = "caderno-novidades-vista";
 const NOVIDADES = [
+  { v: "2.5.2", data: "28/10/2026", itens: [
+    "Cards individuais (Meus) agora têm dono: cada pessoa só vê os seus, mesmo usando o mesmo navegador. Cards de antes desta versão aparecem uma vez com a pergunta \u201cSão seus?\u201d.",
+    "Bloqueio por 5 senhas erradas vale em todos os aparelhos: o Administrador confirma o bloqueio ao entrar e ele vai assinado no arquivo da equipe. Desbloquear também vale para todos.",
+    "A tela Pessoas e o status Bloqueado se atualizam sozinhos depois do login do Administrador e de cada sincronização."
+  ] },
   { v: "2.5.1", data: "25/10/2026", itens: [
     "A sincronização nunca troca quem está logado: se os seus dados de acesso mudarem no arquivo da equipe, o app pede para entrar de novo.",
     "App mais antigo que o arquivo da equipe só lê, nunca grava por cima, e avisa para atualizar.",

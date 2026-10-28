@@ -48,6 +48,7 @@ function lerLixeiraMeus() {
   const l = lerJSON(LIX_MEUS_KEY, []);
   return (Array.isArray(l) ? l : []).filter((e) => e && e.id && e.card && typeof e.card === "object" && new Date(e.excluidoEm).getTime() >= lim);
 }
+function lixeiraMeusVisivel() { return lerLixeiraMeus().filter((e) => individualVisivel(e.card)); } // v2.5.2 (item 1)
 function gravarLixeiraMeus(l) { Dados.gravarTexto(LIX_MEUS_KEY, JSON.stringify(l)); }
 function restaurarDaLixeira(ids) {
   const lixEq = lerLixeiraEq(); let lixMeus = lerLixeiraMeus();
@@ -61,7 +62,7 @@ function restaurarDaLixeira(ids) {
       if (!itens.some((x) => x.id === id)) { const c = Object.assign({}, e.card); if (!c.arquivado_em) c.arquivado_em = hoje(); restaurando.add(id); itens.push(c); n++; }
       return;
     }
-    const m = lixMeus.find((x) => x.id === id);
+    const m = lixMeus.find((x) => x.id === id && individualVisivel(x.card));
     if (m) { lixMeus = lixMeus.filter((x) => x.id !== id); if (!itens.some((x) => x.id === id)) { restaurandoMeus.add(id); itens.push(Object.assign({}, m.card)); n++; } }
   });
   gravarLixeiraEq(lixEq); gravarLixeiraMeus(lixMeus);
@@ -87,7 +88,7 @@ async function apagarDaLixeira(e, equipe) {
 }
 function diasParaApagar(e) { return Math.max(0, Math.ceil((new Date(e.excluidoEm).getTime() + DIAS_LIXEIRA * 864e5 - Date.now()) / 864e5)); }
 function blocoLixeira(box) {
-  const eq = lerLixeiraEq().itens, meus = lerLixeiraMeus();
+  const eq = lerLixeiraEq().itens, meus = lixeiraMeusVisivel();
   const c = el("article", "card painel-mais lixeira"); c.id = "blocoLixeira";
   c.appendChild(el("h3", "", "🗑️ Lixeira" + (eq.length + meus.length ? " (" + (eq.length + meus.length) + ")" : "")));
   c.appendChild(el("p", "meta", (perfisAtivos() && papelAtual() !== "admin" ? "Cards excluídos ficam aqui por " + DIAS_LIXEIRA + " dias. Os seus (Meus) ficam só neste aparelho e voltam com usuário e senha." : "Cards excluídos ficam aqui por " + DIAS_LIXEIRA + " dias. Os da Equipe podem ser restaurados " + (perfisAtivos() ? "pelo Administrador" : "por qualquer analista") + " e voltam para o Arquivo de todos. Os Meus ficam só neste aparelho e voltam com usuário e senha.")));

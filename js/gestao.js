@@ -295,6 +295,7 @@ function resetarSenha(p) {
       try {
         const mud = p.papel === "admin" ? Object.assign(await hashAdmin(s.value), await gerarChavesAdmin(s.value), { trocarSenha: true, bloqueado: false }) : Object.assign(await hashPessoal(s.value), { senhaTemp: true, bloqueado: false });
         gravarTentativas(p.id, 0);
+        if (typeof limparBloqueioPendente === "function") limparBloqueioPendente(p.id); // v2.5.2 (item 2)
         await alterarPerfil(p.id, mud, "Senha resetada (temporária): " + p.nome);
         s.value = ""; fim(true); toast("Senha de " + p.nome + " resetada (temporária)");
       } catch (e) { er.textContent = "Não foi possível resetar (" + ((e && e.name) || "erro") + ")."; }

@@ -122,7 +122,7 @@ async function assinarPendentes() {
     pend.delete(k);
   }
   Dados.gravarTexto(ASSINAR_PEND_KEY, JSON.stringify([...pend]));
-  if (mudou) Dados.gravarTexto(KEY, JSON.stringify(itens));
+  if (mudou) Dados.gravarTexto(KEY, JSON.stringify(todosItens()));
   return mudou;
 }
 /* ---------- v2.4.0: perfis assinados pelo Administrador ----------

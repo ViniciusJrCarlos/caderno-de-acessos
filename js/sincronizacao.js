@@ -231,6 +231,7 @@ async function sincronizarAgora(interativo, fixo) {
     gravarLixeiraEq({ itens: resultado.ex.lixeira, removidos: resultado.ex.lixRem });
     gravarConflitos({ itens: resultado.ex.conflitos, resolvidos: resultado.ex.confRes });
     await concluirPerfisSync(resultado.perfis);
+    if (typeof confirmarBloqueiosPendentes === "function" && await confirmarBloqueiosPendentes()) setTimeout(agendarSync, 0); // v2.5.2 (item 2)
     if (antigo) avisarAtualizar(antigo);
     const trocouIdentidade = idAntes && typeof manterIdentidade === "function" ? manterIdentidade(idAntes) : false; // v2.5.1 (item 1)
     aplicarResultado(resultado.r);
@@ -287,6 +288,9 @@ function renderAposSync() {
   const y = window.scrollY; render(); if (window.scrollY !== y) window.scrollTo(0, y);
 }
 function renderSePendente() { if (renderPendente) setTimeout(renderAposSync, 0); }
+// v2.5.2 (item 3): o redesenho adiado (campo com foco, aba em segundo plano no Edge) acontece assim que der, sem precisar sincronizar
+document.addEventListener("focusout", () => setTimeout(renderSePendente, 60));
+document.addEventListener("visibilitychange", () => { if (!document.hidden) setTimeout(renderSePendente, 60); });
 function aplicarResultado(r0) {
   // Alterações feitas enquanto o arquivo era gravado não se perdem: mescla de novo o que está na tela com o que foi gravado.
   carimbarMudancas();
@@ -303,7 +307,7 @@ function aplicarResultado(r0) {
   });
   porId.forEach((it) => { const l = locaisPorId.get(it.id); novaLista.push(l && !compartilhado(l) ? l : it); });
   itens = novaLista;
-  Dados.gravarTexto(KEY, JSON.stringify(itens));
+  Dados.gravarTexto(KEY, JSON.stringify(todosItens()));
   Dados.gravarTexto(REMOVIDOS_KEY, JSON.stringify(r.removidos));
   const marcas = {}, bases = {}; itens.filter(compartilhado).forEach((it) => { marcas[it.id] = marcaDe(it); bases[it.id] = it.updatedAt || ""; });
   gravarMeta(Object.assign({}, syncMeta(), { ultimaSync: new Date().toISOString(), marcas: marcas, bases: bases, marcaV: 3 }));

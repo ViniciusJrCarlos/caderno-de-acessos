@@ -10,7 +10,7 @@ function exigirNome() {
 function carimbarSemData() {
   const agora = new Date().toISOString();
   itens.filter(compartilhado).forEach((it) => { if (!it.updatedAt) { it.updatedAt = agora; it.updatedBy = autor(); } });
-  Dados.gravarTexto(KEY, JSON.stringify(itens));
+  Dados.gravarTexto(KEY, JSON.stringify(todosItens()));
   const meta = syncMeta(); meta.ultimaSync = ""; gravarMeta(meta);
 }
 /* v2.3.0 (item 12): a pasta escolhida tem o arquivo da equipe? (sem criar nada) */

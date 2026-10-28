@@ -228,6 +228,7 @@ async function loginPasso1(mat, senha) {
   if (!p) return { erro: excl ? "Perfil excluído. Fale com o Administrador." : "Matrícula não encontrada. Só entra quem o Administrador cadastrou." };
   if (!p.ativo) return { erro: "Perfil desativado. Fale com o Administrador." };
   if (p.bloqueado) return { erro: "Conta bloqueada depois de " + MAX_TENTATIVAS + " senhas erradas. Peça ao Administrador para resetar a sua senha." };
+  if (p.papel !== "admin" && await bloqueadoNoArquivo(p.id)) return { erro: "Conta bloqueada depois de " + MAX_TENTATIVAS + " senhas erradas. Peça ao Administrador para resetar a sua senha." }; // v2.5.2 (item 2)
   const c = (await perfisCompletos()).find((x) => x.id === p.id);
   if (p.papel === "admin") {
     if (Date.now() < esperaLoginAte) return { erro: "Muitas tentativas. Aguarde alguns segundos." };
@@ -246,7 +247,7 @@ async function loginPasso1(mat, senha) {
   const h = await derivarSenha(senha, c.senhaSalt, c.senhaIter || PERFIS_ITER);
   if (!hashIguais(h, c.senhaHash)) {
     const n = tentativasDe(c.id) + 1; gravarTentativas(c.id, n);
-    if (n >= MAX_TENTATIVAS) { gravarTentativas(c.id, 0); await alterarPerfil(c.id, { bloqueado: true }, "Conta bloqueada (" + MAX_TENTATIVAS + " senhas erradas): " + c.nome); return { erro: "Conta bloqueada depois de " + MAX_TENTATIVAS + " senhas erradas. Peça ao Administrador para resetar a sua senha." }; }
+    if (n >= MAX_TENTATIVAS) { gravarTentativas(c.id, 0); await alterarPerfil(c.id, { bloqueado: true }, "Conta bloqueada (" + MAX_TENTATIVAS + " senhas erradas): " + c.nome); marcarBloqueioPendente(c.id); setTimeout(renderPessoasSeAberto, 0); return { erro: "Conta bloqueada depois de " + MAX_TENTATIVAS + " senhas erradas. Peça ao Administrador para resetar a sua senha." }; }
     return { erro: "Matrícula ou senha incorreta. Restam " + (MAX_TENTATIVAS - n) + " tentativa(s)." };
   }
   gravarTentativas(c.id, 0);
@@ -280,7 +281,15 @@ function concluirLoginPerfil(c, admin, senhaFinal) {
   if (admin) { Dados.gravarTexto(ADMIN_CONF_KEY, c.id); modoAdmin = true; histPerfil("Entrou como Administrador: " + c.nome); }
   else modoAdmin = false;
   sessaoPerfilId = c.id; sessaoPapel = c.papel;
-  if (syncEstado.vinculado) setTimeout(() => sincronizar(false), 0); // v2.5.1 (item 4): todo login registra o último acesso (máx. 1 gravação a cada 15 min)
+  separarOcultos(); // v2.5.2 (item 1): só os Meus desta pessoa
+  if (admin) setTimeout(async () => { // v2.5.2 (item 2 e 3): confirma bloqueios feitos neste aparelho e redesenha Pessoas
+    const n = await confirmarBloqueiosPendentes(); // antes da sincronização: o bloqueio já sai assinado nesta gravação
+    if (syncEstado.vinculado) { try { await sincronizar(false); } catch (e) {} }
+    if (n) toast(n === 1 ? "Bloqueio confirmado: vale em todos os aparelhos depois da sincronização" : n + " bloqueios confirmados: valem em todos os aparelhos depois da sincronização");
+    renderPessoasSeAberto(true);
+  }, 0);
+  setTimeout(perguntarCardsSemDono, 1200);
+  if (syncEstado.vinculado && !admin) setTimeout(() => sincronizar(false), 0); // v2.5.1 (item 4): todo login registra o último acesso (máx. 1 gravação a cada 15 min)
   if (trocou && travadoEmMemoria) { travadoEmMemoria = false; try { fecharSheet("sheet"); } catch (e) {} }
   abrirSessaoPerfil(c.id);
   if (senhaFinal) lembrarChaveLogin(senhaFinal);
@@ -313,9 +322,10 @@ function manterIdentidade(antes) {
 function verificarSessaoAtiva(trocouIdentidade) {
   if (!sessaoPerfilId || document.body.classList.contains("travado")) return;
   const p = lerPerfis().find((x) => x.id === sessaoPerfilId);
-  const motivo = !p || p.excluido ? "Perfil excluído. Fale com o Administrador." : !p.ativo ? "Perfil desativado. Fale com o Administrador." : trocouIdentidade === true ? "Os seus dados de acesso mudaram no arquivo da equipe. Entre de novo." : "";
+  const motivo = !p || p.excluido ? "Perfil excluído. Fale com o Administrador." : !p.ativo ? "Perfil desativado. Fale com o Administrador." : p.bloqueado && p.papel !== "admin" ? "Conta bloqueada depois de " + MAX_TENTATIVAS + " senhas erradas. Peça ao Administrador para resetar a sua senha." : trocouIdentidade === true ? "Os seus dados de acesso mudaram no arquivo da equipe. Entre de novo." : "";
   if (!motivo) return;
   sessaoPerfilId = null; try { sessionStorage.removeItem(SESSAO); } catch (e) {}
+  separarOcultos();
   bloquear(false);
   const er = $("loginErro"); if (er) er.textContent = motivo;
 }
@@ -327,6 +337,7 @@ function restaurarSessaoPerfil() {
   if (!p || p.id !== id || p.papel === "admin" || !p.ativo || p.bloqueado || p.excluido) { try { sessionStorage.removeItem(SESSAO); } catch (e) {} return false; }
   if (v !== "p:" + id + ":" + (p.senhaSalt || "")) return false;
   sessaoPerfilId = id; sessaoPapel = p.papel; modoAdmin = false;
+  setTimeout(perguntarCardsSemDono, 1200);
   return true;
 }
 async function enviarLogin() {
@@ -485,7 +496,7 @@ function renderPessoas(box) {
     const b1 = btn("btn pequeno", "key", "Resetar senha", () => resetarSenha(p).then(render)); b1.dataset.acao = "resetar"; b1.classList.add("rot-curto"); b1.dataset.curto = "Resetar";
     if (souEu) { b1.disabled = true; b1.title = "Para trocar a sua senha, use Trocar minha senha"; }
     ac.appendChild(b1);
-    const b2 = btn("btn pequeno", "lock", "Desbloquear", async () => { gravarTentativas(p.id, 0); await alterarPerfil(p.id, { bloqueado: false }, "Conta desbloqueada: " + p.nome); toast(p.nome + " desbloqueado(a)"); render(); }); b2.dataset.acao = "desbloquear"; b2.dataset.curto = "Desbloq.";
+    const b2 = btn("btn pequeno", "lock", "Desbloquear", async () => { gravarTentativas(p.id, 0); limparBloqueioPendente(p.id); await alterarPerfil(p.id, { bloqueado: false }, "Conta desbloqueada: " + p.nome); toast(p.nome + " desbloqueado(a)"); render(); }); b2.dataset.acao = "desbloquear"; b2.dataset.curto = "Desbloq.";
     if (!p.bloqueado) { b2.disabled = true; b2.title = "Só quando a conta está bloqueada"; }
     ac.appendChild(b2);
     const b3 = btn("btn pequeno", "edit", "Editar", () => editarPessoa(p)); b3.dataset.acao = "editar"; b3.dataset.curto = "Editar"; ac.appendChild(b3);
@@ -497,7 +508,7 @@ function renderPessoas(box) {
   const vazio = el("p", "vazio pessoas-vazio", "Nenhuma pessoa encontrada para essa busca."); vazio.hidden = true; box.appendChild(vazio);
   const filtrar = () => { pessoasBusca = bi.value; const q = normTxt(bi.value); let n = 0; ul.querySelectorAll(".pessoa-linha").forEach((li) => { const v = !q || li.dataset.busca.indexOf(q) >= 0; li.hidden = !v; if (v) n++; }); vazio.hidden = n > 0; };
   bi.addEventListener("input", filtrar); filtrar();
-  box.appendChild(el("p", "meta gestao__nota", "O analista só recebe o arquivo da equipe (não grava nele): bloqueio por senhas erradas e o último acesso ficam no aparelho dele. Para liberar quem esqueceu a senha ou foi bloqueado, use Resetar senha."));
+  box.appendChild(el("p", "meta gestao__nota", "O analista só recebe o arquivo da equipe. Bloqueio por 5 senhas erradas: quando um Administrador entra no aparelho onde aconteceu, o bloqueio é confirmado e passa a valer em todos os aparelhos. Desbloquear ou Resetar senha libera em todos."));
 }
 async function alternarAtivo(p) {
   if (p.ativo) await confirmarAcao("Desativar " + p.nome + "?", p.nome + " não consegue mais entrar (aparece “Perfil desativado”). Pode ser reativado depois.", "Desativar", () => alterarPerfil(p.id, { ativo: false }, "Perfil desativado: " + p.nome));
@@ -676,4 +687,68 @@ function ligarArea() {
   $("loginVoltar").addEventListener("click", () => { mostrarPassoLogin(1); $("loginErro").textContent = ""; $("loginSenha").value = ""; $("loginSenha").focus(); });
   $("loginMatricula").addEventListener("input", (ev) => { const i = ev.target; const p = i.selectionStart; i.value = i.value.toUpperCase(); try { i.setSelectionRange(p, p); } catch (e) {} });
   prepararTelaLogin();
+}
+
+/* v2.5.2 (item 2): o bloqueio por 5 senhas erradas vale em todos os aparelhos. Neste aparelho ele fica pendente até um Administrador
+ * entrar aqui: o app confirma (assina) e publica no arquivo da equipe. Em outro aparelho, antes de conferir a senha, o login olha o
+ * arquivo da equipe: bloqueio assinado por um Administrador conhecido (e mais novo que a cópia local) recusa a entrada. */
+const BLOQ_PEND_KEY = "caderno-bloqueios-pendentes";
+function marcarBloqueioPendente(id) { const m = lerJSON(BLOQ_PEND_KEY, {}); m[id] = new Date().toISOString(); Dados.gravarTexto(BLOQ_PEND_KEY, JSON.stringify(m)); }
+function limparBloqueioPendente(id) { const m = lerJSON(BLOQ_PEND_KEY, {}); if (m[id]) { delete m[id]; Dados.gravarTexto(BLOQ_PEND_KEY, JSON.stringify(m)); } }
+function bloqueiosPendentes() { return Object.keys(lerJSON(BLOQ_PEND_KEY, {})); }
+async function confirmarBloqueiosPendentes() {
+  if (!modoAdmin || !chaveAdmin) return 0;
+  const ids = bloqueiosPendentes(); if (!ids.length) return 0;
+  let n = 0;
+  for (const id of ids) {
+    const p = lerPerfis().find((x) => x.id === id);
+    if (p && p.bloqueado && p.ativo && !p.excluido && p.papel !== "admin") { if (await alterarPerfil(id, { bloqueado: true }, "Bloqueio confirmado pelo Administrador (vale em todos os aparelhos): " + p.nome)) n++; }
+    limparBloqueioPendente(id);
+  }
+  return n;
+}
+async function bloqueadoNoArquivo(id) {
+  try {
+    if (!window.CadernoSync || !syncEstado.vinculado) return false;
+    const a = adaptador(); if (!a || !(await a.permissao(false))) return false;
+    const d = await Promise.race([abrirDocEquipe(await a.ler(), false), new Promise((r) => setTimeout(() => r(null), 4000))]);
+    const rp = d && Array.isArray(d.perfis) ? d.perfis.find((x) => x && x.id === id) : null;
+    if (!rp || !rp.bloqueado || !rp.assinP) return false;
+    const cache = await perfisCompletos(); const loc = cache.find((x) => x.id === id);
+    if (loc && CadernoSync.ts(loc.updatedAt) > CadernoSync.ts(rp.updatedAt)) return false; // o desbloqueio daqui é mais novo
+    return !!(await verificarAssin(rp.assinP, msgPerfil(rp), cache));
+  } catch (e) { return false; }
+}
+/* v2.5.2 (item 3): Pessoas e o status Bloqueado se redesenham sozinhos (login do Administrador, fim da sincronização, bloqueio gravado). */
+function renderPessoasSeAberto(forcar) {
+  try {
+    if (document.body.classList.contains("travado")) return;
+    if (!forcar && !(typeof aba !== "undefined" && String(aba).indexOf("adm-") === 0)) return;
+    if (typeof podeRenderAgora === "function" && !podeRenderAgora()) { renderPendente = true; return; }
+    render();
+  } catch (e) {}
+}
+/* v2.5.2 (item 1): cards Individuais de antes da v2.5.2 (sem dono) ficam escondidos até alguém dizer que são seus. Pergunta uma vez por
+ * pessoa neste aparelho, sem mostrar o conteúdo. */
+const LEGADO_DONO_KEY = "caderno-meus-sem-dono-resposta";
+function perguntarCardsSemDono() {
+  if (!sessaoPerfilId || document.body.classList.contains("travado") || typeof cardsSemDono !== "function") return;
+  const sem = cardsSemDono(); if (!sem.length) return;
+  const resp = lerJSON(LEGADO_DONO_KEY, {}); if (resp[sessaoPerfilId]) return;
+  if (document.querySelector(".sheet.on")) { setTimeout(perguntarCardsSemDono, 1500); return; }
+  const pid = sessaoPerfilId;
+  janela("dlgSE", (box, fim) => {
+    box.dataset.dlg = "meus-sem-dono";
+    dlgPadrao(box, "Cards de antes da atualização", "Este navegador tem " + sem.length + (sem.length === 1 ? " card individual (Meus) criado" : " cards individuais (Meus) criados") + " antes da v2.5.2, quando ainda não se guardava quem criou. Para proteger as senhas, eles ficam escondidos até o dono confirmar.");
+    avisoPadrao(box, "Só confirme se foi você quem criou. Se este navegador é usado por outras pessoas e você não tem certeza, escolha “Não são meus”.");
+    const er = erroPadrao(box);
+    botoesPadrao(box, "Não são meus", "São meus", () => {
+      const r = lerJSON(LEGADO_DONO_KEY, {}); r[pid] = "nao"; Dados.gravarTexto(LEGADO_DONO_KEY, JSON.stringify(r)); fim(false);
+    }, () => {
+      if (sessaoPerfilId !== pid) { er.textContent = "A sessão mudou. Entre de novo."; return; }
+      cardsSemDono().forEach((it) => { it.dono = pid; });
+      const r = lerJSON(LEGADO_DONO_KEY, {}); r[pid] = "sim"; Dados.gravarTexto(LEGADO_DONO_KEY, JSON.stringify(r));
+      separarOcultos(); save(); fim(true); toast(sem.length === 1 ? "Card movido para Meus" : sem.length + " cards movidos para Meus");
+    });
+  });
 }

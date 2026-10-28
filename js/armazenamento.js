@@ -4,6 +4,26 @@
 const KEY = "caderno-acessos-web-v1";
 let aba = "equipe";
 let itens = [];
+/* v2.5.2 (item 1): card Individual tem dono (id do perfil que criou). Com perfis, "itens" só tem os cards da Equipe e os Meus de quem
+ * está logado; os Meus de outras pessoas (e os de antes da v2.5.2, sem dono) ficam em itensOcultos e são gravados juntos, sem aparecer
+ * em lista, busca, contadores, Vencendo, Arquivo, exportações nem na Lixeira. Nada Individual vai para o arquivo da equipe. */
+let itensOcultos = [];
+function individualVisivel(it) {
+  if (!it || compartilhado(it)) return true;
+  if (typeof perfisAtivos !== "function" || !perfisAtivos()) return true; // aparelho sem perfis: como antes
+  return !!it.dono && typeof sessaoPerfilId !== "undefined" && !!sessaoPerfilId && it.dono === sessaoPerfilId;
+}
+function todosItens() { return itens.concat(itensOcultos); }
+function separarOcultos() {
+  const todos = todosItens();
+  itens = todos.filter(individualVisivel); itensOcultos = todos.filter((it) => !individualVisivel(it));
+  if (typeof fotoIndividuais === "function") fotoMeus = fotoIndividuais();
+}
+function carimbarDono() {
+  if (typeof sessaoPerfilId === "undefined" || !sessaoPerfilId) return;
+  itens.forEach((it) => { if (it && !compartilhado(it) && !it.dono) it.dono = sessaoPerfilId; });
+}
+function cardsSemDono() { return itensOcultos.filter((it) => !compartilhado(it) && !it.dono && it.id !== "s12"); }
 let edit = null;
 function hoje() {
   return new Date().toISOString().slice(0, 10);
@@ -54,6 +74,7 @@ function exemplos() {
   ];
 }
 function load() {
+  itensOcultos = [];
   try { itens = JSON.parse(Dados.texto(KEY) || "[]"); } catch (e) { itens = []; }
   if (!Array.isArray(itens)) itens = [];
   // v2.0.0: descarta lixo (não objeto / sem id) e saneia datas e ciclo dos cards guardados (cliente já quebrado pela v1.9.9 se recupera)
@@ -102,6 +123,7 @@ function load() {
     mudou = true;
   });
   if (mudou || saneou) Dados.gravarTexto(KEY, JSON.stringify(itens));
+  separarOcultos();
   if (window.CadernoSync && !syncMeta().marcas) carimbarMudancas();
   else if (window.CadernoSync) migrarMarcas(marcasAntes);
   if (typeof fotografarEquipe === "function") fotografarEquipe();
@@ -122,10 +144,11 @@ function migrarMarcas(antes) {
 }
 function save() {
   if (typeof guardarPermissoes === "function") guardarPermissoes(); // v2.2.0: o analista não grava o que só o admin pode mudar
+  carimbarDono();
   if (window.CadernoSync) carimbarMudancas();
   registrarMeus();
   restaurando.clear(); paraLixeira.clear(); paraLixeiraMeus.clear(); restaurandoMeus.clear();
-  Dados.gravarTexto(KEY, JSON.stringify(itens));
+  Dados.gravarTexto(KEY, JSON.stringify(todosItens()));
   if (typeof fotografarEquipe === "function") fotografarEquipe();
   render();
   if (window.CadernoSync) agendarSync();
