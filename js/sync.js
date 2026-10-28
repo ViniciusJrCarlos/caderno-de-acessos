@@ -176,14 +176,6 @@
     const shh = txt(p.senhaHash, 128), ssa = txt(p.senhaSalt, 64), sit = parseInt(p.senhaIter, 10);
     if (ssa && HEX.test(ssa)) { o.senhaSalt = ssa; o.senhaIter = sit > 0 && sit <= 5e6 ? sit : 310000; if (shh && HEX.test(shh)) o.senhaHash = shh; } // o sal fica na cópia pública (marca a senha atual)
     if (p.senhaTemp === true) o.senhaTemp = true;
-    // v2.5.3 (item 1): a senha pessoal é uma unidade própria. senhaReset/senhaBase: último "Resetar senha" (assinado pelo Administrador);
-    // senhaEm/senhaProva: quando a própria pessoa trocou e a prova (HMAC com a base) de que ela sabia a senha temporária.
-    if (p.senhaV === 2) o.senhaV = 2;
-    const sre = isoValido(p.senhaReset), sem = isoValido(p.senhaEm), sba = txt(p.senhaBase, 128), spv = txt(p.senhaProva, 128);
-    if (sre) o.senhaReset = sre;
-    if (sem) o.senhaEm = sem;
-    if (sba && HEX.test(sba)) o.senhaBase = sba;
-    if (spv && HEX.test(spv)) o.senhaProva = spv;
     if (p.bloqueado === true) o.bloqueado = true;
     // v2.5.0: matrícula (login) e exclusão definitiva (marca: o perfil some das telas, mas a lista nunca apaga ninguém)
     const mt = txt(p.matricula, 20).trim().toUpperCase(); if (mt && /^[A-Z0-9._\-]+$/.test(mt)) o.matricula = mt;
@@ -208,16 +200,7 @@
       // cópia local sem hash (aparelho sem a chave do cofre) nunca apaga o hash do admin: o hash só sai quando o papel deixa de ser admin
       if (novo.papel === "admin" && !novo.adminHash && outro.adminHash) { novo.adminHash = outro.adminHash; novo.adminSalt = outro.adminSalt; novo.adminIter = outro.adminIter; }
       if (novo.papel === "admin" && !novo.chavePub && outro.chavePub) novo.chavePub = outro.chavePub;
-      if (!novo.senhaHash && outro.senhaHash && novo.updatedAt === outro.updatedAt && (novo.senhaEm || "") === (outro.senhaEm || "")) { novo.senhaHash = outro.senhaHash; novo.senhaSalt = outro.senhaSalt; novo.senhaIter = outro.senhaIter; }
-      if (!novo.senhaBase && outro.senhaBase && (novo.senhaReset || "") === (outro.senhaReset || "")) novo.senhaBase = outro.senhaBase;
-      // v2.5.3 (item 1): a senha pessoal não segue o updatedAt do perfil. Com o mesmo "Resetar senha", vence a troca mais nova (senhaEm);
-      // empate: fica a do primeiro da lista (a cópia deste aparelho). Um Resetar senha mais novo do Administrador sempre vence.
-      const sx = (q) => ({ senhaHash: q.senhaHash, senhaSalt: q.senhaSalt, senhaIter: q.senhaIter, senhaTemp: q.senhaTemp, senhaEm: q.senhaEm, senhaProva: q.senhaProva });
-      if ((p.senhaReset || "") === (a.senhaReset || "") && (novo.senhaReset || "") === (p.senhaReset || "")) {
-        const tp = ts(p.senhaEm), ta = ts(a.senhaEm);
-        const mel = tp > ta ? p : a;
-        if (mel.senhaSalt && (mel.senhaHash || !novo.senhaHash || mel.senhaSalt === novo.senhaSalt)) { const u = sx(mel); if (!u.senhaHash && mel.senhaSalt === novo.senhaSalt) u.senhaHash = novo.senhaHash; Object.keys(u).forEach((k) => { if (u[k] === undefined) delete novo[k]; else novo[k] = u[k]; }); }
-      }
+      if (!novo.senhaHash && outro.senhaHash && novo.updatedAt === outro.updatedAt) { novo.senhaHash = outro.senhaHash; novo.senhaSalt = outro.senhaSalt; novo.senhaIter = outro.senhaIter; }
       if (novo.papel === "admin" && !novo.chavePriv && outro.chavePriv && (!novo.chavePub || novo.chavePub === outro.chavePub)) { novo.chavePriv = outro.chavePriv; novo.chaveSalt = outro.chaveSalt; }
       novo.ultimaSync = vivo.ultimaSync; novo.versao = vivo.versao;
       novo.ultimoAcesso = ts(p.ultimoAcesso) > ts(a.ultimoAcesso) ? p.ultimoAcesso : a.ultimoAcesso;

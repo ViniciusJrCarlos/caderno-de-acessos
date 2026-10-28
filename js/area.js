@@ -183,7 +183,7 @@ async function gravarSenhaNova(c, antiga, nova) {
     Dados.gravarTexto(ADMIN_CONF_KEY, c.id);
   } else {
     const h = await hashPessoal(nova);
-    const p = await gravarSenhaPropria(c.id, h); // v2.5.3 (item 1)
+    const p = await alterarPerfil(c.id, Object.assign({}, h, { senhaTemp: false }), "");
     if (!p) return "Não foi possível gravar a senha.";
     Dados.gravarTexto(PESSOAL_CONF_KEY, c.id + "|" + h.senhaSalt);
   }
@@ -223,9 +223,9 @@ function acharPerfilLogin(v) {
 async function loginPasso1(mat, senha) {
   if (!normMat(mat)) return { erro: "Digite a sua matrícula." };
   if (!senha) return { erro: "Digite a sua senha." };
-  let p = acharPerfilLogin(mat);
-  if (!p) return loginDesconhecido(mat, senha); // v2.5.3 (item 3): a mesma resposta de senha errada (sem dizer se a matrícula existe)
-  if (await perfilDoArquivo(p.id)) p = acharPerfilLogin(mat) || p; // v2.5.3 (item 2): reativação/reset já gravados no arquivo valem na tela de login
+  const excl = lerPerfis().find((p) => p.excluido && p.matricula && p.matricula === normMat(mat));
+  const p = acharPerfilLogin(mat);
+  if (!p) return { erro: excl ? "Perfil excluído. Fale com o Administrador." : "Matrícula não encontrada. Só entra quem o Administrador cadastrou." };
   if (!p.ativo) return { erro: "Perfil desativado. Fale com o Administrador." };
   if (p.bloqueado) return { erro: "Conta bloqueada depois de " + MAX_TENTATIVAS + " senhas erradas. Peça ao Administrador para resetar a sua senha." };
   if (p.papel !== "admin" && await bloqueadoNoArquivo(p.id)) return { erro: "Conta bloqueada depois de " + MAX_TENTATIVAS + " senhas erradas. Peça ao Administrador para resetar a sua senha." }; // v2.5.2 (item 2)
@@ -234,7 +234,7 @@ async function loginPasso1(mat, senha) {
     if (Date.now() < esperaLoginAte) return { erro: "Muitas tentativas. Aguarde alguns segundos." };
     if (!c || !c.adminHash) return { erro: "A senha deste perfil ainda não chegou neste aparelho. Peça o arquivo da equipe ao Administrador." };
     const h = await derivarSenha(senha, c.adminSalt, c.adminIter || PERFIS_ITER);
-    if (!hashIguais(h, c.adminHash)) { tentativasLoginAdmin++; if (tentativasLoginAdmin >= MAX_TENTATIVAS) { tentativasLoginAdmin = 0; esperaLoginAte = Date.now() + 30000; return { erro: "Muitas tentativas. Aguarde alguns segundos." }; } return { erro: "Matrícula ou senha incorreta. Restam " + (MAX_TENTATIVAS - tentativasLoginAdmin) + " tentativa(s)." }; } // v2.5.3 (item 3): mesma mensagem; o Administrador nunca é travado (espera 30 s)
+    if (!hashIguais(h, c.adminHash)) { tentativasLoginAdmin++; if (tentativasLoginAdmin >= 5) { tentativasLoginAdmin = 0; esperaLoginAte = Date.now() + 30000; } return { erro: "Matrícula ou senha incorreta." }; }
     tentativasLoginAdmin = 0;
     if (c.trocarSenha) return { trocar: true, c: c };
     const ch = await prepararChaveAdmin(c, senha, "");
@@ -256,14 +256,6 @@ async function loginPasso1(mat, senha) {
   concluirLoginPerfil(c, false);
   return { ok: true };
 }
-/* v2.5.3 (item 3): matrícula que não existe (ou excluída) responde igual a senha errada, com a mesma contagem e o mesmo tempo de conferência. */
-async function loginDesconhecido(mat, senha) {
-  try { await derivarSenha(senha, "00112233445566778899aabbccddeeff", PERFIS_ITER); } catch (e) {}
-  const k = "m:" + normMat(mat).slice(0, 20), n = tentativasDe(k) + 1;
-  if (n >= MAX_TENTATIVAS) { gravarTentativas(k, 0); return { erro: "Conta bloqueada depois de " + MAX_TENTATIVAS + " senhas erradas. Peça ao Administrador para resetar a sua senha." }; }
-  gravarTentativas(k, n);
-  return { erro: "Matrícula ou senha incorreta. Restam " + (MAX_TENTATIVAS - n) + " tentativa(s)." };
-}
 async function loginPasso2(nova, conf) {
   const lp = loginPendente; if (!lp) return { erro: "Comece de novo." };
   if (!senhaForte(nova)) return { erro: REGRAS_SENHA };
@@ -276,7 +268,7 @@ async function loginPasso2(nova, conf) {
     await alterarPerfil(c.id, Object.assign(await hashAdmin(nova), ch.campos || {}, { trocarSenha: false }), "Senha de Administrador definida: " + c.nome);
   } else {
     const h = await hashPessoal(nova);
-    const p = await gravarSenhaPropria(c.id, h); // v2.5.3 (item 1)
+    const p = await alterarPerfil(c.id, Object.assign({}, h, { senhaTemp: false }), "");
     if (!p) return { erro: "Não foi possível gravar a senha." };
     Dados.gravarTexto(PESSOAL_CONF_KEY, c.id + "|" + h.senhaSalt);
   }
@@ -504,7 +496,7 @@ function renderPessoas(box) {
     const b1 = btn("btn pequeno", "key", "Resetar senha", () => resetarSenha(p).then(render)); b1.dataset.acao = "resetar"; b1.classList.add("rot-curto"); b1.dataset.curto = "Resetar";
     if (souEu) { b1.disabled = true; b1.title = "Para trocar a sua senha, use Trocar minha senha"; }
     ac.appendChild(b1);
-    const b2 = btn("btn pequeno", "lock", "Desbloquear", async () => { await desbloquearPessoa(p); render(); }); b2.dataset.acao = "desbloquear"; b2.dataset.curto = "Desbloq."; // v2.5.3 (item 5)
+    const b2 = btn("btn pequeno", "lock", "Desbloquear", async () => { gravarTentativas(p.id, 0); limparBloqueioPendente(p.id); await alterarPerfil(p.id, { bloqueado: false }, "Conta desbloqueada: " + p.nome); toast(p.nome + " desbloqueado(a)"); render(); }); b2.dataset.acao = "desbloquear"; b2.dataset.curto = "Desbloq.";
     if (!p.bloqueado) { b2.disabled = true; b2.title = "Só quando a conta está bloqueada"; }
     ac.appendChild(b2);
     const b3 = btn("btn pequeno", "edit", "Editar", () => editarPessoa(p)); b3.dataset.acao = "editar"; b3.dataset.curto = "Editar"; ac.appendChild(b3);
@@ -519,14 +511,12 @@ function renderPessoas(box) {
   box.appendChild(el("p", "meta gestao__nota", "O analista só recebe o arquivo da equipe. Bloqueio por 5 senhas erradas: quando um Administrador entra no aparelho onde aconteceu, o bloqueio é confirmado e passa a valer em todos os aparelhos. Desbloquear ou Resetar senha libera em todos."));
 }
 async function alternarAtivo(p) {
-  if (p.ativo && !(await exigirSenhaAdmin(p))) { render(); return; } // v2.5.3 (item 5)
   if (p.ativo) await confirmarAcao("Desativar " + p.nome + "?", p.nome + " não consegue mais entrar (aparece “Perfil desativado”). Pode ser reativado depois.", "Desativar", () => alterarPerfil(p.id, { ativo: false }, "Perfil desativado: " + p.nome));
   else { await alterarPerfil(p.id, { ativo: true }, "Perfil reativado: " + p.nome); toast(p.nome + " reativado(a)"); }
   render();
 }
-async function excluirPessoa(p) {
-  if (p.ativo) { toast("Desative a pessoa antes de excluir"); return false; }
-  if (!(await exigirSenhaAdmin(p))) return false; // v2.5.3 (item 5)
+function excluirPessoa(p) {
+  if (p.ativo) { toast("Desative a pessoa antes de excluir"); return Promise.resolve(false); }
   return janela("dlgSE", (box, fim) => {
     dlgPadrao(box, "Excluir " + p.nome + "?", "O perfil some da lista e a matrícula " + (p.matricula || "") + " deixa de entrar. Os cards e o histórico continuam. Não dá para desfazer.");
     avisoPadrao(box, "Para confirmar, digite EXCLUIR.");
@@ -543,36 +533,6 @@ async function excluirPessoa(p) {
 }
 function matriculaValida(v) { return /^[A-Z0-9._\-]{2,20}$/.test(normMat(v)); }
 function matriculaEmUso(v, exceto) { const m = normMat(v); return lerPerfis().some((p) => !p.excluido && p.id !== exceto && p.matricula === m); }
-/* v2.5.3 (item 4): matrícula de pessoa excluída não volta a ser usada (nem em cadastro nem em edição). */
-function matriculaExcluida(v, exceto) { const m = normMat(v); return lerPerfis().some((p) => p.excluido && p.id !== exceto && p.matricula === m); }
-const MSG_MAT_EXCLUIDA = "Essa matrícula era de uma pessoa excluída e não pode ser usada de novo. Use outra matrícula.";
-/* v2.5.3 (item 5): agir sobre OUTRO Administrador (resetar, desativar, rebaixar, excluir, desbloquear) pede a senha de quem está agindo. */
-function exigirSenhaAdmin(p) {
-  const eu = meuPerfil();
-  if (!p || p.papel !== "admin" || (eu && eu.id === p.id)) return Promise.resolve(true);
-  return janela("dlgConfAdm", (box, fim) => {
-    box.classList.add("dlg-admin");
-    dlgPadrao(box, "Confirme com a sua senha", p.nome + " é Administrador. Para continuar, digite a SUA senha de Administrador.");
-    const s = campoPadrao(box, "csaSenha", "Sua senha", { senha: true, auto: "current-password" });
-    const er = erroPadrao(box);
-    const ok = botoesPadrao(box, "Cancelar", "Confirmar", () => fim(false), async () => {
-      er.textContent = "";
-      if (Date.now() < esperaAdminAte) { er.textContent = "Muitas tentativas. Aguarde alguns segundos."; return; }
-      ok.disabled = true;
-      try {
-        if (!(await conferirSenhaPerfil(s.value))) { tentativasAdmin++; if (tentativasAdmin >= 5) { tentativasAdmin = 0; esperaAdminAte = Date.now() + 30000; } er.textContent = "Senha incorreta."; s.select(); return; }
-        tentativasAdmin = 0; s.value = ""; fim(true);
-      } catch (e) { er.textContent = "Não foi possível conferir a senha (" + ((e && e.name) || "erro") + ")."; }
-      finally { ok.disabled = false; }
-    });
-    setTimeout(() => s.focus(), 60);
-  });
-}
-async function desbloquearPessoa(p) {
-  if (!(await exigirSenhaAdmin(p))) return false;
-  gravarTentativas(p.id, 0); if (typeof limparBloqueioPendente === "function") limparBloqueioPendente(p.id);
-  await alterarPerfil(p.id, { bloqueado: false }, "Conta desbloqueada: " + p.nome); toast(p.nome + " desbloqueado(a)"); return true;
-}
 function editarPessoa(p) {
   return janela("dlgPerfis", (box, fim) => {
     dlgPadrao(box, "Editar " + p.nome, "Nome, matrícula e perfil. A matrícula é o que a pessoa digita para entrar.");
@@ -587,7 +547,6 @@ function editarPessoa(p) {
       if (!nome) { er.textContent = "Digite o nome."; n.focus(); return; }
       if (!matriculaValida(mat)) { er.textContent = "Matrícula: de 2 a 20 letras, números, ponto, hífen ou sublinhado."; m.focus(); return; }
       if (matriculaEmUso(mat, p.id)) { er.textContent = "Essa matrícula já é de outra pessoa."; m.focus(); return; }
-      if (matriculaExcluida(mat, p.id)) { er.textContent = MSG_MAT_EXCLUIDA; m.focus(); return; } // v2.5.3 (item 4)
       const outro = perfilPorNome(nome); if (outro && outro.id !== p.id && !outro.excluido) { er.textContent = "Já existe um perfil com esse nome."; return; }
       ok.disabled = true;
       try {
@@ -758,23 +717,6 @@ async function bloqueadoNoArquivo(id) {
     const cache = await perfisCompletos(); const loc = cache.find((x) => x.id === id);
     if (loc && CadernoSync.ts(loc.updatedAt) > CadernoSync.ts(rp.updatedAt)) return false; // o desbloqueio daqui é mais novo
     return !!(await verificarAssin(rp.assinP, msgPerfil(rp), cache));
-  } catch (e) { return false; }
-}
-/* v2.5.3 (item 2): com a tela de login aberta o aparelho não sincroniza. No login, o perfil da pessoa é conferido no arquivo
- * da equipe: reativação, reset ou troca de senha mais novos (assinados / com prova) entram aqui, pela mesma mescla e conferência da sincronização. */
-async function perfilDoArquivo(id) {
-  try {
-    if (!window.CadernoSync || !syncEstado.vinculado) return false;
-    const a = adaptador(); if (!a || !(await a.permissao(false))) return false;
-    const d = await Promise.race([abrirDocEquipe(await a.ler(), false), new Promise((r) => setTimeout(() => r(null), 4000))]);
-    if (!d || !Array.isArray(d.perfis) || !d.perfis.some((x) => x && x.id === id)) return false;
-    const cache = await perfisCompletos(); const loc = cache.find((x) => x.id === id); if (!loc) return false;
-    const fp = await filtrarPerfisRemoto(cache, CadernoSync.mesclarPerfis([cache, d.perfis]));
-    const novo = fp.itens.find((x) => x.id === id); if (!novo) return false;
-    const k = (x) => JSON.stringify([x.updatedAt, x.ativo, x.excluido, x.bloqueado, x.senhaReset, x.senhaEm, x.senhaHash, x.senhaSalt]);
-    if (k(novo) === k(loc)) return false;
-    await gravarPerfis(fp.itens); fixarChaves(fp.itens);
-    return true;
   } catch (e) { return false; }
 }
 /* v2.5.2 (item 3): Pessoas e o status Bloqueado se redesenham sozinhos (login do Administrador, fim da sincronização, bloqueio gravado). */

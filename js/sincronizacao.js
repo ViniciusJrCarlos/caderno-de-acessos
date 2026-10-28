@@ -138,15 +138,9 @@ function presencaParaGravar(remoto0, perfis) {
   const rp = remoto0.perfis[i];
   const mud = {};
   CAMPOS_PRESENCA.forEach((k) => { if (eu[k] && eu[k] !== rp[k] && (k === "versao" || CadernoSync.ts(eu[k]) > CadernoSync.ts(rp[k]))) mud[k] = eu[k]; });
-  // v2.5.3 (item 1): a troca da própria senha pessoal (com a prova) viaja junto, se for mais nova que a do arquivo e do mesmo Resetar senha
-  let tiraTemp = false;
-  if (eu.senhaV === 2 && rp.senhaV === 2 && eu.senhaProva && eu.senhaHash && !eu.senhaTemp && (eu.senhaReset || "") === (rp.senhaReset || "") && CadernoSync.ts(eu.senhaEm) > CadernoSync.ts(rp.senhaEm)) {
-    ["senhaHash", "senhaSalt", "senhaIter", "senhaEm", "senhaProva"].forEach((k) => { mud[k] = eu[k]; }); tiraTemp = true;
-  }
   if (!Object.keys(mud).length) return null;
   const doc = JSON.parse(JSON.stringify(remoto0));
   Object.assign(doc.perfis[i], mud);
-  if (tiraTemp) delete doc.perfis[i].senhaTemp;
   delete doc.gravacao;
   return doc;
 }

@@ -23,7 +23,7 @@ let baseEquipe = null;          // foto dos cards da Equipe aceitos (para desfaz
 let tentativasAdmin = 0, esperaAdminAte = 0;
 const PRESENCA_MS = 15 * 6e4;   // v2.5.1 (item 4): no máximo uma gravação de presença a cada 15 min
 
-const SEGREDOS_PERFIL = ["adminHash", "adminSalt", "adminIter", "chavePriv", "chaveSalt", "senhaHash", "senhaIter", "senhaBase"]; // v2.5.3: senhaBase (hash da temporária do último Resetar senha) também é segredo // v2.4.0: senhaSalt fica na cópia pública (não é segredo; marca a senha atual);
+const SEGREDOS_PERFIL = ["adminHash", "adminSalt", "adminIter", "chavePriv", "chaveSalt", "senhaHash", "senhaIter"]; // v2.4.0: senhaSalt fica na cópia pública (não é segredo; marca a senha atual);
 function semHash(p) { const o = Object.assign({}, p); SEGREDOS_PERFIL.forEach((k) => delete o[k]); return o; }
 function lerPerfis() { return window.CadernoSync ? CadernoSync.limparPerfis(lerJSON(PERFIS_KEY, [])).map(semHash) : []; }
 /* Grava a lista: a parte pública em texto e a completa (com hashes) só cifrada com a chave da equipe deste aparelho. */
@@ -49,8 +49,7 @@ async function perfisCompletos() {
     const c = cofre.get(p.id); if (!c) return p;
     let o = p;
     if (p.papel === "admin" && c.adminHash) o = Object.assign({}, p, { adminHash: c.adminHash, adminSalt: c.adminSalt, adminIter: c.adminIter }, c.chavePriv && (!p.chavePub || p.chavePub === c.chavePub) ? { chavePub: c.chavePub, chavePriv: c.chavePriv, chaveSalt: c.chaveSalt } : {});
-    if (c.senhaHash && c.senhaSalt === p.senhaSalt && (c.senhaEm || "") === (p.senhaEm || "") && (p.senhaV === 2 || c.updatedAt === p.updatedAt)) o = Object.assign({}, o, { senhaHash: c.senhaHash, senhaSalt: c.senhaSalt, senhaIter: c.senhaIter }); // v2.4.0; v2.5.3: a senha pessoal tem data própria
-    if (c.senhaBase && (c.senhaReset || "") === (p.senhaReset || "")) o = Object.assign({}, o, { senhaBase: c.senhaBase }); // v2.5.3
+    if (c.senhaHash && c.updatedAt === p.updatedAt) o = Object.assign({}, o, { senhaHash: c.senhaHash, senhaSalt: c.senhaSalt, senhaIter: c.senhaIter }); // v2.4.0
     return o;
   });
 }
@@ -247,31 +246,13 @@ function novoIdPerfil() { return "pf-" + Date.now().toString(36) + Math.random()
 async function hashAdmin(senha) { const salt = saltAleatorio(); return { adminHash: await derivarSenha(senha, salt, PERFIS_ITER), adminSalt: salt, adminIter: PERFIS_ITER }; }
 async function alterarPerfil(id, mud, texto) {
   const l = await perfisCompletos(); const p = l.find((x) => x.id === id); if (!p) return null;
-  const agora = new Date().toISOString();
-  Object.assign(p, mud, { updatedAt: agora, updatedBy: autor() });
-  // v2.5.3 (item 1): a senha pessoal vira unidade própria (senhaV 2). O Administrador só mexe nela com "Resetar senha" (temporária nova,
-  // senhaReset/senhaBase assinados) ou ao excluir; editar, desbloquear, reativar, bloqueio e papel não tocam na senha do analista.
-  if (p.papel !== "admin" || p.senhaV === 2) {
-    if (mud.senhaTemp === true && mud.senhaHash) { p.senhaReset = agora; p.senhaBase = mud.senhaHash; p.senhaEm = agora; delete p.senhaProva; }
-    else if (Object.prototype.hasOwnProperty.call(mud, "senhaHash") && !mud.senhaHash) { p.senhaReset = agora; delete p.senhaBase; delete p.senhaEm; delete p.senhaProva; delete p.senhaHash; delete p.senhaSalt; delete p.senhaIter; delete p.senhaTemp; }
-    else if (p.senhaV !== 2 && p.senhaTemp && p.senhaHash && !p.senhaBase) p.senhaBase = p.senhaHash; // perfil de antes: a temporária vira a base (sem mudar senhaReset)
-    p.senhaV = 2;
-  }
+  Object.assign(p, mud, { updatedAt: new Date().toISOString(), updatedBy: autor() });
   if (p.papel !== "admin") { delete p.adminHash; delete p.adminSalt; delete p.adminIter; delete p.chavePub; delete p.chavePriv; delete p.chaveSalt; delete p.trocarSenha; }
   if (!adminsAtivos(l).length) { toast("Não dá para remover, desativar ou rebaixar o último Administrador"); return null; }
   await assinarPerfil(p); // v2.4.0: mudança feita com a chave do Administrador aberta sai assinada
   if (p.papel === "admin" && p.chavePub && chaveAdmin && chaveAdmin.pid !== p.id) { const pn = pinsChaves(); pn[p.id] = p.chavePub; Dados.gravarTexto(CHAVES_PIN_KEY, JSON.stringify(pn)); }
   await gravarPerfis(l); if (texto) histPerfil(texto);
   agendarSync(); return p;
-}
-/* v2.5.3 (item 1): a própria pessoa troca a senha pessoal sem mexer no resto do perfil (nem no updatedAt assinado pelo Administrador).
- * A troca leva a prova (HMAC com a base do último Resetar senha) e viaja para o arquivo da equipe junto com a presença. */
-async function gravarSenhaPropria(id, h) {
-  const l = await perfisCompletos(); const p = l.find((x) => x.id === id); if (!p) return null;
-  if (p.senhaV !== 2 || !p.senhaBase) return alterarPerfil(id, Object.assign({}, h, { senhaTemp: false, senhaEm: new Date().toISOString() }), ""); // perfil de antes da v2.5.3
-  Object.assign(p, h, { senhaEm: new Date().toISOString() }); delete p.senhaTemp; delete p.senhaProva;
-  p.senhaProva = await provaSenhaPropria(p);
-  await gravarPerfis(l); agendarSync(); return p;
 }
 /* ---------- Modo admin ---------- */
 function sairModoAdmin(silencioso) {
