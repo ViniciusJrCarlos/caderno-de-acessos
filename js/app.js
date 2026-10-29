@@ -7,9 +7,12 @@ document.addEventListener("pointerdown", () => { ignorarClique = false; }, true)
 document.addEventListener("click", (ev) => { if (!ev.target.closest(".menu-card")) fecharMenus(); });
 document.addEventListener("click", () => { if (renderPendente) setTimeout(renderSePendente, 50); });
 /* ---------- v1.9.3+: Novidades (texto vai junto com o app; mais recente primeiro) ---------- */
-const APP_VERSAO = "2.5.2";
+const APP_VERSAO = "2.5.4";
 const NOVIDADES_VISTA = "caderno-novidades-vista";
 const NOVIDADES = [
+  { v: "2.5.4", data: "28/10/2026", itens: [
+    "v2.5.4: corrige sincronização travada após a volta da v2.5.3 (mesmo código da v2.5.2)."
+  ] },
   { v: "2.5.2", data: "28/10/2026", itens: [
     "Cards individuais (Meus) agora têm dono: cada pessoa só vê os seus, mesmo usando o mesmo navegador. Cards de antes desta versão aparecem uma vez com a pergunta \u201cSão seus?\u201d.",
     "Bloqueio por 5 senhas erradas vale em todos os aparelhos: o Administrador confirma o bloqueio ao entrar e ele vai assinado no arquivo da equipe. Desbloquear também vale para todos.",
