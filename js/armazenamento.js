@@ -9,6 +9,8 @@ let itens = [];
  * em lista, busca, contadores, Vencendo, Arquivo, exportações nem na Lixeira. Nada Individual vai para o arquivo da equipe. */
 let itensOcultos = [];
 function individualVisivel(it) {
+  return true; // v3.0.0 (item 2): sem dono automático nem "São meus?": todos os Meus deste aparelho voltam a aparecer (nada se perde)
+  /* eslint-disable no-unreachable */
   if (!it || compartilhado(it)) return true;
   if (typeof perfisAtivos !== "function" || !perfisAtivos()) return true; // aparelho sem perfis: como antes
   return !!it.dono && typeof sessaoPerfilId !== "undefined" && !!sessaoPerfilId && it.dono === sessaoPerfilId;
@@ -20,6 +22,7 @@ function separarOcultos() {
   if (typeof fotoIndividuais === "function") fotoMeus = fotoIndividuais();
 }
 function carimbarDono() {
+  return; // v3.0.0 (item 2): não carimba mais dono nos Meus
   if (typeof sessaoPerfilId === "undefined" || !sessaoPerfilId) return;
   itens.forEach((it) => { if (it && !compartilhado(it) && !it.dono) it.dono = sessaoPerfilId; });
 }

@@ -20,7 +20,10 @@ const syncFila = window.CadernoSync ? CadernoSync.Fila() : null;
 const syncEstado = { suportado: false, pastaSuportada: false, vinculado: false, modo: "", nome: "", pendente: false, rodando: false, agendado: false, acoes: [] };
 let syncAtivo = null;
 function adaptador() { return window.__syncAdaptadorTeste || syncAtivo; }
-function autor() { return (Dados.texto(AUTOR_KEY) || "").trim(); }
+function autor() { // v3.0.0 (item 4): o autor do log é o perfil da sessão desta aba
+  if (typeof sessaoPerfilId !== "undefined" && sessaoPerfilId && typeof lerPerfis === "function") { try { const p = lerPerfis().find((x) => x.id === sessaoPerfilId); if (p && p.nome) return String(p.nome).trim(); } catch (e) {} }
+  return (Dados.texto(AUTOR_KEY) || "").trim();
+}
 function syncMeta() { return lerJSON(SYNC_META_KEY, { ultimaSync: "", marcas: null }); }
 function gravarMeta(m) { Dados.gravarTexto(SYNC_META_KEY, JSON.stringify(m)); }
 function removidosLocais() { return lerJSON(REMOVIDOS_KEY, []); }
@@ -115,15 +118,41 @@ function syncSoLeitura() { return comPerfis() && papelAtual() !== "admin"; }
 const ESQUEMA_DOC = 1;
 function versaoArquivoNova(d) {
   if (!d || typeof d !== "object") return "";
-  if (typeof d.app === "string" && /^\d+(\.\d+){0,2}$/.test(d.app) && cmpVersao(d.app, APP_VERSAO) > 0) return d.app;
+  if (typeof d.app === "string" && /^\d+(\.\d+){0,2}$/.test(d.app) && cmpVersao(d.app, APP_VERSAO) > 0 && versaoLiberada() !== d.app) return d.app;
   if (Number(d.versao) > ESQUEMA_DOC) return "esquema " + d.versao;
   return "";
+}
+/* v3.0.0 (item 6): saída segura do Administrador. Ele confirma com a própria senha (fica no log) e, só nesta aba, o app volta a
+ * gravar por cima do arquivo marcado com aquela versão mais nova. A proteção continua para todo o resto. */
+const VERSAO_LIBERADA_KEY = "caderno-versao-liberada";
+function versaoLiberada() { try { return sessionStorage.getItem(VERSAO_LIBERADA_KEY) || ""; } catch (e) { return ""; } }
+async function liberarVersaoAdmin(v) {
+  if (typeof modoAdmin === "undefined" || !modoAdmin) return false;
+  const eu = meuPerfil(); if (!eu || eu.papel !== "admin") return false;
+  return janela("dlgSE", (box, fim) => {
+    box.dataset.dlg = "versao-nova";
+    dlgPadrao(box, "Arquivo gravado por uma versão mais nova", "O arquivo da equipe foi gravado pela versão " + v + " do Caderno e este app é a v" + APP_VERSAO + ". Para não estragar dados, este aparelho só lê o arquivo.");
+    avisoPadrao(box, "Só libere se você voltou de versão de propósito (por exemplo, depois de um retorno para uma versão anterior). A liberação vale só nesta aba e fica no log.");
+    const s = campoPadrao(box, "vnSenha", "Sua senha de Administrador", { senha: true, auto: "current-password" });
+    const er = erroPadrao(box);
+    botoesPadrao(box, "Agora não", "Liberar gravação", () => fim(false), async () => {
+      er.textContent = "";
+      const c = (await perfisCompletos()).find((x) => x.id === eu.id);
+      if (!c || !c.adminHash) { er.textContent = "A senha deste perfil não está neste aparelho."; return; }
+      const h = await derivarSenha(s.value, c.adminSalt, c.adminIter || PERFIS_ITER);
+      if (!hashIguais(h, c.adminHash)) { er.textContent = "Senha incorreta."; s.select(); return; }
+      try { sessionStorage.setItem(VERSAO_LIBERADA_KEY, v); } catch (e) {}
+      addHist({ id: "vl-" + Date.now().toString(36), tipo: "texto", card: "", escopo: "Equipe", texto: "Administrador liberou a gravação sobre arquivo da versão " + v + " (app v" + APP_VERSAO + "): " + eu.nome });
+      fim(true); toast("Gravação liberada nesta aba. Sincronizando…"); setTimeout(() => sincronizar(true), 0);
+    });
+  });
 }
 let avisoAtualizarMostrado = "";
 function avisarAtualizar(v) {
   syncEstado.appAntigo = v;
   if (avisoAtualizarMostrado === v) return; avisoAtualizarMostrado = v;
-  setTimeout(() => aviso("Atualize o app", "O arquivo da equipe foi gravado por uma versão mais nova do Caderno (" + v + "). Este aparelho (v" + APP_VERSAO + ") só lê o arquivo, sem gravar nada, até você atualizar: feche e abra o app de novo ou recarregue a página."), 0);
+  if (typeof modoAdmin !== "undefined" && modoAdmin) { setTimeout(() => liberarVersaoAdmin(v), 0); return; }
+  setTimeout(() => aviso("Arquivo gravado por uma versão mais nova", "O arquivo da equipe foi gravado por uma versão mais nova do Caderno (" + v + "). Este aparelho (v" + APP_VERSAO + ") só lê o arquivo, sem gravar nada, até você atualizar: feche e abra o app de novo ou recarregue a página."), 0);
 }
 /* v2.5.1 (item 3): o analista grava SÓ a própria presença (último acesso, última sincronização, versão) no arquivo da equipe.
  * Parte do arquivo como foi lido (já decifrado), troca só esses 3 campos no perfil dele (pelo id) e grava com a mesma gravação verificada.
@@ -141,6 +170,54 @@ function presencaParaGravar(remoto0, perfis) {
   if (!Object.keys(mud).length) return null;
   const doc = JSON.parse(JSON.stringify(remoto0));
   Object.assign(doc.perfis[i], mud);
+  delete doc.gravacao;
+  return doc;
+}
+/* v3.0.0 (item 1): além da presença, o analista grava no arquivo SÓ os campos operacionais (CAMPOS_ANALISTA: senha, datas/ciclo,
+ * escalonamento) dos cards da Equipe que ele mudou aqui (mais novos que os do arquivo). O resto do arquivo fica como foi lido.
+ * Os outros aparelhos aceitam essas mudanças pela regra que já existe (sanearEquipe: o analista pode mudar esses campos sem assinatura);
+ * URL, tipo, nome etc. continuam desfeitos se não vierem assinados pelo Administrador. Sem mudar formato de assinatura nem de senha. */
+function operacaoParaGravar(doc) {
+  if (!doc || !Array.isArray(doc.itens) || typeof CAMPOS_ANALISTA === "undefined" || papelAtual() !== "analista") return 0;
+  const eu = autor(); let n = 0;
+  const loc = new Map(itens.filter(compartilhado).map((it) => [it.id, it]));
+  doc.itens.forEach((rc, i) => {
+    const it = rc && loc.get(rc.id); if (!it || it.updatedBy !== eu || CadernoSync.ts(it.updatedAt) <= CadernoSync.ts(rc.updatedAt)) return;
+    const mud = {};
+    CAMPOS_ANALISTA.forEach((k) => { if (JSON.stringify(it[k] === undefined ? null : it[k]) !== JSON.stringify(rc[k] === undefined ? null : rc[k])) mud[k] = it[k] === undefined ? null : JSON.parse(JSON.stringify(it[k])); });
+    if (!Object.keys(mud).length) return;
+    const novo = Object.assign({}, rc, mud, { updatedAt: it.updatedAt, updatedBy: eu });
+    delete novo.assin; // a assinatura antiga do admin não vale para a versão nova (o card passa a ser "do analista" só nesses campos)
+    doc.itens[i] = novo; n++;
+  });
+  return n;
+}
+/* v3.0.0: a senha nova que o analista criou (troca da temporária) vai para o arquivo, só se ele for cifrado; os outros aparelhos já
+ * aceitam essa mudança sem assinatura (mudancaPropria). */
+const CAMPOS_TROCA_SENHA = ["senhaHash", "senhaSalt", "senhaIter", "senhaTemp"];
+function senhaPropriaParaGravar(doc, perfis, bruto) {
+  if (!doc || !Array.isArray(doc.perfis) || !perfis || !window.CadernoCripto || !CadernoCripto.ehProtegido(bruto)) return false;
+  const eu = meuPerfil(perfis); if (!eu || eu.papel === "admin" || !eu.senhaHash) return false;
+  const i = doc.perfis.findIndex((p) => p && String(p.id) === eu.id); if (i < 0) return false;
+  const rp = doc.perfis[i];
+  if (!rp.senhaTemp || eu.senhaTemp || eu.senhaHash === rp.senhaHash || CadernoSync.ts(eu.updatedAt) <= CadernoSync.ts(rp.updatedAt)) return false;
+  const novo = Object.assign({}, rp); CAMPOS_TROCA_SENHA.forEach((k) => { novo[k] = eu[k]; });
+  novo.updatedAt = eu.updatedAt; novo.updatedBy = eu.updatedBy || eu.nome;
+  doc.perfis[i] = novo; return true;
+}
+function restritoParaGravar(remoto0, perfis, histEq, bruto) {
+  if (!remoto0 || typeof remoto0 !== "object") return null;
+  const doc = presencaParaGravar(remoto0, perfis) || JSON.parse(JSON.stringify(remoto0));
+  let mudou = JSON.stringify(doc.perfis) !== JSON.stringify(remoto0.perfis);
+  if (senhaPropriaParaGravar(doc, perfis, bruto)) mudou = true;
+  const n = operacaoParaGravar(doc);
+  if (n) {
+    mudou = true;
+    const ids = new Set((remoto0.historico || []).map((e) => e.id)), eu = normTxt(autor());
+    const novos = (histEq || []).filter((e) => e && !ids.has(e.id) && normTxt(e.quem || "") === eu);
+    if (novos.length) doc.historico = CadernoSync.mesclarHistorico([remoto0.historico || [], novos], CadernoSync.HIST_MAX);
+  }
+  if (!mudou) return null;
   delete doc.gravacao;
   return doc;
 }
@@ -213,8 +290,8 @@ async function sincronizarAgora(interativo, fixo) {
       const idsRem = new Set(((remoto && remoto.historico) || []).map((e) => e.id));
       if (histEq.some((e) => !idsRem.has(e.id))) precisa = true;
       if (precisa && !soLeitura) await a.gravar(await fecharDocEquipe(CadernoSync.montarDoc(r.itens, r.removidos, autor(), compartilhado, { modelos: rm.itens, modelosRemovidos: rm.removidos, historico: histEq, lixeira: ex.lixeira, lixeiraRemovidos: ex.lixRem, conflitos: ex.conflitos, conflitosResolvidos: ex.confRes, perfis: pf.gravar ? pf.itens : [], app: APP_VERSAO }), bruto));
-      else if (soLeitura && !antigo && !fixo && pf.gravar) { // v2.5.1 (item 3): gravação restrita do analista (só a presença dele)
-        const pres = presencaParaGravar(remoto0, pf.itens);
+      else if (soLeitura && !antigo && !fixo && remoto0) { // v3.0.0 (itens 1 e 7): gravação restrita do analista (presença + campos operacionais), com ou sem senha da equipe
+        const pres = restritoParaGravar(remoto0, pf.itens, histEq, bruto);
         if (pres) await a.gravar(await fecharDocEquipe(pres, bruto));
       }
       resultado = { r: r, mud: mud, conf: ex.novosConf, localMudou: localMudou, rm: rm, histEq: histEq, ex: ex, perfis: pf.itens };

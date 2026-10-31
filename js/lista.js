@@ -318,7 +318,7 @@ function abrirMenuCard(it, ancora) {
   m.setAttribute("role", "menu");
   const id = it.id;
   const cur = (fn) => () => { fecharMenus(); const c = atual({ id: id }); if (!c) { toast("Este card não existe mais"); render(); return; } fn(c); };
-  const soVer = compartilhado(it) && !podeAdminEquipe() && perfisAtivos(); // v2.5.0: analista só vê os cards da Equipe
+  const soVer = compartilhado(it) && papelAtual() === "leitura"; // v3.0.0 (item 1): o analista edita senha, datas/ciclo e escalonamento (URL, tipo e arquivar seguem só do admin)
   m.appendChild(btn("mi", soVer ? "eye" : "edit", soVer ? "Ver detalhes" : "Editar", cur((c) => abrirFicha(c)), null, soVer ? "Ver este acesso (só leitura)" : "Editar este acesso"));
   m.appendChild(btn("mi", "copy", "Copiar usuário", cur((c) => copiar(c.usuario, "Usuário"))));
   if (it.visibilidade === "Individual" && !it.arquivado_em) {

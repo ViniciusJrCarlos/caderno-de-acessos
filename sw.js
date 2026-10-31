@@ -1,4 +1,4 @@
-const CACHE = "caderno-web-v44";
+const CACHE = "caderno-web-v45";
 const FILES = ["./", "./index.html", "./css/temas.css", "./css/base.css", "./css/layout.css", "./css/cards.css", "./css/telas.css", "./css/componentes.css", "./css/shell.css", "./js/tema-init.js", "./js/sync.js", "./js/cripto-equipe.js", "./js/dados.js", "./js/ui.js", "./js/armazenamento.js", "./js/cards.js", "./js/escalonamento.js", "./js/lista.js", "./js/lixeira.js", "./js/conflitos.js", "./js/historico.js", "./js/sincronizacao.js", "./js/senha-equipe.js", "./js/assinatura.js", "./js/perfis.js", "./js/gestao.js", "./js/compartilhados.js", "./js/mais.js", "./js/gerador.js", "./js/importar-exportar.js", "./js/planilhas.js", "./js/ficha.js", "./js/login-bloqueio.js", "./js/instalar.js", "./js/area.js", "./js/app.js", "./manifest.webmanifest", "./favicon.ico", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-maskable-192.png", "./icons/icon-maskable-512.png", "./icons/apple-touch-icon.png", "./js/vendor/xlsx.full.min.js", "./js/vendor/exceljs.min.js"];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)));

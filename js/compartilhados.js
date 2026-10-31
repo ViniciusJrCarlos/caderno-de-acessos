@@ -180,11 +180,51 @@ async function compartilharModelo(card, op) {
   m.itens = m.itens.filter((x) => x.id !== tid).concat([CadernoSync.limparModelo(novo)]);
   m.removidos = m.removidos.filter((t) => t.id !== tid);
   gravarModelosLocais(m);
+  if (op.semMarcar) { save(); if (!op.semSync) await sincronizar(true); return; } // v3.0.0: envio de card da Equipe/arquivado não vira "meu modelo"
   const meus = meusModelos(); if (meus.indexOf(tid) < 0) meus.push(tid); Dados.gravarTexto(MEUS_MODELOS_KEY, JSON.stringify(meus));
   const base = lerJSON(MODELOS_BASE_KEY, {}); if (base[tid]) { delete base[tid]; Dados.gravarTexto(MODELOS_BASE_KEY, JSON.stringify(base)); }
   (atual(card) || card).modeloDono = tid;
   save();
+  if (!op.semSync) await sincronizar(true);
+}
+/* v3.0.0 (item 2): só o Administrador. Escolhe cards (Meus, Equipe e Arquivados) e envia para um ou mais analistas. Vai como
+ * card compartilhado (sem login e senha), o mesmo formato de sempre: quem recebe vê em Mais › Cards compartilhados e leva para Meus. */
+async function selecionarEEnviar() {
+  if (!podeAdminEquipe()) { toast(DICA_ADMIN); return; }
+  const cards = itens.filter((it) => it && it.id !== "s12");
+  const pessoas = lerPerfis().filter((p) => p.ativo && !p.excluido && p.papel !== "admin");
+  if (!cards.length) { toast("Nenhum card para enviar"); return; }
+  if (!pessoas.length) { toast("Nenhum analista cadastrado"); return; }
+  const ok = await janela("dlgMod", (box, fim) => {
+    box.dataset.dlg = "selecionar-enviar";
+    dlgPadrao(box, "Selecionar e enviar", "Marque os cards e para quem enviar. Vai nome, link, sistema, escalonamento e observações; login e senha não vão.");
+    const grupo = (tit, lista) => {
+      if (!lista.length) return [];
+      const fs = el("fieldset", "mod-para"); fs.appendChild(el("legend", "", tit + " (" + lista.length + ")"));
+      const cbs = lista.map((it) => { const l = el("label", "mod-chk"); const cb = el("input"); cb.type = "checkbox"; cb.value = it.id; cb.dataset.envCard = "1"; l.appendChild(cb); l.appendChild(document.createTextNode(" " + (it.aplicacao || it.titulo || "(sem nome)") + (it.cliente ? " · " + it.cliente : ""))); fs.appendChild(l); return cb; });
+      box.appendChild(fs); return cbs;
+    };
+    const cbCards = [].concat(
+      grupo("Meus", cards.filter((it) => !compartilhado(it) && !it.arquivado_em)),
+      grupo("Equipe", cards.filter((it) => compartilhado(it) && !it.arquivado_em)),
+      grupo("Arquivados", cards.filter((it) => !!it.arquivado_em)));
+    const fp = el("fieldset", "mod-para"); fp.appendChild(el("legend", "", "Para"));
+    const cbP = pessoas.map((p) => { const l = el("label", "mod-chk"); const cb = el("input"); cb.type = "checkbox"; cb.value = p.nome; cb.dataset.envPara = "1"; l.appendChild(cb); l.appendChild(document.createTextNode(" " + p.nome + (p.matricula ? " · " + p.matricula : ""))); fp.appendChild(l); return cb; });
+    box.appendChild(fp);
+    const er = erroPadrao(box);
+    botoesPadrao(box, "Cancelar", "Enviar", () => fim(false), () => {
+      const ids = cbCards.filter((c) => c.checked).map((c) => c.value), para = cbP.filter((c) => c.checked).map((c) => c.value);
+      if (!ids.length) { er.textContent = "Marque ao menos um card."; return; }
+      if (!para.length) { er.textContent = "Marque ao menos um analista."; return; }
+      fim({ ids: ids, para: para });
+    });
+  });
+  if (!ok) return;
+  let n = 0;
+  for (const id of ok.ids) { const c = itens.find((x) => x.id === id); if (c) { await compartilharModelo(c, { para: ok.para, semSync: true, semMarcar: compartilhado(c) || !!c.arquivado_em }); n++; } }
+  addHist({ id: "se-" + Date.now().toString(36), tipo: "texto", card: "", escopo: "Equipe", texto: "Administrador enviou " + n + (n === 1 ? " card" : " cards") + " para " + ok.para.join(", ") });
   await sincronizar(true);
+  toast((n === 1 ? "1 card enviado" : n + " cards enviados") + " para " + ok.para.join(", ") + ". Chega em Mais › Cards compartilhados de quem recebe.");
 }
 /* v2.0.1 (item 4): analistas que já apareceram no arquivo da equipe (Histórico, quem atualizou, quem compartilhou, Lixeira).
  * Sem repetir (normTxt) e sem o analista atual. */

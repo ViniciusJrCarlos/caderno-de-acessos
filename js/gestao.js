@@ -221,7 +221,7 @@ function novoAnalista() {
   return janela("dlgPerfis", (box, fim) => {
     dlgPadrao(box, "Novo analista", "Cadastre a pessoa e passe a senha temporária pessoalmente, nunca por e-mail ou chat.");
     const nome = campoPadrao(box, "gNome", "Nome", { placeholder: "Nome do colaborador", max: 40, auto: "off" });
-    const mat = campoPadrao(box, "gMatricula", "Matrícula", { placeholder: "Ex.: A1023", max: 20, auto: "off" });
+    const mat = campoPadrao(box, "gMatricula", "Matrícula", { placeholder: "Ex.: 1234567", max: 20, auto: "off" });
     mat.addEventListener("input", () => { mat.value = mat.value.toUpperCase(); });
     const perfil = selectPadrao(box, "gPerfil", "Perfil", [["analista", "Analista"], ["admin", "Administrador"]]);
     const s = campoPadrao(box, "gSenha", "Senha temporária", { senha: true, valor: gerarSenhaTemporaria(), auto: "new-password", copiar: true });
@@ -235,7 +235,7 @@ function novoAnalista() {
       if (!v) { er.textContent = "Digite o nome."; nome.focus(); return; }
       if (perfilPorNome(v)) { er.textContent = "Já existe um perfil com esse nome."; return; }
       const m = normMat(mat.value);
-      if (!matriculaValida(m)) { er.textContent = "Matrícula: de 2 a 20 letras, números, ponto, hífen ou sublinhado."; mat.focus(); return; }
+      if (!matriculaValida(m)) { er.textContent = "Matrícula: só números, de 6 ou 7 dígitos."; mat.focus(); return; }
       if (matriculaEmUso(m, "")) { er.textContent = "Essa matrícula já é de outra pessoa."; mat.focus(); return; }
       if (!senhaForte(s.value)) { er.textContent = REGRAS_SENHA; return; }
       ok.disabled = true;

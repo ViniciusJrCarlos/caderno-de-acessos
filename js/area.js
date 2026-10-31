@@ -84,12 +84,13 @@ function abrirContaMenu() {
   const p = perfisAtivos() ? meuPerfil() : null;
   const topo = el("div", "conta-menu__topo");
   topo.appendChild(el("b", "", p ? p.nome : (autor() || "Este aparelho")));
-  topo.appendChild(el("small", "", p ? (modoAdmin ? "Administrador" : "Analista") + (p.matricula ? " · Matrícula " + p.matricula : "") : papelAtual() === "livre" ? "Sem perfis configurados" : "Analista"));
+  topo.appendChild(el("small", "", p ? (modoAdmin && p.papel === "admin" ? "Administrador" : p.papel === "admin" ? "Administrador (sem modo admin)" : "Analista") + (p.matricula ? " · Matrícula " + p.matricula : "") : papelAtual() === "livre" ? "Sem perfis configurados" : "Analista"));
   m.appendChild(topo);
   const item = (ic, txt, fn, id) => { const b = btn("conta-menu__item", ic, txt, () => { fecharContaMenu(); fn(); }); b.setAttribute("role", "menuitem"); if (id) b.dataset.item = id; m.appendChild(b); return b; };
   if (podeAdminEquipe()) {
     if (emAreaAdmin()) item("folder", "Voltar aos cards", () => irPara("equipe"), "cards");
     else item("lock", "Área do administrador", () => irPara("adm-pessoas"), "area");
+    item("share", "Selecionar e enviar", selecionarEEnviar, "enviar"); // v3.0.0 (item 2)
   }
   if (p) item("user", "Meu perfil", abrirMeuPerfil, "perfil");
   if (!podeAdminEquipe()) item("folder", "Arquivo e backup", () => irPara("conta-arquivo"), "arquivo");
@@ -222,6 +223,8 @@ function acharPerfilLogin(v) {
 /* Passo 1: matrícula + senha. Devolve { ok } ou { erro } ou { trocar } (senha temporária: pede a nova). */
 async function loginPasso1(mat, senha) {
   if (!normMat(mat)) return { erro: "Digite a sua matrícula." };
+  // v3.0.0 (item 3): matrícula só com números (6 ou 7 dígitos). Perfil antigo sem matrícula (entra pelo nome) continua entrando.
+  if (!matriculaValida(mat) && !lerPerfis().some((p) => !p.excluido && (p.matricula ? p.matricula === normMat(mat) : normTxt(p.nome) === normTxt(mat)))) return { erro: "Matrícula: só números, de 6 ou 7 dígitos." };
   if (!senha) return { erro: "Digite a sua senha." };
   const excl = lerPerfis().find((p) => p.excluido && p.matricula && p.matricula === normMat(mat));
   const p = acharPerfilLogin(mat);
@@ -247,7 +250,7 @@ async function loginPasso1(mat, senha) {
   const h = await derivarSenha(senha, c.senhaSalt, c.senhaIter || PERFIS_ITER);
   if (!hashIguais(h, c.senhaHash)) {
     const n = tentativasDe(c.id) + 1; gravarTentativas(c.id, n);
-    if (n >= MAX_TENTATIVAS) { gravarTentativas(c.id, 0); await alterarPerfil(c.id, { bloqueado: true }, "Conta bloqueada (" + MAX_TENTATIVAS + " senhas erradas): " + c.nome); marcarBloqueioPendente(c.id); setTimeout(renderPessoasSeAberto, 0); return { erro: "Conta bloqueada depois de " + MAX_TENTATIVAS + " senhas erradas. Peça ao Administrador para resetar a sua senha." }; }
+    if (n >= MAX_TENTATIVAS) { gravarTentativas(c.id, 0); await alterarPerfil(c.id, { bloqueado: true }, "Conta bloqueada (" + MAX_TENTATIVAS + " senhas erradas): " + c.nome); marcarBloqueioPendente(c.id); await publicarBloqueio(c.id); setTimeout(renderPessoasSeAberto, 0); return { erro: "Conta bloqueada depois de " + MAX_TENTATIVAS + " senhas erradas. Peça ao Administrador para resetar a sua senha." }; }
     return { erro: "Matrícula ou senha incorreta. Restam " + (MAX_TENTATIVAS - n) + " tentativa(s)." };
   }
   gravarTentativas(c.id, 0);
@@ -288,7 +291,6 @@ function concluirLoginPerfil(c, admin, senhaFinal) {
     if (n) toast(n === 1 ? "Bloqueio confirmado: vale em todos os aparelhos depois da sincronização" : n + " bloqueios confirmados: valem em todos os aparelhos depois da sincronização");
     renderPessoasSeAberto(true);
   }, 0);
-  setTimeout(perguntarCardsSemDono, 1200);
   if (syncEstado.vinculado && !admin) setTimeout(() => sincronizar(false), 0); // v2.5.1 (item 4): todo login registra o último acesso (máx. 1 gravação a cada 15 min)
   if (trocou && travadoEmMemoria) { travadoEmMemoria = false; try { fecharSheet("sheet"); } catch (e) {} }
   abrirSessaoPerfil(c.id);
@@ -305,12 +307,11 @@ function abrirSessaoPerfil(id) {
 function identidadeSessao() {
   if (!sessaoPerfilId) return null;
   let s = ""; try { s = sessionStorage.getItem(SESSAO) || ""; } catch (e) {}
-  return { id: sessaoPerfilId, papel: sessaoPapel, perfilId: Dados.texto(PERFIL_ID_KEY), salt: s.split(":")[2] || "" };
+  return { id: sessaoPerfilId, papel: sessaoPapel, perfilId: sessaoPerfilId, salt: s.split(":")[2] || "" }; // v3.0.0 (item 4): foto da sessão desta aba
 }
 function manterIdentidade(antes) {
   if (!antes) return false;
   let trocou = false;
-  if (Dados.texto(PERFIL_ID_KEY) !== antes.perfilId) { Dados.gravarTexto(PERFIL_ID_KEY, antes.perfilId); trocou = true; }
   if (sessaoPerfilId !== antes.id) { sessaoPerfilId = antes.id; trocou = true; }
   const p = lerPerfis().find((x) => x.id === antes.id);
   if (p && antes.papel && p.papel !== antes.papel) trocou = true;
@@ -318,6 +319,20 @@ function manterIdentidade(antes) {
   if (trocou && modoAdmin) modoAdmin = false;
   return trocou;
 }
+/* v3.0.0 (item 4): cada aba tem a própria identidade (sessionStorage). Se outra aba muda a identidade DESTE perfil (senha resetada
+ * ou trocada, papel mudou), esta aba trava e pede o login de novo. Outra aba entrar com outra pessoa não muda quem está aqui. */
+window.addEventListener("storage", (ev) => {
+  try {
+    if (!sessaoPerfilId || document.body.classList.contains("travado")) return;
+    if ([PERFIL_ID_KEY, PERFIS_KEY, PESSOAL_CONF_KEY, AUTOR_KEY].indexOf(ev.key) < 0) return;
+    const antes = identidadeSessao(); const era = modoAdmin;
+    if (ev.key === PERFIL_ID_KEY && ev.newValue && ev.newValue !== sessaoPerfilId) { const o = lerPerfis().find((x) => x.id === ev.newValue); toast("Outra aba entrou como " + ((o && o.nome) || "outra pessoa") + ". Esta aba continua com o seu perfil."); }
+    if (!manterIdentidade(antes)) { if (era && !modoAdmin) modoAdmin = era; return; }
+    sessaoPerfilId = null; modoAdmin = false; try { sessionStorage.removeItem(SESSAO); } catch (e) {}
+    bloquear(false);
+    const er = $("loginErro"); if (er) er.textContent = "A identidade deste perfil mudou em outra aba. Entre de novo.";
+  } catch (e) {}
+});
 /* Depois de receber o arquivo: se o Administrador desativou ou excluiu este perfil, a sessão termina. */
 function verificarSessaoAtiva(trocouIdentidade) {
   if (!sessaoPerfilId || document.body.classList.contains("travado")) return;
@@ -333,11 +348,10 @@ function verificarSessaoAtiva(trocouIdentidade) {
 function restaurarSessaoPerfil() {
   let v = ""; try { v = sessionStorage.getItem(SESSAO) || ""; } catch (e) {}
   if (!loginPorPerfil() || v.indexOf("p:") !== 0) return false;
-  const id = v.split(":")[1]; const p = meuPerfil();
+  const id = v.split(":")[1]; const p = lerPerfis().find((x) => x.id === id); // v3.0.0 (item 4): o perfil DESTA aba
   if (!p || p.id !== id || p.papel === "admin" || !p.ativo || p.bloqueado || p.excluido) { try { sessionStorage.removeItem(SESSAO); } catch (e) {} return false; }
   if (v !== "p:" + id + ":" + (p.senhaSalt || "")) return false;
   sessaoPerfilId = id; sessaoPapel = p.papel; modoAdmin = false;
-  setTimeout(perguntarCardsSemDono, 1200);
   return true;
 }
 async function enviarLogin() {
@@ -352,6 +366,7 @@ async function enviarLogin() {
       entrar(); toast("Senha criada. Bem-vindo(a)!");
       return;
     }
+    if (syncEstado.vinculado && window.CadernoSync) await lerEquipeNoLogin(); // v3.0.0 (item 5): a permissão da pasta sai deste clique
     if (loginPorPerfil()) {
       const senha = $("loginSenha").value;
       const r = await loginPasso1($("loginMatricula").value, senha);
@@ -531,13 +546,13 @@ function excluirPessoa(p) {
     ok.classList.remove("pri"); ok.classList.add("perigo");
   });
 }
-function matriculaValida(v) { return /^[A-Z0-9._\-]{2,20}$/.test(normMat(v)); }
+function matriculaValida(v) { return /^\d{6,7}$/.test(normMat(v)); } // v3.0.0 (item 3): só números, 6 ou 7 dígitos
 function matriculaEmUso(v, exceto) { const m = normMat(v); return lerPerfis().some((p) => !p.excluido && p.id !== exceto && p.matricula === m); }
 function editarPessoa(p) {
   return janela("dlgPerfis", (box, fim) => {
     dlgPadrao(box, "Editar " + p.nome, "Nome, matrícula e perfil. A matrícula é o que a pessoa digita para entrar.");
     const n = campoPadrao(box, "pxNome", "Nome", { valor: p.nome, max: 40 });
-    const m = campoPadrao(box, "pxMatricula", "Matrícula", { valor: p.matricula || "", max: 20, placeholder: "Ex.: A1023" });
+    const m = campoPadrao(box, "pxMatricula", "Matrícula", { valor: p.matricula || "", max: 20, placeholder: "Ex.: 1234567" });
     const pf = selectPadrao(box, "pxPerfil", "Perfil", [["analista", "Analista"], ["admin", "Administrador"]]); pf.value = p.papel === "admin" ? "admin" : "analista";
     const eu = meuPerfil(); if (eu && eu.id === p.id) { pf.disabled = true; pf.title = "Você não muda o seu próprio perfil"; }
     const er = erroPadrao(box);
@@ -545,7 +560,7 @@ function editarPessoa(p) {
       er.textContent = "";
       const nome = n.value.trim(), mat = normMat(m.value);
       if (!nome) { er.textContent = "Digite o nome."; n.focus(); return; }
-      if (!matriculaValida(mat)) { er.textContent = "Matrícula: de 2 a 20 letras, números, ponto, hífen ou sublinhado."; m.focus(); return; }
+      if (mat !== (p.matricula || "") && !matriculaValida(mat)) { er.textContent = "Matrícula: só números, de 6 ou 7 dígitos."; m.focus(); return; }
       if (matriculaEmUso(mat, p.id)) { er.textContent = "Essa matrícula já é de outra pessoa."; m.focus(); return; }
       const outro = perfilPorNome(nome); if (outro && outro.id !== p.id && !outro.excluido) { er.textContent = "Já existe um perfil com esse nome."; return; }
       ok.disabled = true;
@@ -707,6 +722,54 @@ async function confirmarBloqueiosPendentes() {
   }
   return n;
 }
+/* v3.0.0 (item 5): no "Entrar", com a pasta da equipe vinculada, o login lê o arquivo (pede a permissão com o clique) e junta os
+ * perfis antes de conferir a senha. Reset ou desbloqueio assinado por um Administrador e mais novo que o bloqueio daqui limpa o
+ * bloqueio local e as tentativas (o analista entra com a senha temporária depois do F5 + Entrar). */
+async function lerEquipeNoLogin() {
+  try {
+    if (!window.CadernoSync || !syncEstado.vinculado) return false;
+    const a = adaptador(); if (!a || !(await a.permissao(true))) return false;
+    const bruto = await Promise.race([a.ler(), new Promise((r) => setTimeout(() => r(undefined), 5000))]);
+    if (!bruto) return false;
+    notarPerfisNoArquivo(bruto);
+    const d = await abrirDocEquipe(bruto, true);
+    if (!d || !CadernoSync.docValido(d) || !Array.isArray(d.perfis) || !d.perfis.length) return false;
+    const remoto = CadernoSync.limparDoc(d).doc;
+    const cache = await perfisCompletos();
+    if (adminsAtivos(cache).length) { // reset/desbloqueio do admin vence o bloqueio local
+      let troca = false;
+      const novo = [];
+      for (const loc of cache) {
+        const rp = (remoto.perfis || []).find((x) => x && x.id === loc.id);
+        if (rp && loc.bloqueado && !rp.bloqueado && rp.assinP && (rp.senhaSalt !== loc.senhaSalt || CadernoSync.ts(rp.updatedAt) > CadernoSync.ts(loc.updatedAt)) && await verificarAssin(rp.assinP, msgPerfil(rp), cache)) {
+          novo.push(rp); troca = true; gravarTentativas(loc.id, 0); limparBloqueioPendente(loc.id);
+          addHist({ id: "dl-" + loc.id + "-" + Date.now().toString(36), tipo: "texto", card: "", escopo: "Equipe", texto: "Desbloqueio do Administrador recebido no login: " + (rp.nome || "") });
+        } else novo.push(loc);
+      }
+      if (troca) await gravarPerfis(novo);
+    }
+    const pf = await mesclarPerfisSync(remoto, d, []);
+    await concluirPerfisSync(pf.itens);
+    return true;
+  } catch (e) { return false; }
+}
+/* v3.0.0 (item 5): no 5º erro, o bloqueio vai para o arquivo da equipe na hora (quando a pasta já está liberada). Só o campo
+ * "bloqueado" muda no perfil, e os outros aparelhos já aceitam isso sem assinatura (mudancaPropria). */
+async function publicarBloqueio(id) {
+  try {
+    if (!window.CadernoSync || !syncEstado.vinculado) return false;
+    const a = adaptador(); if (!a || !(await a.permissao(false))) return false;
+    const bruto = await a.ler(); const d = await abrirDocEquipe(bruto, true);
+    if (!d || !CadernoSync.docValido(d) || versaoArquivoNova(d) || !Array.isArray(d.perfis)) return false;
+    const i = d.perfis.findIndex((x) => x && x.id === id); if (i < 0 || d.perfis[i].bloqueado) return false;
+    const doc = JSON.parse(JSON.stringify(d));
+    doc.perfis[i].bloqueado = true; doc.perfis[i].updatedAt = new Date().toISOString(); doc.perfis[i].updatedBy = doc.perfis[i].nome || "";
+    doc.historico = CadernoSync.mesclarHistorico([doc.historico || [], [{ id: "bq-" + id + "-" + Date.now().toString(36), tipo: "texto", card: "", quem: doc.perfis[i].nome || "", quando: new Date().toISOString(), escopo: "Equipe", texto: "Conta bloqueada (" + MAX_TENTATIVAS + " senhas erradas): " + (doc.perfis[i].nome || "") }]], CadernoSync.HIST_MAX);
+    delete doc.gravacao;
+    await a.gravar(await fecharDocEquipe(doc, bruto));
+    return true;
+  } catch (e) { return false; }
+}
 async function bloqueadoNoArquivo(id) {
   try {
     if (!window.CadernoSync || !syncEstado.vinculado) return false;
@@ -731,24 +794,4 @@ function renderPessoasSeAberto(forcar) {
 /* v2.5.2 (item 1): cards Individuais de antes da v2.5.2 (sem dono) ficam escondidos até alguém dizer que são seus. Pergunta uma vez por
  * pessoa neste aparelho, sem mostrar o conteúdo. */
 const LEGADO_DONO_KEY = "caderno-meus-sem-dono-resposta";
-function perguntarCardsSemDono() {
-  if (!sessaoPerfilId || document.body.classList.contains("travado") || typeof cardsSemDono !== "function") return;
-  const sem = cardsSemDono(); if (!sem.length) return;
-  const resp = lerJSON(LEGADO_DONO_KEY, {}); if (resp[sessaoPerfilId]) return;
-  if (document.querySelector(".sheet.on")) { setTimeout(perguntarCardsSemDono, 1500); return; }
-  const pid = sessaoPerfilId;
-  janela("dlgSE", (box, fim) => {
-    box.dataset.dlg = "meus-sem-dono";
-    dlgPadrao(box, "Cards de antes da atualização", "Este navegador tem " + sem.length + (sem.length === 1 ? " card individual (Meus) criado" : " cards individuais (Meus) criados") + " antes da v2.5.2, quando ainda não se guardava quem criou. Para proteger as senhas, eles ficam escondidos até o dono confirmar.");
-    avisoPadrao(box, "Só confirme se foi você quem criou. Se este navegador é usado por outras pessoas e você não tem certeza, escolha “Não são meus”.");
-    const er = erroPadrao(box);
-    botoesPadrao(box, "Não são meus", "São meus", () => {
-      const r = lerJSON(LEGADO_DONO_KEY, {}); r[pid] = "nao"; Dados.gravarTexto(LEGADO_DONO_KEY, JSON.stringify(r)); fim(false);
-    }, () => {
-      if (sessaoPerfilId !== pid) { er.textContent = "A sessão mudou. Entre de novo."; return; }
-      cardsSemDono().forEach((it) => { it.dono = pid; });
-      const r = lerJSON(LEGADO_DONO_KEY, {}); r[pid] = "sim"; Dados.gravarTexto(LEGADO_DONO_KEY, JSON.stringify(r));
-      separarOcultos(); save(); fim(true); toast(sem.length === 1 ? "Card movido para Meus" : sem.length + " cards movidos para Meus");
-    });
-  });
-}
+function perguntarCardsSemDono() { /* v3.0.0 (item 2): removido ("São meus?" não existe mais) */ }

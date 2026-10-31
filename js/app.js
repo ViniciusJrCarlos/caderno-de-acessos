@@ -7,9 +7,18 @@ document.addEventListener("pointerdown", () => { ignorarClique = false; }, true)
 document.addEventListener("click", (ev) => { if (!ev.target.closest(".menu-card")) fecharMenus(); });
 document.addEventListener("click", () => { if (renderPendente) setTimeout(renderSePendente, 50); });
 /* ---------- v1.9.3+: Novidades (texto vai junto com o app; mais recente primeiro) ---------- */
-const APP_VERSAO = "2.5.4";
+const APP_VERSAO = "3.0.0";
 const NOVIDADES_VISTA = "caderno-novidades-vista";
 const NOVIDADES = [
+  { v: "3.0.0", data: "28/10/2026", itens: [
+    "Analista edita senha, datas/ciclo e escalonamento dos cards da Equipe e isso vai para o arquivo da equipe (URL, tipo e arquivar seguem só do Administrador).",
+    "Sem a pergunta “São meus?”: os Meus deste navegador voltam a aparecer. Novo: Administrador › Selecionar e enviar (cards para um ou mais analistas).",
+    "Matrícula só com números (6 ou 7 dígitos).",
+    "Cada aba tem a sua identidade: admin e analista em abas diferentes não se misturam (menu, log e último acesso).",
+    "Entrar lê o arquivo da equipe: reset do Administrador libera o analista depois do F5 + Entrar; o bloqueio por 5 erros vai na hora para o arquivo.",
+    "Aviso “Arquivo gravado por uma versão mais nova” com saída segura do Administrador (confirma a senha, fica no log).",
+    "Último acesso do analista gravado na sincronização."
+  ] },
   { v: "2.5.4", data: "28/10/2026", itens: [
     "v2.5.4: corrige sincronização travada após a volta da v2.5.3 (mesmo código da v2.5.2)."
   ] },

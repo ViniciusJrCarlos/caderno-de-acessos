@@ -65,12 +65,16 @@ function perfilPorNome(nome, l) {
  * senha pessoal (PESSOAL_CONF_KEY) e o Administrador com a senha de Administrador (ADMIN_CONF_KEY ou id gravado no "Entrar como"). */
 function meuPerfil(l) {
   l = l || lerPerfis();
-  const id = Dados.texto(PERFIL_ID_KEY);
+  // v3.0.0 (item 4): a identidade é a da sessão DESTA aba (sessionStorage); o id compartilhado só vale numa aba sem login por perfil
+  const sid = typeof sessaoPerfilId !== "undefined" && sessaoPerfilId ? sessaoPerfilId : "";
+  const id = sid || Dados.texto(PERFIL_ID_KEY);
   const p = id ? l.find((x) => x.id === id) : null;
   if (!p) return null;
+  if (sid && p.papel !== "admin" && sessaoSaltAba() === (p.senhaSalt || "")) return p; // senha pessoal conferida nesta aba
   if (p.papel !== "admin" && Dados.texto(PESSOAL_CONF_KEY) !== p.id + "|" + (p.senhaSalt || "") && !adminConfirmado(p.id)) return null; // analista sem a senha pessoal (ou a senha foi resetada)
   return p;
 }
+function sessaoSaltAba() { try { const s = sessionStorage.getItem(SESSAO) || ""; return s.indexOf("p:") === 0 ? s.split(":")[2] || "" : null; } catch (e) { return null; } }
 function adminConfirmado(id) { return !!id && Dados.texto(ADMIN_CONF_KEY) === id; }
 /* v2.3.0 (item 1): o arquivo da equipe tem perfis, mas eles ainda não chegaram aqui (arquivo cifrado sem a senha, primeira sincronização). */
 function perfisNoArquivo() { return Dados.texto(PERFIS_NO_ARQUIVO_KEY) === "1"; }
