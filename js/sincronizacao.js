@@ -151,7 +151,7 @@ let avisoAtualizarMostrado = "";
 function avisarAtualizar(v) {
   syncEstado.appAntigo = v;
   if (avisoAtualizarMostrado === v) return; avisoAtualizarMostrado = v;
-  if (typeof modoAdmin !== "undefined" && modoAdmin) { setTimeout(() => liberarVersaoAdmin(v), 0); return; }
+  if (typeof modoAdmin !== "undefined" && modoAdmin && /^\d/.test(v)) { setTimeout(() => liberarVersaoAdmin(v), 0); return; } // esquema novo do arquivo: sem liberação
   setTimeout(() => aviso("Arquivo gravado por uma versão mais nova", "O arquivo da equipe foi gravado por uma versão mais nova do Caderno (" + v + "). Este aparelho (v" + APP_VERSAO + ") só lê o arquivo, sem gravar nada, até você atualizar: feche e abra o app de novo ou recarregue a página."), 0);
 }
 /* v2.5.1 (item 3): o analista grava SÓ a própria presença (último acesso, última sincronização, versão) no arquivo da equipe.
