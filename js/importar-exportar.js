@@ -96,6 +96,7 @@ const IMPORT_MAX_BYTES = 5 * 1024 * 1024, IMPORT_MAX_CARDS = 2000;
 function listaNomes(l, n) { n = n || 5; return l.slice(0, n).join(", ") + (l.length > n ? " e mais " + (l.length - n) : ""); }
 /* Prévia antes de aplicar: novos, atualizados, mais antigos que os seus (escolha), datas inválidas e textos que serão cortados. */
 async function importarComPrevia(listaBruta, titulo) {
+  if (negarAnalista()) return false; // v3.0.1 (item 4)
   if (listaBruta.length > IMPORT_MAX_CARDS) { aviso("Arquivo grande demais", "O arquivo tem " + listaBruta.length + " cards. O limite é " + IMPORT_MAX_CARDS + " por importação. Nada foi importado."); return false; }
   const prep = prepararImportacao(listaBruta);
   const fe = filtrarImportacaoEquipe(prep.itens); prep.itens = fe.itens; // v2.2.0: só o admin importa para a Equipe
@@ -153,6 +154,7 @@ function chaveCard(it) {
   return a + "|" + f + "|" + t;
 }
 function importarJson(ev) {
+  if (negarAnalista()) { try { ev.target.value = ""; } catch (e) {} return; } // v3.0.1 (item 4)
   const f = ev.target.files && ev.target.files[0];
   if (!f) return;
   if (f.size > IMPORT_MAX_BYTES) { aviso("Arquivo grande demais", "O limite é 5 MB por importação. Nada foi importado."); ev.target.value = ""; return; }

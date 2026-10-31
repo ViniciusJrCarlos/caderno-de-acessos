@@ -24,6 +24,7 @@ function ligarNovo(sel, input) {
 }
 function abrirFicha(it) {
   fecharMenus();
+  if (!it && negarAnalista()) return; // v3.0.1 (item 4): analista não cria card
   edit = it ? Object.assign({}, it) : { id: Math.random().toString(16).slice(2, 10), visibilidade: aba === "meu" ? "Individual" : "Equipe", categoria: "Interno", ciclo: "90", ultima: hoje() };
   $("fichaTitulo").textContent = it ? "Editar acesso" : "Novo acesso";
   $("fTitulo").value = edit.titulo || "";

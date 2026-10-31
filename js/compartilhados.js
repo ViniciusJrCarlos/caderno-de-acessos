@@ -94,6 +94,7 @@ function verModelo(d, origem) {
   });
 }
 async function compartilharMeuCard(card) {
+  if (negarAnalista()) return; // v3.0.1 (item 4)
   if (!card || card.visibilidade !== "Individual") return;
   if (!podeAdminEquipe()) { toast("Só o Administrador compartilha cards com a equipe. Seus cards de Meus ficam só com você."); return; } // v2.3.0 (item 9)
   if (!syncEstado.vinculado) { toast("Para compartilhar, vincule a pasta da equipe em Mais › Arquivo da equipe."); return; }
@@ -169,6 +170,7 @@ async function compartilharMeuCard(card) {
 }
 /* v2.0.1: grava o modelo (sem login e senha) e marca o card como meu modelo. para = [] → Todos. */
 async function compartilharModelo(card, op) {
+  if (negarAnalista()) return; // v3.0.1 (item 4)
   op = op || {};
   const tid = card.modeloDono || ("m-" + card.id);
   const agora = new Date().toISOString();

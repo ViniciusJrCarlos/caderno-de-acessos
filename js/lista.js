@@ -92,7 +92,7 @@ function render() {
   try { aplicarShell(); } catch (e) {}
   const painel = emPainel();
   document.getElementById("barraBusca").classList.toggle("oculto", painel);
-  document.getElementById("novo").classList.toggle("oculto", painel || aba === "arquivo" || (aba === "equipe" && !podeAdminEquipe()));
+  document.getElementById("novo").classList.toggle("oculto", (typeof analistaPuro === "function" && analistaPuro()) || painel || aba === "arquivo" || (aba === "equipe" && !podeAdminEquipe()));
   box.classList.toggle("mais", painel);
   box.classList.remove("area-pag");
   if (aba !== "gerador" && painel) { renderArea(box); return; }
@@ -318,9 +318,11 @@ function abrirMenuCard(it, ancora) {
   m.setAttribute("role", "menu");
   const id = it.id;
   const cur = (fn) => () => { fecharMenus(); const c = atual({ id: id }); if (!c) { toast("Este card não existe mais"); render(); return; } fn(c); };
-  const soVer = compartilhado(it) && papelAtual() === "leitura"; // v3.0.0 (item 1): o analista edita senha, datas/ciclo e escalonamento (URL, tipo e arquivar seguem só do admin)
+  const restr = typeof analistaPuro === "function" && analistaPuro(); // v3.0.1 (item 4)
+  const soVer = (compartilhado(it) && papelAtual() === "leitura") || (restr && !!it.arquivado_em); // v3.0.1: arquivado é só leitura para o analista
   m.appendChild(btn("mi", soVer ? "eye" : "edit", soVer ? "Ver detalhes" : "Editar", cur((c) => abrirFicha(c)), null, soVer ? "Ver este acesso (só leitura)" : "Editar este acesso"));
   m.appendChild(btn("mi", "copy", "Copiar usuário", cur((c) => copiar(c.usuario, "Usuário"))));
+  if (restr) { m.appendChild(el("p", "mi-dica", "🔒 " + DICA_ANALISTA)); ancora.parentNode.appendChild(m); return; }
   if (it.visibilidade === "Individual" && !it.arquivado_em) {
     if (it.modeloDono) m.appendChild(btn("mi", "x", "Parar de compartilhar", () => { fecharMenus(); pararCompartilhar(atual(it) || it); }));
     else if (podeAdminEquipe()) m.appendChild(btn("mi", "share", "Compartilhar meu card", cur((c) => compartilharMeuCard(c))));

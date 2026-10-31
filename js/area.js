@@ -322,6 +322,7 @@ function manterIdentidade(antes) {
 /* v3.0.0 (item 4): cada aba tem a própria identidade (sessionStorage). Se outra aba muda a identidade DESTE perfil (senha resetada
  * ou trocada, papel mudou), esta aba trava e pede o login de novo. Outra aba entrar com outra pessoa não muda quem está aqui. */
 window.addEventListener("storage", (ev) => {
+  try { if (ev.key === KEY && reconciliarAbas() && !document.body.classList.contains("travado")) render(); } catch (e) {} // v3.0.1 (item 1): outra aba gravou os cards
   try {
     if (!sessaoPerfilId || document.body.classList.contains("travado")) return;
     if ([PERFIL_ID_KEY, PERFIS_KEY, PESSOAL_CONF_KEY, AUTOR_KEY].indexOf(ev.key) < 0) return;

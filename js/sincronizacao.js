@@ -182,11 +182,11 @@ function operacaoParaGravar(doc) {
   const eu = autor(); let n = 0;
   const loc = new Map(itens.filter(compartilhado).map((it) => [it.id, it]));
   doc.itens.forEach((rc, i) => {
-    const it = rc && loc.get(rc.id); if (!it || it.updatedBy !== eu || CadernoSync.ts(it.updatedAt) <= CadernoSync.ts(rc.updatedAt)) return;
+    const it = rc && loc.get(rc.id); if (!it || rc.arquivado_em || it.updatedBy !== eu || CadernoSync.ts(it.updatedAt) <= CadernoSync.ts(rc.updatedAt)) return; // v3.0.1 (item 4): arquivado é só leitura para o analista
     const mud = {};
     CAMPOS_ANALISTA.forEach((k) => { if (JSON.stringify(it[k] === undefined ? null : it[k]) !== JSON.stringify(rc[k] === undefined ? null : rc[k])) mud[k] = it[k] === undefined ? null : JSON.parse(JSON.stringify(it[k])); });
     if (!Object.keys(mud).length) return;
-    const novo = Object.assign({}, rc, mud, { updatedAt: it.updatedAt, updatedBy: eu });
+    const novo = Object.assign({}, rc, mud, { updatedAt: it.updatedAt, updatedBy: eu, baseAt: it.baseAt || rc.updatedAt || "" }); // v3.0.1 (item 2): a base é a da edição do analista (sem conflito falso)
     delete novo.assin; // a assinatura antiga do admin não vale para a versão nova (o card passa a ser "do analista" só nesses campos)
     doc.itens[i] = novo; n++;
   });
@@ -228,6 +228,7 @@ async function sincronizarAgora(interativo, fixo) {
   let antigo = ""; syncEstado.appAntigo = "";
   const idAntes = typeof identidadeSessao === "function" ? identidadeSessao() : null; // v2.5.1 (item 1)
   let recusados = 0;
+  reconciliarAbas(); // v3.0.1 (item 1): antes de carimbar, junta o que outra aba deste navegador gravou
   syncEstado.rodando = true; desenharBotaoSync();
   const acoes = syncEstado.acoes.splice(0);
   try {
@@ -257,7 +258,7 @@ async function sincronizarAgora(interativo, fixo) {
         catch (e) { copiasFechadas.push(c.nome); } // cópia cifrada com uma senha que este aparelho não conhece: fica na pasta
       }
       if (!Dados.texto(PRIMEIRO_KEY) && autor()) addHist({ id: "pa-" + idAparelho(), tipo: "primeiro", card: "", escopo: "Equipe" });
-      carimbarMudancas();
+      reconciliarAbas(); carimbarMudancas();
       await assinarPendentes(); // v2.3.0 (item 6): o que foi feito no modo admin sai assinado
       const meta = syncMeta();
       let base = { itens: itens.filter(compartilhado).map(itemParaEquipe), removidos: removidosLocais() };
@@ -369,6 +370,7 @@ function renderSePendente() { if (renderPendente) setTimeout(renderAposSync, 0);
 document.addEventListener("focusout", () => setTimeout(renderSePendente, 60));
 document.addEventListener("visibilitychange", () => { if (!document.hidden) setTimeout(renderSePendente, 60); });
 function aplicarResultado(r0) {
+  reconciliarAbas(); // v3.0.1 (item 1)
   // Alterações feitas enquanto o arquivo era gravado não se perdem: mescla de novo o que está na tela com o que foi gravado.
   carimbarMudancas();
   const r = CadernoSync.mesclar({ itens: itens.filter(compartilhado).map(itemParaEquipe), removidos: removidosLocais() }, { tipo: CadernoSync.TIPO, itens: r0.itens, removidos: r0.removidos }, "");

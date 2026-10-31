@@ -9,6 +9,7 @@ let itens = [];
  * em lista, busca, contadores, Vencendo, Arquivo, exportações nem na Lixeira. Nada Individual vai para o arquivo da equipe. */
 let itensOcultos = [];
 function individualVisivel(it) {
+  if (it && !compartilhado(it) && !it.modeloId && typeof analistaPuro === "function" && analistaPuro()) return false; // v3.0.1 (item 4): o analista só vê em Meus os cards que o Administrador enviou
   return true; // v3.0.0 (item 2): sem dono automático nem "São meus?": todos os Meus deste aparelho voltam a aparecer (nada se perde)
   /* eslint-disable no-unreachable */
   if (!it || compartilhado(it)) return true;
@@ -76,6 +77,36 @@ function exemplos() {
       ], obs: "Card fictício de exemplo. Pode apagar." })
   ];
 }
+/* ---------- v3.0.1 (item 1): duas abas no mesmo navegador ----------
+ * Cada aba guarda os cards em memória, mas o localStorage é um só. Antes de salvar, sincronizar ou quando outra aba grava,
+ * esta aba junta: o que ELA mudou desde a última leitura fica; o resto vem do que a outra aba gravou. Nada é recarimbado à toa. */
+let fotoAba = null, fotoAbaTxt = null;
+function mapaCards(txt) { const m = new Map(); try { (JSON.parse(txt || "[]") || []).forEach((c) => { if (c && c.id != null) m.set(c.id, JSON.stringify(c)); }); } catch (e) {} return m; }
+(function () { const g = Dados.gravarTexto; Dados.gravarTexto = function (k, v) { const r = g(k, v); if (k === KEY) { fotoAbaTxt = String(v); fotoAba = mapaCards(fotoAbaTxt); } return r; }; })();
+function reconciliarAbas() {
+  const cur = Dados.texto(KEY);
+  if (fotoAba === null || cur === fotoAbaTxt || cur == null) return false;
+  let outra = []; try { outra = JSON.parse(cur) || []; } catch (e) { return false; }
+  const mem = new Map(todosItens().map((c) => [c.id, c])), vistos = new Set(), saida = [], deFora = [];
+  outra.forEach((r) => {
+    if (!r || r.id == null) return; vistos.add(r.id);
+    const m = mem.get(r.id), base = fotoAba.get(r.id);
+    if (m && JSON.stringify(m) !== base) saida.push(m); // mudança desta aba
+    else if (!m && base != null) { /* excluído nesta aba */ }
+    else { saida.push(r); deFora.push(r); }
+  });
+  mem.forEach((m, id) => { if (vistos.has(id)) return; if (fotoAba.has(id) && JSON.stringify(m) === fotoAba.get(id)) return; saida.push(m); }); // a outra aba excluiu / esta aba criou
+  fotoAbaTxt = cur; fotoAba = mapaCards(cur);
+  itens = saida; itensOcultos = []; separarOcultos();
+  deFora.forEach((r) => {
+    const j = JSON.stringify(r);
+    if (fotoMeus && !compartilhado(r)) fotoMeus.set(r.id, j);
+    if (typeof baseEquipe !== "undefined" && baseEquipe && compartilhado(r)) baseEquipe.set(r.id, JSON.parse(j));
+    if (typeof baseMeus !== "undefined" && baseMeus && !compartilhado(r)) baseMeus.set(r.id, JSON.parse(j));
+  });
+  if (fotoMeus) [...fotoMeus.keys()].forEach((id) => { if (!vistos.has(id) && !mem.has(id)) fotoMeus.delete(id); });
+  return true;
+}
 function load() {
   itensOcultos = [];
   try { itens = JSON.parse(Dados.texto(KEY) || "[]"); } catch (e) { itens = []; }
@@ -127,6 +158,7 @@ function load() {
   });
   if (mudou || saneou) Dados.gravarTexto(KEY, JSON.stringify(itens));
   separarOcultos();
+  fotoAbaTxt = Dados.texto(KEY); fotoAba = mapaCards(fotoAbaTxt); // v3.0.1 (item 1)
   if (window.CadernoSync && !syncMeta().marcas) carimbarMudancas();
   else if (window.CadernoSync) migrarMarcas(marcasAntes);
   if (typeof fotografarEquipe === "function") fotografarEquipe();
@@ -146,6 +178,7 @@ function migrarMarcas(antes) {
   if (mudou) gravarMeta(meta);
 }
 function save() {
+  reconciliarAbas(); // v3.0.1 (item 1): não grava por cima do que outra aba salvou
   if (typeof guardarPermissoes === "function") guardarPermissoes(); // v2.2.0: o analista não grava o que só o admin pode mudar
   carimbarDono();
   if (window.CadernoSync) carimbarMudancas();

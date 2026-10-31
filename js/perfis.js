@@ -92,6 +92,12 @@ function papelAtual() {
   if (modoAdmin && p && p.papel === "admin" && p.ativo) return "admin";
   return "analista";
 }
+/* v3.0.1 (item 4): analista (perfil que não é Administrador): não cria, não compartilha, não arquiva, não exclui e não reativa.
+ * Em Meus ele só tem os cards que o Administrador enviou (Selecionar e enviar) e preenche login, senha, datas e escalonamento. */
+const DICA_ANALISTA = "Só o Administrador cria, compartilha, arquiva, exclui ou reativa cards";
+const CAMPOS_MEUS_ANALISTA = CAMPOS_ANALISTA.concat(["usuario"]);
+function analistaPuro() { try { return typeof perfisAtivos === "function" && perfisAtivos() && !souAdminCadastrado(); } catch (e) { return false; } }
+function negarAnalista() { if (!analistaPuro()) return false; toast(DICA_ANALISTA + "."); return true; }
 function podeAdminEquipe() { const p = papelAtual(); return p === "livre" || p === "admin"; }
 function souAdminCadastrado() { const p = perfisAtivos() ? meuPerfil() : null; return !!(p && p.ativo && p.papel === "admin"); }
 /* Card da Equipe e o usuário não é admin: a ação proibida mostra a dica e não acontece. */
@@ -110,14 +116,16 @@ function sanearEquipe(antes, depois, papel) {
   const a = normP(antes), d = normP(depois), o = Object.assign({}, depois), barrados = [];
   new Set(Object.keys(a).concat(Object.keys(d))).forEach((k) => {
     if (CAMPOS_META.has(k) || igualP(a[k], d[k])) return;
-    const ok = papel === "analista" && CAMPOS_ANALISTA.indexOf(k) >= 0; // v2.3.0 (item 8): arquivar também é só do admin
+    const ok = papel === "analista" && !a.arquivado_em && CAMPOS_ANALISTA.indexOf(k) >= 0; // v3.0.1 (item 4): card arquivado é só leitura para o analista // v2.3.0 (item 8): arquivar também é só do admin
     if (ok) return;
     if (Object.prototype.hasOwnProperty.call(antes, k)) o[k] = antes[k]; else delete o[k];
     barrados.push(k);
   });
   return { card: o, barrados: barrados };
 }
+let baseMeus = null; // v3.0.1 (item 4): foto dos Meus para o analista não criar, excluir nem mudar campos proibidos
 function fotografarEquipe() {
+  baseMeus = new Map(); (itens || []).filter((it) => it && !compartilhado(it)).forEach((it) => baseMeus.set(it.id, JSON.parse(JSON.stringify(it))));
   baseEquipe = new Map();
   (itens || []).filter(compartilhado).forEach((it) => baseEquipe.set(it.id, JSON.parse(JSON.stringify(it))));
 }
@@ -132,6 +140,23 @@ function guardarPermissoes() {
     else if (compartilhado(it)) { it.visibilidade = "Individual"; viraramMeus++; }
   });
   baseEquipe.forEach((b, id) => { if (!vistos.has(id)) { itens.push(JSON.parse(JSON.stringify(b))); voltaram++; } });
+  if (analistaPuro() && baseMeus) { // v3.0.1 (item 4): Meus do analista = cards enviados pelo admin; só login, senha, datas e escalonamento
+    const vm = new Set();
+    for (let i = itens.length - 1; i >= 0; i--) {
+      const it = itens[i]; if (!it || compartilhado(it)) continue;
+      const b = baseMeus.get(it.id);
+      if (!b) { if (it.modeloId && !it.arquivado_em) continue; itens.splice(i, 1); barrados++; continue; } // card novo só se veio de um enviado pelo admin
+      vm.add(it.id);
+      const o = Object.assign({}, it); let mudou = false;
+      new Set(Object.keys(b).concat(Object.keys(it))).forEach((k) => {
+        if (CAMPOS_META.has(k) || k === "modeloVersao" || igualP(b[k], it[k])) return;
+        if (!b.arquivado_em && CAMPOS_MEUS_ANALISTA.indexOf(k) >= 0) return;
+        if (Object.prototype.hasOwnProperty.call(b, k)) o[k] = b[k]; else delete o[k]; mudou = true;
+      });
+      if (mudou) { itens[i] = o; barrados++; }
+    }
+    baseMeus.forEach((b, id) => { if (!vm.has(id) && !itens.some((x) => x.id === id)) { itens.push(JSON.parse(JSON.stringify(b))); voltaram++; } });
+  }
   if (barrados || viraramMeus || voltaram) {
     setTimeout(() => toast(viraramMeus ? "Só o Administrador cria cards da Equipe: o card foi salvo em Meus." : DICA_ADMIN + ": a mudança proibida não foi gravada."), 0);
     return { barrados: barrados, viraramMeus: viraramMeus, voltaram: voltaram };
@@ -511,7 +536,10 @@ function aplicarTravasFicha(it) {
     x.insertAdjacentElement("afterend", d);
   };
   if (!it) { $("fVisibilidade").value = "Individual"; $("avisoInd").hidden = false; edit.visibilidade = "Individual"; travar("fVisibilidade"); return; }
-  if (!compartilhado(it)) { travar("fVisibilidade"); return; } // card de Meus não vira card da Equipe
+  const restr = analistaPuro(); // v3.0.1 (item 4)
+  const tudo = () => { CAMPOS_FICHA_ADMIN.concat(CAMPOS_FICHA_ANALISTA).forEach(travar); sheet.classList.add("ficha-leitura"); $("fichaTitulo").textContent = "Ver acesso (só leitura)"; sheet.querySelectorAll("#escEdit input, #escEdit select, #escEdit textarea, #escEdit button, #escAdd").forEach((x) => { x.disabled = true; x.setAttribute("data-trava", "1"); }); };
+  if (restr && it.arquivado_em) { tudo(); return; } // arquivado: só leitura
+  if (!compartilhado(it)) { if (restr) CAMPOS_FICHA_ADMIN.filter((k) => k !== "fUsuario").forEach(travar); else travar("fVisibilidade"); return; } // card de Meus não vira card da Equipe; analista só preenche login, senha, datas e escalonamento
   CAMPOS_FICHA_ADMIN.forEach(travar);
   if (papel === "leitura") { CAMPOS_FICHA_ANALISTA.forEach(travar); sheet.classList.add("ficha-leitura"); $("fichaTitulo").textContent = "Ver acesso (só leitura)"; sheet.querySelectorAll("#escEdit input, #escEdit select, #escEdit textarea, #escEdit button").forEach((x) => { x.disabled = true; x.setAttribute("data-trava", "1"); x.title = DICA_ADMIN; }); } else if (papel === "analista") { $("fichaTitulo").textContent = "Editar acesso (operação)"; }
 }

@@ -4,6 +4,7 @@
 /* v2.0.0: "Excluir" manda para a Lixeira (Mais › Lixeira) por 30 dias. Equipe: lixeira no arquivo da equipe (restaurável por
  * qualquer analista; o tombstone continua, para versões antigas não ressuscitarem o card). Meus: lixeira só deste aparelho, com login e senha. */
 async function excluir(lista) {
+  if (negarAnalista()) return false; // v3.0.1 (item 4)
   lista = lista.map(atual).filter((it) => it && it.arquivado_em);
   if (!lista.length) return false;
   if (bloqueadoEquipe(lista)) return false;
@@ -51,6 +52,7 @@ function lerLixeiraMeus() {
 function lixeiraMeusVisivel() { return lerLixeiraMeus().filter((e) => individualVisivel(e.card)); } // v2.5.2 (item 1)
 function gravarLixeiraMeus(l) { Dados.gravarTexto(LIX_MEUS_KEY, JSON.stringify(l)); }
 function restaurarDaLixeira(ids) {
+  if (negarAnalista()) return; // v3.0.1 (item 4)
   const lixEq = lerLixeiraEq(); let lixMeus = lerLixeiraMeus();
   if (!podeAdminEquipe() && lixEq.itens.some((e) => ids.indexOf(e.id) >= 0)) { toast(DICA_ADMIN + " (Lixeira da Equipe)."); return false; }
   const agora = new Date().toISOString(), quem = autor();
@@ -71,6 +73,7 @@ function restaurarDaLixeira(ids) {
   return n;
 }
 async function apagarDaLixeira(e, equipe) {
+  if (negarAnalista()) return; // v3.0.1 (item 4)
   if (equipe && !podeAdminEquipe()) { toast(DICA_ADMIN + " (Lixeira da Equipe)."); return false; }
   const sim = await dialogo({ titulo: "Excluir agora da lixeira?", texto: "O card " + nomeDe(e.card) + " será apagado de vez" + (equipe ? ", para toda a equipe" : "") + ". Não dá para desfazer.", ok: "Excluir agora", cancelar: "Cancelar", perigo: true });
   if (!sim) return false;
@@ -104,7 +107,7 @@ function blocoLixeira(box) {
       tx.appendChild(el("div", "hist2-sub", "Excluído" + (e.excluidoPor ? " por " + e.excluidoPor : "") + " em " + dataHoraBR(e.excluidoEm) + " · apaga sozinho em " + diasParaApagar(e) + " dia(s)"));
       li.appendChild(tx);
       const ac = el("div", "lix-acoes");
-      if (equipe && !podeAdminEquipe()) ac.appendChild(el("small", "trava-dica", "🔒 " + DICA_ADMIN));
+      if ((equipe && !podeAdminEquipe()) || analistaPuro()) ac.appendChild(el("small", "trava-dica", "🔒 " + DICA_ADMIN));
       else {
         ac.appendChild(btn("btn pequeno pri", "restore", "Restaurar", () => { restaurarDaLixeira([e.id]); }));
         ac.appendChild(btn("btn pequeno perigo", "trash", "Excluir agora da lixeira", () => apagarDaLixeira(e, equipe)));

@@ -48,7 +48,7 @@ function mesclarExtras(remoto, copias, r, conf, remAqui, voltaram) {
   const conflitos = CadernoSync.mesclarConflitos([remoto ? remoto.conflitos : [], ...copias.map((c) => c.doc.conflitos), confL.itens, novos], confRes, agora);
   const conhecidos = new Set(confL.itens.map((c) => c.id).concat(confL.resolvidos.map((c) => c.id)));
   const novosConf = conflitos.filter((c) => !conhecidos.has(c.id));
-  novos.forEach((c) => hist.push({ id: "h" + c.id, tipo: "conflito", card: c.titulo, quem: c.perdedorPor, texto: tituloConflito(c).replace(/^⚠️ /, "") + " (" + c.titulo + "). Ficou a versão de " + (c.vencedorPor || "outra pessoa") + ", a mais recente; a de " + (c.perdedorPor || "outra pessoa") + " está guardada como cópia de conflito.", quando: c.quando, escopo: "Equipe" }));
+  novos.forEach((c) => hist.push({ id: "h" + c.id, tipo: "conflito", card: c.titulo, quem: c.vencedorPor || c.perdedorPor, /* v3.0.1 (item 3): quem fez a versão que ficou */ texto: tituloConflito(c).replace(/^⚠️ /, "") + " (" + c.titulo + "). Ficou a versão de " + (c.vencedorPor || "outra pessoa") + ", a mais recente; a de " + (c.perdedorPor || "outra pessoa") + " está guardada como cópia de conflito.", quando: c.quando, escopo: "Equipe" }));
   const sig = (l, f) => JSON.stringify((l || []).map(f).sort());
   const fl = (e) => e.id + "@" + e.excluidoEm + "@" + (e.card.updatedAt || ""), ft = (t) => t.id + "@" + t.em, fc = (c) => c.id;
   const precisa = !remoto || sig(remoto.lixeira, fl) !== sig(lixeira, fl) || sig(remoto.lixeiraRemovidos, ft) !== sig(lixRem, ft) || sig(remoto.conflitos, fc) !== sig(conflitos, fc) || sig(remoto.conflitosResolvidos, ft) !== sig(confRes, ft);

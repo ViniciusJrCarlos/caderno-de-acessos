@@ -7,9 +7,13 @@ document.addEventListener("pointerdown", () => { ignorarClique = false; }, true)
 document.addEventListener("click", (ev) => { if (!ev.target.closest(".menu-card")) fecharMenus(); });
 document.addEventListener("click", () => { if (renderPendente) setTimeout(renderSePendente, 50); });
 /* ---------- v1.9.3+: Novidades (texto vai junto com o app; mais recente primeiro) ---------- */
-const APP_VERSAO = "3.0.0";
+const APP_VERSAO = "3.0.1";
 const NOVIDADES_VISTA = "caderno-novidades-vista";
 const NOVIDADES = [
+  { v: "3.0.1", data: "31/10/2026", itens: [
+    "⏰ Duas abas no mesmo navegador: antes uma aba desfazia a senha trocada na outra; agora uma junta o que a outra salvou (ex.: o Admin troca a senha do Coy crm numa aba e a aba do José recebe a nova, sem voltar a antiga).",
+    "⏰ Analista: antes criava, compartilhava e excluía cards em Meus; agora em Meus ficam só os cards que o Administrador enviou (Selecionar e enviar), e ele preenche login, senha, datas e escalonamento. Arquivados ficam só para ver. Criar, compartilhar, arquivar, excluir e reativar são do Administrador.",
+    "Analista trocando senha não gera mais “Edição ao mesmo tempo” falso, e o log de conflito mostra o nome de quem fez a versão que ficou."] },
   { v: "3.0.0", data: "28/10/2026", itens: [
     "Analista edita senha, datas/ciclo e escalonamento dos cards da Equipe e isso vai para o arquivo da equipe (URL, tipo e arquivar seguem só do Administrador).",
     "Sem a pergunta “São meus?”: os Meus deste navegador voltam a aparecer. Novo: Administrador › Selecionar e enviar (cards para um ou mais analistas).",
