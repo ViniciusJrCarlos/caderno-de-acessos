@@ -458,9 +458,7 @@ function cardsFormatoCaderno(workbook, XLSX) {
     if (nv && nv.length) {
       c.escalonamentos = nv.sort((a, b) => a.nivel - b.nivel);
       if (!c.escalonamento) c.escalonamento = resumoEscalonamentos(c.escalonamentos);
-    } else if (c.escalonamento) {
-      c.escalonamentos = parseEscalonamentoTexto(c.escalonamento);
-    }
+    } // v3.0.3 (item 8): sem aba de escalonamento, o texto fica só no Resumo (não vira Nome/Obs de contato)
   });
   return { cards: cards, abasUsadas: usadas };
 }

@@ -7,9 +7,18 @@ document.addEventListener("pointerdown", () => { ignorarClique = false; }, true)
 document.addEventListener("click", (ev) => { if (!ev.target.closest(".menu-card")) fecharMenus(); });
 document.addEventListener("click", () => { if (renderPendente) setTimeout(renderSePendente, 50); });
 /* ---------- v1.9.3+: Novidades (texto vai junto com o app; mais recente primeiro) ---------- */
-const APP_VERSAO = "3.0.2";
+const APP_VERSAO = "3.0.3";
 const NOVIDADES_VISTA = "caderno-novidades-vista";
 const NOVIDADES = [
+  { v: "3.0.3", data: "31/10/2026", itens: [
+    "⏰ Senha errada: antes 5 erros bloqueavam a conta até o Administrador desbloquear e a tela dizia “Restam N”; agora 5 erros bloqueiam a entrada por 15 minutos (também para o Administrador, mesmo apertando F5), sem contador, com a mensagem “Matrícula ou senha inválida.” e registro no Histórico.",
+    "⏰ Senha pessoal: antes bastava ser forte; agora também não pode ter a matrícula, o nome, “caderno” ou “acessos”, nem ser uma senha comum, nem repetir uma das 3 últimas.",
+    "⏰ Senha da equipe: antes 8 caracteres; agora no mínimo 12, com letra, número e símbolo (a frase gerada continua valendo).",
+    "⏰ Cadastro: matrícula só com números (6 ou 7) e nome só com letras (2 a 40), sem a matrícula nem a senha temporária. Matrícula de perfil inativo ou excluído não pode ser usada de novo.",
+    "⏰ Reativar: antes voltava com a senha antiga; agora quem ficou inativo (ou sem entrar) por 7 dias ou mais volta com senha temporária.",
+    "⏰ Card enviado: antes chegava sem cliente/operação e o analista não editava o horário; agora chega com os dados do Administrador travados e o analista preenche usuário, senha, ciclo, última troca, horário, escalonamento e resumo.",
+    "⏰ Selecionar e enviar: quem já tem o card aparece desmarcado com “já recebeu” e o aviso diz “Fulano já tem esse card.”.",
+    "Segurança: só links http/https no card e na importação; Excel/CSV do Histórico protegido contra fórmulas; troca de senha pelo próprio usuário registrada no Histórico; o Resumo não vai mais parar no Nome/Obs do escalonamento."] },
   { v: "3.0.2", data: "31/10/2026", itens: [
     "⏰ Selecionar e enviar: antes o card ia para “Cards compartilhados” e o analista podia ignorar; agora chega direto em Meus de cada analista marcado (sem aceitar nem ignorar), assinado pelo Administrador.",
     "⏰ Envio: antes dava para enviar o mesmo card de novo e cards da Equipe/arquivados; agora só cards de Meus, quem já recebeu não recebe de novo e o Administrador vê “já recebeu: …” em cada card.",

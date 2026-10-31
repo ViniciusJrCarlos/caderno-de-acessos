@@ -23,7 +23,7 @@ let baseEquipe = null;          // foto dos cards da Equipe aceitos (para desfaz
 let tentativasAdmin = 0, esperaAdminAte = 0;
 const PRESENCA_MS = 15 * 6e4;   // v2.5.1 (item 4): no máximo uma gravação de presença a cada 15 min
 
-const SEGREDOS_PERFIL = ["adminHash", "adminSalt", "adminIter", "chavePriv", "chaveSalt", "senhaHash", "senhaIter"]; // v2.4.0: senhaSalt fica na cópia pública (não é segredo; marca a senha atual);
+const SEGREDOS_PERFIL = ["adminHash", "adminSalt", "adminIter", "chavePriv", "chaveSalt", "senhaHash", "senhaIter", "senhaHist"]; // v3.0.3: senhaHist (hashes das 3 últimas) também só no cofre; // v2.4.0: senhaSalt fica na cópia pública (não é segredo; marca a senha atual);
 function semHash(p) { const o = Object.assign({}, p); SEGREDOS_PERFIL.forEach((k) => delete o[k]); return o; }
 function lerPerfis() { return window.CadernoSync ? CadernoSync.limparPerfis(lerJSON(PERFIS_KEY, [])).map(semHash) : []; }
 /* Grava a lista: a parte pública em texto e a completa (com hashes) só cifrada com a chave da equipe deste aparelho. */
@@ -50,6 +50,7 @@ async function perfisCompletos() {
     let o = p;
     if (p.papel === "admin" && c.adminHash) o = Object.assign({}, p, { adminHash: c.adminHash, adminSalt: c.adminSalt, adminIter: c.adminIter }, c.chavePriv && (!p.chavePub || p.chavePub === c.chavePub) ? { chavePub: c.chavePub, chavePriv: c.chavePriv, chaveSalt: c.chaveSalt } : {});
     if (c.senhaHash && c.updatedAt === p.updatedAt) o = Object.assign({}, o, { senhaHash: c.senhaHash, senhaSalt: c.senhaSalt, senhaIter: c.senhaIter }); // v2.4.0
+    if (c.senhaHist && c.updatedAt === p.updatedAt) o = Object.assign({}, o, { senhaHist: c.senhaHist }); // v3.0.3 (item 5)
     return o;
   });
 }
@@ -95,7 +96,7 @@ function papelAtual() {
 /* v3.0.1 (item 4): analista (perfil que não é Administrador): não cria, não compartilha, não arquiva, não exclui e não reativa.
  * Em Meus ele só tem os cards que o Administrador enviou (Selecionar e enviar) e preenche login, senha, datas e escalonamento. */
 const DICA_ANALISTA = "Só o Administrador cria, compartilha, arquiva, exclui ou reativa cards";
-const CAMPOS_MEUS_ANALISTA = CAMPOS_ANALISTA.concat(["usuario"]);
+const CAMPOS_MEUS_ANALISTA = CAMPOS_ANALISTA.concat(["usuario", "horario"]); // v3.0.3 (item 9): no card recebido o analista também edita o horário
 function analistaPuro() { try { return typeof perfisAtivos === "function" && perfisAtivos() && !souAdminCadastrado(); } catch (e) { return false; } }
 function negarAnalista() { if (!analistaPuro()) return false; toast(DICA_ANALISTA + "."); return true; }
 function podeAdminEquipe() { const p = papelAtual(); return p === "livre" || p === "admin"; }
@@ -271,7 +272,11 @@ function novoIdPerfil() { return "pf-" + Date.now().toString(36) + Math.random()
 async function hashAdmin(senha) { const salt = saltAleatorio(); return { adminHash: await derivarSenha(senha, salt, PERFIS_ITER), adminSalt: salt, adminIter: PERFIS_ITER }; }
 async function alterarPerfil(id, mud, texto) {
   const l = await perfisCompletos(); const p = l.find((x) => x.id === id); if (!p) return null;
+  const antes = Object.assign({}, p);
   Object.assign(p, mud, { updatedAt: new Date().toISOString(), updatedBy: autor() });
+  try { empurrarHistSenha(antes, p, mud); } catch (e) {} // v3.0.3 (item 5): guarda o hash anterior (nunca o texto)
+  if (mud.ativo === false && antes.ativo !== false) p.inativoDesde = p.updatedAt; // v3.0.3 (item 12)
+  if (mud.ativo === true) delete p.inativoDesde;
   if (p.papel !== "admin") { delete p.adminHash; delete p.adminSalt; delete p.adminIter; delete p.chavePub; delete p.chavePriv; delete p.chaveSalt; delete p.trocarSenha; }
   if (!adminsAtivos(l).length) { toast("Não dá para remover, desativar ou rebaixar o último Administrador"); return null; }
   await assinarPerfil(p); // v2.4.0: mudança feita com a chave do Administrador aberta sai assinada
@@ -535,7 +540,7 @@ function aplicarTravasFicha(it) {
   const restr = analistaPuro(); // v3.0.1 (item 4)
   const tudo = () => { CAMPOS_FICHA_ADMIN.concat(CAMPOS_FICHA_ANALISTA).forEach(travar); sheet.classList.add("ficha-leitura"); $("fichaTitulo").textContent = "Ver acesso (só leitura)"; sheet.querySelectorAll("#escEdit input, #escEdit select, #escEdit textarea, #escEdit button, #escAdd").forEach((x) => { x.disabled = true; x.setAttribute("data-trava", "1"); }); };
   if (restr && it.arquivado_em) { tudo(); return; } // arquivado: só leitura
-  if (!compartilhado(it)) { if (restr) CAMPOS_FICHA_ADMIN.filter((k) => k !== "fUsuario").forEach(travar); else travar("fVisibilidade"); return; } // card de Meus não vira card da Equipe; analista só preenche login, senha, datas e escalonamento
+  if (!compartilhado(it)) { if (restr) CAMPOS_FICHA_ADMIN.filter((k) => k !== "fUsuario" && k !== "fHorario").forEach(travar); else travar("fVisibilidade"); return; } // card de Meus não vira card da Equipe; analista só preenche login, senha, datas, horário (v3.0.3), resumo e escalonamento
   CAMPOS_FICHA_ADMIN.forEach(travar);
   if (papel === "leitura") { CAMPOS_FICHA_ANALISTA.forEach(travar); sheet.classList.add("ficha-leitura"); $("fichaTitulo").textContent = "Ver acesso (só leitura)"; sheet.querySelectorAll("#escEdit input, #escEdit select, #escEdit textarea, #escEdit button").forEach((x) => { x.disabled = true; x.setAttribute("data-trava", "1"); x.title = DICA_ADMIN; }); } else if (papel === "analista") { $("fichaTitulo").textContent = "Editar acesso (operação)"; }
 }

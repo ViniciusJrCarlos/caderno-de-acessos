@@ -29,7 +29,7 @@
    * Lista branca: só estes campos podem sair. Login e senha NUNCA. */
   /* v2.0.1: sugeridoPara (lista de nomes que recebem o aviso de card novo; vazio = todos) e parecidoCom (nome do card da Equipe com o
    * mesmo link, para o selo "Card parecido"). Versões antigas descartam os dois: o card aparece para todos, como um compartilhado comum. */
-  const CAMPOS_MODELO = ["id", "nome", "url", "sistema", "escalonamento", "escalonamentos", "obs", "sharedBy", "createdAt", "updatedAt", "updatedBy", "sugeridoPara", "parecidoCom", "destinatarios", "assin"];
+  const CAMPOS_MODELO = ["id", "nome", "url", "sistema", "escalonamento", "escalonamentos", "obs", "sharedBy", "createdAt", "updatedAt", "updatedBy", "sugeridoPara", "parecidoCom", "destinatarios", "assin", "cliente", "categoria", "horario"]; // v3.0.3 (item 9): cliente, categoria e horário do card enviado
   /* v3.0.2: destinatarios (ids de perfil que recebem o card direto em Meus) e assin (assinatura do Administrador sobre id + quem enviou + destinatarios). */
   const CAMPOS_NIVEL = ["nivel", "canal", "nome", "valor", "horario", "obs"];
   function limparModelo(m) {
@@ -54,6 +54,7 @@
         if (typeof m[k] === "string" && m[k].trim()) o[k] = m[k].trim().slice(0, 200);
       } else o[k] = typeof m[k] === "string" || typeof m[k] === "number" ? m[k] : String(m[k]);
     });
+    if (o.url != null) o.url = urlPermitida(o.url); // v3.0.3 (item 4)
     return o;
   }
   /* v1.9.7: todo card vindo de fora (importação, arquivo da equipe, cópia de conflito) passa por aqui.
@@ -79,6 +80,16 @@
     return t ? "Nunca" : "";
   }
   function isoValido(v) { const t = String(v == null ? "" : v).trim(); return t && !isNaN(Date.parse(t)) ? t.slice(0, 40) : ""; }
+  /* v3.0.3 (item 4): link só http/https (ou endereço sem esquema, ex.: portal.exemplo.com). javascript:, data:, vbscript: etc. viram "". */
+  function urlPermitida(v) {
+    const t = String(v == null ? "" : v).trim(); if (!t) return "";
+    const limpo = t.replace(/[\u0000-\u0020\u007f-\u009f]/g, "");
+    const m = /^([a-z][a-z0-9+.\-]*):/i.exec(limpo);
+    if (!m) return /^[\\\/]{2}/.test(limpo) ? "" : t; // sem esquema: ok ("//host" não)
+    if (/^https?$/i.test(m[1])) return t;
+    if (/^[a-z0-9.\-]+:\d+(\/|$)/i.test(limpo) && !/^(javascript|data|vbscript|file|blob|about)$/i.test(m[1])) return t; // host:porta
+    return "";
+  }
   const PROIBIDAS = new Set(["__proto__", "constructor", "prototype"]);
   function txt(v, max) { if (v == null) return ""; if (typeof v === "object") return ""; return String(v).slice(0, max); }
   function normalizarNivel(n, info) {
@@ -110,6 +121,7 @@
       o[k] = d || (k === "arquivado_em" ? null : "");
     });
     if ("arquivado_em" in o && o.arquivado_em === "") o.arquivado_em = null;
+    if ("url" in o) { const u = urlPermitida(o.url); if (u !== o.url && info) { info.urlsRecusadas = (info.urlsRecusadas || 0) + 1; } o.url = u; } // v3.0.3 (item 4)
     if ("ciclo" in o) { const c = cicloValido(o.ciclo); if (c !== o.ciclo && o.ciclo !== "" && info) info.datasInvalidas.push("ciclo"); o.ciclo = c; }
     ["updatedAt", "baseAt"].forEach((k) => { if (k in o) o[k] = isoValido(o[k]); });
     const esc = Array.isArray(raw.escalonamentos) ? raw.escalonamentos : [];
@@ -187,6 +199,9 @@
     // v2.5.0: matrícula (login) e exclusão definitiva (marca: o perfil some das telas, mas a lista nunca apaga ninguém)
     const mt = txt(p.matricula, 20).trim().toUpperCase(); if (mt && /^[A-Z0-9._\-]+$/.test(mt)) o.matricula = mt;
     if (p.excluido === true) { o.excluido = true; o.ativo = false; }
+    // v3.0.3 (itens 5 e 12): histórico das 3 últimas senhas (só hash PBKDF2, nunca o texto) e desde quando o perfil está inativo
+    if (Array.isArray(p.senhaHist)) { const hl = p.senhaHist.filter((x) => x && typeof x === "object" && HEX.test(txt(x.h, 128)) && txt(x.h, 128) && HEX.test(txt(x.s, 64)) && txt(x.s, 64)).slice(0, 3).map((x) => { const it2 = parseInt(x.i, 10); return { h: txt(x.h, 128), s: txt(x.s, 64), i: it2 > 0 && it2 <= 5e6 ? it2 : 310000 }; }); if (hl.length) o.senhaHist = hl; }
+    const ind = isoValido(p.inativoDesde); if (ind && !o.ativo) o.inativoDesde = ind;
     const ap = txt(p.assinP, 200); if (ap && /^[A-Za-z0-9_\-]+:[A-Za-z0-9+\/=]+$/.test(ap)) o.assinP = ap;
     return o;
   }
@@ -441,7 +456,7 @@
     const volta = parseDoc(await lerTexto(fh));
     if (!volta || volta.gravacao !== doc.gravacao) throw erroVerificacao();
   }
-  function csv(v) { const t = String(v == null ? "" : v).replace(/[\r\n]+/g, " "); return /[";,]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }
+  function csv(v) { let t = String(v == null ? "" : v); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; t = t.replace(/[\r\n]+/g, " "); /* v3.0.3 (item 6): célula que começa com = + - @ tab ou CR não vira fórmula */ return /[";,]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }
   async function anexarLog(fh, campos) {
     const linha = campos.map(csv).join(";") + "\r\n";
     const f = await fh.getFile();
@@ -541,7 +556,7 @@
     return a;
   }
 
-  g.CadernoSync = { TIPO: TIPO, normalizarCard: normalizarCard, sanearDatas: sanearDatas, dataValida: dataValida, normUrl: normUrl, LIMITES_NIVEL: LIMITES_NIVEL, CAMPOS_CARD: CAMPOS_CARD, LIXEIRA_DIAS: LIXEIRA_DIAS,
+  g.CadernoSync = { TIPO: TIPO, urlPermitida: urlPermitida, csvCelula: csv, normalizarCard: normalizarCard, sanearDatas: sanearDatas, dataValida: dataValida, normUrl: normUrl, LIMITES_NIVEL: LIMITES_NIVEL, CAMPOS_CARD: CAMPOS_CARD, LIXEIRA_DIAS: LIXEIRA_DIAS,
     limparLixeira: limparLixeira, limparConflitos: limparConflitos, limparRemocoes: limparRemocoes, mesclarLixeira: mesclarLixeira, mesclarConflitos: mesclarConflitos, mesclarRemocoes: mesclarRemocoes, concorrentes: concorrentes, filtrarItens: filtrarItens, limparDoc: limparDoc, limparPerfis: limparPerfis, mesclarPerfis: mesclarPerfis, limparHistorico: limparHistorico, mesclarHistorico: mesclarHistorico, HIST_MAX: HIST_MAX, limparModelo: limparModelo, modelosDoDoc: modelosDoDoc, CAMPOS_MODELO: CAMPOS_MODELO, PRINCIPAL: PRINCIPAL, LOG: LOG, montarDoc: montarDoc, docValido: docValido, mesclar: mesclar, ts: ts, semMeta: semMeta, semMetaV1: semMetaV1,
     comRetentativa: comRetentativa, retentavel: retentavel, Fila: Fila, ehCopiaConflito: ehCopiaConflito, gravarVerificado: gravarVerificado, anexarLog: anexarLog,
     AdaptadorPasta: AdaptadorPasta, AdaptadorArquivo: AdaptadorArquivo };

@@ -93,7 +93,7 @@ function abrirProtegerEquipe(trocar) {
     box.appendChild(ger);
     const lg = campoSenha(box, "seLogin", "Sua senha de login (confirma que é você)", "current-password");
     const av = el("p", "se-aviso"); const er = el("p", "se-erro"); box.appendChild(av); box.appendChild(er);
-    function validar() { const r = CadernoCripto.avaliar(s1.value); av.textContent = s1.value ? (r.ok ? r.aviso : r.msg) : "Dica: 3 ou 4 palavras e um número, como “cafe-azul-mesa-27”. Evite só números ou datas."; }
+    function validar() { const r = CadernoCripto.avaliar(s1.value); av.textContent = s1.value ? (r.ok ? r.aviso : r.msg) : "Mínimo 12 caracteres, com letra, número e símbolo. Dica: 3 ou 4 palavras e um número, como “cafe-azul-mesa-27”."; }
     s1.addEventListener("input", validar); validar();
     const bb = el("div", "dlg-botoes");
     bb.appendChild(botaoDlg("", "Cancelar", () => fim(false)));

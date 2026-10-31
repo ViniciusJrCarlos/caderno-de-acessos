@@ -117,7 +117,7 @@ function niveisDe(it) {
   if (Array.isArray(it.escalonamentos) && it.escalonamentos.length) {
     return it.escalonamentos.map(limparNivelEsc).filter(Boolean).sort((a, b) => a.nivel - b.nivel);
   }
-  return parseEscalonamentoTexto(it.escalonamento);
+  return []; // v3.0.3 (item 8): o Resumo (texto livre) não vira mais nível — antes ia parar no Nome/Obs do contato
 }
 function hrefEsc(nivel) {
   const v = (nivel.valor || "").trim();

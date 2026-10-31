@@ -194,7 +194,7 @@ function operacaoParaGravar(doc) {
 }
 /* v3.0.0: a senha nova que o analista criou (troca da temporária) vai para o arquivo, só se ele for cifrado; os outros aparelhos já
  * aceitam essa mudança sem assinatura (mudancaPropria). */
-const CAMPOS_TROCA_SENHA = ["senhaHash", "senhaSalt", "senhaIter", "senhaTemp"];
+const CAMPOS_TROCA_SENHA = ["senhaHash", "senhaSalt", "senhaIter", "senhaTemp", "senhaHist"]; // v3.0.3 (item 5): o histórico (só hashes) vai junto
 function senhaPropriaParaGravar(doc, perfis, bruto) {
   if (!doc || !Array.isArray(doc.perfis) || !perfis || !window.CadernoCripto || !CadernoCripto.ehProtegido(bruto)) return false;
   const eu = meuPerfil(perfis); if (!eu || eu.papel === "admin" || !eu.senhaHash) return false;
@@ -217,6 +217,11 @@ function restritoParaGravar(remoto0, perfis, histEq, bruto) {
     const novos = (histEq || []).filter((e) => e && !ids.has(e.id) && normTxt(e.quem || "") === eu);
     if (novos.length) doc.historico = CadernoSync.mesclarHistorico([remoto0.historico || [], novos], CadernoSync.HIST_MAX);
   }
+  // v3.0.3 (item 13): linhas de Log da própria pessoa ("Senha alterada pelo próprio usuário") que a gravação direta perdeu
+  // (corrida com a sincronização logo após entrar) vão de novo, mesmo sem operação de card. Só essas linhas, só do próprio autor.
+  const idsR = new Set((doc.historico || []).map((e) => e.id)), eu2 = normTxt(autor());
+  const linhasPl = (histEq || []).filter((e) => e && /^pl-/.test(String(e.id)) && !idsR.has(e.id) && normTxt(e.quem || "") === eu2 && /^Senha alterada pelo próprio usuário: /.test(String(e.texto || "")));
+  if (linhasPl.length) { doc.historico = CadernoSync.mesclarHistorico([doc.historico || [], linhasPl], CadernoSync.HIST_MAX); mudou = true; }
   if (!mudou) return null;
   delete doc.gravacao;
   return doc;

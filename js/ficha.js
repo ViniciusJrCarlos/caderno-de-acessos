@@ -44,7 +44,7 @@ function abrirFicha(it) {
   $("fUltima").value = edit.ultima || "";
   $("fHorario").value = edit.horario || "";
   escDraft = niveisDe(edit).map((n) => Object.assign({}, n));
-  if (!escDraft.length && edit.escalonamento) escDraft = parseEscalonamentoTexto(edit.escalonamento);
+  // v3.0.3 (item 8): não converte mais o Resumo em níveis ao abrir (o texto aparecia no Nome/Obs do contato)
   renderEscEditor();
   $("fEscalonamento").value = edit.escalonamento || "";
   $("fObs").value = edit.obs || "";
@@ -131,6 +131,7 @@ function lerFicha() {
   // v2.0.0 (item 5): texto acima do limite (ex.: card antigo ou colado por script) não é cortado em silêncio: pede para encurtar
   const passou = excessoDeTexto(o);
   if (passou) { $("erroForm").textContent = passou; return null; }
+  if (o.url && !CadernoSync.urlPermitida(o.url)) { $("erroForm").textContent = "URL: use um link que comece com http:// ou https://."; return null; } // v3.0.3 (item 4): javascript:, data:, vbscript: etc. recusados
   if (!o.titulo && !o.aplicacao) { $("erroForm").textContent = "Preencha pelo menos o Título ou a Aplicação."; return null; }
   if (!o.titulo) o.titulo = o.aplicacao + (o.cliente ? " " + o.cliente : "");
   if (!o.aplicacao) o.aplicacao = o.titulo;

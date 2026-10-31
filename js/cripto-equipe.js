@@ -66,13 +66,16 @@
   const PALAVRAS = "abacate agua alto amigo amora anel areia azul banco barco bola bravo brisa cafe caju calmo campo canto carta casa cedro ceu chave chuva cinza claro cobre coral corda couro doce dourado escada estrela faca farol feliz ferro festa figo flor folha forte fruta fumaca gato gelo girafa grama janela jardim lago lapis leite leve limao livro lobo lua macio manga mapa mar mel mesa milho monte morango nave neve noite norte nuvem ostra ouro ovo palco papel pato pedra peixe pena pera piano pipa planta ponte porta praia prata quente raio rede rio roda rosa sal selo serra sino sol sorte suco taco teto tigre trem trigo tulipa uva vela verde vento vidro vinho zebra".split(" ");
   function rnd(n) { const lim = Math.floor(0x100000000 / n) * n; const a = new Uint32Array(1); do { crypto.getRandomValues(a); } while (a[0] >= lim); return a[0] % n; }
   function frase() { const p = []; for (let i = 0; i < 4; i++) p.push(PALAVRAS[rnd(PALAVRAS.length)]); return p.join("-") + "-" + (10 + rnd(90)); }
-  /* Regra: mínimo 10 caracteres, não pode ser só números. Aviso (não bloqueia) se for fraca. */
+  /* v3.0.3 (item 7): mínimo 12 caracteres, com letra, número e símbolo (a frase gerada, ex.: cafe-azul-mesa-27, passa).
+   * Padrões fracos (só números/datas, repetição, poucos caracteres diferentes, senha/caderno/acessos/123456/qwerty) agora BLOQUEIAM. */
   function avaliar(s) {
     s = String(s || "");
-    if (s.length < 10) return { ok: false, msg: "Use pelo menos 10 caracteres. Dica: uma frase como “cafe-azul-mesa-27”." };
+    const dica = " Dica: uma frase como “cafe-azul-mesa-27”.";
+    if (s.length < 12) return { ok: false, msg: "Use pelo menos 12 caracteres." + dica };
     if (/^[\d\s.\-\/]+$/.test(s)) return { ok: false, msg: "Não use só números ou datas: é fácil de adivinhar. Use uma frase com palavras." };
-    const fraca = new Set(s.toLowerCase()).size < 6 || /^(.)\1+$/.test(s) || /(senha|password|123456|qwerty|caderno)/i.test(s);
-    return { ok: true, aviso: fraca ? "Essa senha parece fácil de adivinhar. Prefira 3 ou 4 palavras e um número." : "" };
+    if (!/\p{L}/u.test(s) || !/\d/.test(s) || !/[^\p{L}\d\s]/u.test(s)) return { ok: false, msg: "Use letras, pelo menos 1 número e 1 símbolo (ex.: - # !)." + dica };
+    if (new Set(s.toLowerCase()).size < 6 || /(.)\1{3,}/.test(s) || /(senha|password|123456|qwerty|caderno|acessos|abcdef)/i.test(s)) return { ok: false, msg: "Essa senha é fácil de adivinhar. Prefira 3 ou 4 palavras, um número e um símbolo." + dica };
+    return { ok: true, aviso: "" };
   }
 
   g.CadernoCripto = { TIPO_P: TIPO_P, ITER: ITER, ehProtegido: ehProtegido, novaChave: novaChave, abrirComSenha: abrirComSenha, conferirChave: conferirChave,

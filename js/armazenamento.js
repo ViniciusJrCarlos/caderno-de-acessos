@@ -135,10 +135,7 @@ function load() {
   Dados.gravarTexto(KEY + "_exemplos", JSON.stringify(entregues));
   itens.forEach((it) => {
     if (!Array.isArray(it.escalonamentos)) it.escalonamentos = [];
-    if (!it.escalonamentos.length && it.escalonamento) {
-      const parsed = parseEscalonamentoTexto(it.escalonamento);
-      if (parsed.length) { it.escalonamentos = parsed; mudou = true; }
-    }
+    // v3.0.3 (item 8): o Resumo fica só como texto (antes era convertido em níveis a cada carga)
   });
   // v1.4: enriquece exemplos fictícios que ainda estão com a senha de demo e sem níveis estruturados.
   const demoSenhas = new Set(["fornecedor123", "nuvem123", "exemplo321"]);

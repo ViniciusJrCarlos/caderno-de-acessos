@@ -12,10 +12,10 @@ function gravarDecisoes(d) { Dados.gravarTexto(MODELOS_DEC_KEY, JSON.stringify(d
 function modelosAtivos() { const m = modelosLocais(); const rem = new Set(m.removidos.map((t) => t.id)); return m.itens.filter((x) => !rem.has(x.id) || CadernoSync.ts(x.updatedAt) > CadernoSync.ts((m.removidos.find((t) => t.id === x.id) || {}).deletedAt)); }
 /* Só nome, link, sistema, escalonamento e observações. Nunca login nem senha. */
 function conteudoModelo(card) {
-  return CadernoSync.limparModelo({ nome: card.titulo || card.aplicacao || "", url: card.url || "", sistema: card.aplicacao || "", escalonamento: card.escalonamento || "",
+  return CadernoSync.limparModelo({ nome: card.titulo || card.aplicacao || "", url: card.url || "", sistema: card.aplicacao || "", cliente: card.cliente || "", categoria: card.categoria || "", horario: card.horario || "", escalonamento: card.escalonamento || "", /* v3.0.3 (item 9): cliente/operação, categoria e horário também vão */
     escalonamentos: niveisDe(card).map((n) => ({ nivel: n.nivel, canal: n.canal, nome: n.nome, valor: n.valor, horario: n.horario, obs: n.obs })), obs: card.obs || "" });
 }
-function mesmoConteudo(a, b) { const k = ["nome", "url", "sistema", "escalonamento", "escalonamentos", "obs"]; return k.every((c) => JSON.stringify(a[c] == null ? "" : a[c]) === JSON.stringify(b[c] == null ? "" : b[c])); }
+function mesmoConteudo(a, b) { const k = ["nome", "url", "sistema", "cliente", "categoria", "horario", "escalonamento", "escalonamentos", "obs"]; return k.every((c) => JSON.stringify(a[c] == null ? "" : a[c]) === JSON.stringify(b[c] == null ? "" : b[c])); }
 /* Chamada em carimbarMudancas(): o dono atualiza o modelo quando edita o card; card excluído vira tombstone. */
 const MODELOS_BASE_KEY = "caderno-acessos-meus-modelos-base";
 /* v2.0.1 (item 3): card de Meus com modeloDono cujo modelo ativo foi compartilhado por mim (mesmo nome, normTxt) volta para a
@@ -141,8 +141,14 @@ async function selecionarEEnviar() {
     });
     box.appendChild(fs);
     const fp = el("fieldset", "mod-para"); fp.appendChild(el("legend", "", "Para"));
-    const cbP = pessoas.map((p) => { const l = el("label", "mod-chk"); const cb = el("input"); cb.type = "checkbox"; cb.value = p.nome; cb.dataset.envPara = "1"; cb.dataset.pid = p.id; l.appendChild(cb); l.appendChild(document.createTextNode(" " + p.nome + (p.matricula ? " · " + p.matricula : ""))); fp.appendChild(l); return cb; });
+    const cbP = pessoas.map((p) => { const l = el("label", "mod-chk"); const cb = el("input"); cb.type = "checkbox"; cb.value = p.nome; cb.dataset.envPara = "1"; cb.dataset.pid = p.id; l.appendChild(cb); l.appendChild(document.createTextNode(" " + p.nome + (p.matricula ? " · " + p.matricula : ""))); const j = el("span", "meta env-ja-pessoa", ""); l.appendChild(j); cb._ja = j; fp.appendChild(l); return cb; });
     box.appendChild(fp);
+    // v3.0.3 (item 10): quem já recebeu TODOS os cards marcados aparece desabilitado com "já recebeu"
+    const atualizarPara = () => {
+      const marc = cbCards.filter((c) => c.checked).map((c) => itens.find((x) => x.id === c.value)).filter(Boolean);
+      cbP.forEach((cb) => { const ja = marc.length > 0 && marc.every((it) => destinatariosDe(it).indexOf(cb.dataset.pid) >= 0); cb.disabled = ja; if (ja) cb.checked = false; cb._ja.textContent = ja ? " — já recebeu" : ""; cb.parentNode.classList.toggle("env-desab", ja); });
+    };
+    cbCards.forEach((c) => c.addEventListener("change", atualizarPara));
     const er = erroPadrao(box);
     botoesPadrao(box, "Cancelar", "Enviar", () => fim(false), () => {
       const ids = cbCards.filter((c) => c.checked).map((c) => c.value), para = cbP.filter((c) => c.checked).map((c) => c.dataset.pid);
@@ -156,14 +162,14 @@ async function selecionarEEnviar() {
   for (const id of ok.ids) {
     const c = itens.find((x) => x.id === id); if (!c || !cardEnviavel(c)) continue;
     const ja = destinatariosDe(c);
-    ok.para.filter((p) => ja.indexOf(p) >= 0).forEach((p) => pulos.push(nomeDe(c) + " → " + nomePerfil(p)));
+    ok.para.filter((p) => ja.indexOf(p) >= 0).forEach((p) => pulos.push(nomePerfil(p) + " já tem esse card" + (ok.ids.length > 1 ? " (" + nomeDe(c) + ")" : "") + "."));
     const k = await compartilharModelo(c, { ids: ok.para, semSync: true });
     if (k) { n += k; linhas.push(nomeDe(c) + " → " + ok.para.filter((p) => ja.indexOf(p) < 0).map(nomePerfil).join(", ")); }
   }
   linhas.forEach((t) => addHist({ id: "se-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), tipo: "texto", card: "", escopo: "Equipe", texto: "Administrador enviou: " + t }));
   if (n) await sincronizar(true);
-  if (pulos.length) aviso(n ? "Enviado (alguns já tinham recebido)" : "Nada enviado", "Já tinham recebido e não recebem de novo: " + pulos.slice(0, 10).join("; ") + (pulos.length > 10 ? " e mais " + (pulos.length - 10) : "") + ".");
-  else toast(linhas.length ? "Enviado: " + linhas.join("; ") + ". Chega direto em Meus." : "Nada enviado");
+  if (pulos.length) aviso(n ? "Enviado (alguns já tinham recebido)" : "Já recebeu", pulos.slice(0, 10).join(" ") + (pulos.length > 10 ? " E mais " + (pulos.length - 10) + "." : "")); // v3.0.3 (item 10): "Fulano já tem esse card."
+  else toast(linhas.length ? "Enviado: " + linhas.join("; ") + ". Chega direto em Meus." : "Nenhum card novo para enviar");
 }
 /* Analista: todo envio para o meu perfil, assinado pelo Administrador, vira card em Meus (dono = eu). Nunca duplica (modelo + dono). */
 const RECUSA_ENVIO_KEY = "caderno-envios-recusados";
@@ -181,15 +187,15 @@ async function entregarEnvios() {
     let c = todos.find((x) => !compartilhado(x) && x.modeloId === m.id && x.dono === eu.id);
     if (!c) { c = todos.find((x) => !compartilhado(x) && x.modeloId === m.id && !x.dono); if (c) { c.dono = eu.id; mexidos.push(c); } } // cópia antiga (antes da v3.0.2): vira a minha, mantém login e senha
     if (!c) {
-      c = { id: "r-" + m.id + "-" + eu.id, titulo: m.nome || m.sistema || "", aplicacao: m.sistema || m.nome || "", cliente: "", categoria: "Interno", visibilidade: "Individual",
-        url: m.url || "", usuario: "", senha: "", ciclo: "90", ultima: hoje(), horario: "", escalonamento: m.escalonamento || "",
+      c = { id: "r-" + m.id + "-" + eu.id, titulo: m.nome || m.sistema || "", aplicacao: m.sistema || m.nome || "", cliente: m.cliente || "", categoria: m.categoria === "Externo" ? "Externo" : "Interno", visibilidade: "Individual",
+        url: CadernoSync.urlPermitida(m.url || ""), usuario: "", senha: "", ciclo: "90", ultima: hoje(), horario: m.horario || "", /* v3.0.3 (item 9): chega preenchido */ escalonamento: m.escalonamento || "",
         escalonamentos: (m.escalonamentos || []).map((n) => Object.assign({}, n)), obs: m.obs || "", modeloId: m.id, modeloVersao: m.updatedAt || "", modeloPor: m.sharedBy || "", dono: eu.id, updatedAt: agora, updatedBy: autor() };
       itensOcultos.push(c); novos++; mexidos.push(c);
       addHist({ id: "rc-" + c.id, tipo: "texto", card: c.titulo, escopo: "Individual", texto: "Recebido do Administrador (" + (m.sharedBy || "") + "): " + (c.titulo || "card") + " — preencha seu login e senha" });
       continue;
     }
     if (CadernoSync.ts(m.updatedAt) > CadernoSync.ts(c.modeloVersao)) {
-      Object.assign(c, { titulo: m.nome || c.titulo, url: m.url || "", escalonamento: m.escalonamento || "", escalonamentos: (m.escalonamentos || []).map((n) => Object.assign({}, n)), obs: m.obs || "", modeloVersao: m.updatedAt });
+      Object.assign(c, { titulo: m.nome || c.titulo, aplicacao: m.sistema || c.aplicacao, cliente: m.cliente || "", categoria: m.categoria === "Externo" ? "Externo" : "Interno", url: CadernoSync.urlPermitida(m.url || ""), /* v3.0.3: horário do analista é mantido */ escalonamento: m.escalonamento || "", escalonamentos: (m.escalonamentos || []).map((n) => Object.assign({}, n)), obs: m.obs || "", modeloVersao: m.updatedAt });
       atu++; if (mexidos.indexOf(c) < 0) mexidos.push(c);
     }
   }

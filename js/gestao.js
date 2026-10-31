@@ -92,7 +92,7 @@ function confirmarSenhaPessoal(p0) {
       box.textContent = ""; box.className = "dlg dlg-mod";
       dlgPadrao(box, "Digite a sua senha", "Para usar o perfil " + p.nome + " neste aparelho, digite a sua senha pessoal (é a que o Administrador passou, se for o primeiro acesso).");
       const s = campoPadrao(box, "pesSenha", "Senha pessoal", { senha: true, auto: "current-password" });
-      regrasPadrao(box, "Depois de " + MAX_TENTATIVAS + " senhas erradas a conta é bloqueada e só o Administrador desbloqueia.");
+      regrasPadrao(box, "Depois de " + MAX_TENTATIVAS + " senhas erradas, a entrada fica bloqueada por 15 minutos neste aparelho.");
       const er = erroPadrao(box);
       const ok = botoesPadrao(box, "Cancelar", "Entrar", () => fim(false), async () => {
         er.textContent = ""; ok.disabled = true;
@@ -100,19 +100,11 @@ function confirmarSenhaPessoal(p0) {
           const c = (await perfisCompletos()).find((x) => x.id === p.id);
           if (!c || !c.senhaHash) { er.textContent = "A sua senha ainda não chegou neste aparelho. Sincronize e tente de novo."; return; }
           if (c.bloqueado) { er.textContent = "Conta bloqueada. Peça ao Administrador para desbloquear."; return; }
+          const kt = p.matricula || ("id-" + p.id); // v3.0.3 (item 14): o mesmo bloqueio temporário do login (15 min, sem contador)
+          if (travaAte(kt)) { er.textContent = MSG_LOGIN_TRAVADO; return; }
           const h = await derivarSenha(s.value, c.senhaSalt, c.senhaIter || PERFIS_ITER);
-          if (!hashIguais(h, c.senhaHash)) {
-            const n = tentativasDe(p.id) + 1;
-            if (n >= MAX_TENTATIVAS) {
-              gravarTentativas(p.id, 0);
-              await alterarPerfil(p.id, { bloqueado: true }, "Conta bloqueada por " + MAX_TENTATIVAS + " senhas erradas: " + p.nome);
-              er.textContent = "Conta bloqueada depois de " + MAX_TENTATIVAS + " senhas erradas. Peça ao Administrador para desbloquear.";
-              s.disabled = true; ok.hidden = true; return;
-            }
-            gravarTentativas(p.id, n);
-            er.textContent = "Senha incorreta. Restam " + (MAX_TENTATIVAS - n) + " tentativa(s)."; s.select(); return;
-          }
-          gravarTentativas(p.id, 0); s.value = "";
+          if (!hashIguais(h, c.senhaHash)) { registrarErroLogin(kt, p); er.textContent = "Senha incorreta."; s.select(); return; }
+          gravarTentativas(p.id, 0); limparTrava(kt); s.value = "";
           if (c.senhaTemp) { etapa2(c); return; }
           concluir(c);
         } catch (e) { er.textContent = "Não foi possível conferir a senha (" + ((e && e.name) || "erro") + ")."; }
@@ -130,11 +122,12 @@ function confirmarSenhaPessoal(p0) {
       const er = erroPadrao(box);
       const ok = botoesPadrao(box, "Sair", "Salvar", () => fim(false), async () => {
         er.textContent = "";
-        if (!senhaForte(s1.value)) { er.textContent = REGRAS_SENHA; return; }
+        const pol = validarSenhaNova(s1.value, { nome: c.nome, matricula: c.matricula }); if (pol) { er.textContent = pol; return; } // v3.0.3 (item 5)
         if (s1.value !== s2.value) { er.textContent = "As duas senhas não são iguais."; return; }
         ok.disabled = true;
         try {
-          const np = await alterarPerfil(c.id, Object.assign(await hashPessoal(s1.value), { senhaTemp: false }), "Senha pessoal criada: " + c.nome);
+          if (await senhaJaUsada(c, s1.value)) { er.textContent = MSG_SENHA_REPETIDA; return; }
+          const np = await alterarPerfil(c.id, Object.assign(await hashPessoal(s1.value), { senhaTemp: false }), "Senha alterada pelo próprio usuário: " + c.nome);
           s1.value = s2.value = "";
           if (np) concluir(np);
         } finally { ok.disabled = false; }
@@ -224,8 +217,7 @@ function novoAnalista() {
   return janela("dlgPerfis", (box, fim) => {
     dlgPadrao(box, "Novo analista", "Cadastre a pessoa e passe a senha temporária pessoalmente, nunca por e-mail ou chat.");
     const nome = campoPadrao(box, "gNome", "Nome", { placeholder: "Nome do colaborador", max: 40, auto: "off" });
-    const mat = campoPadrao(box, "gMatricula", "Matrícula", { placeholder: "Ex.: 1234567", max: 20, auto: "off" });
-    mat.addEventListener("input", () => { mat.value = mat.value.toUpperCase(); });
+    const mat = soDigitosInput(campoPadrao(box, "gMatricula", "Matrícula", { placeholder: "Ex.: 1234567", max: 7, auto: "off" }), 7); // v3.0.3 (item 1): só números, até 7
     const perfil = selectPadrao(box, "gPerfil", "Perfil", [["analista", "Analista"], ["admin", "Administrador"]]);
     const s = campoPadrao(box, "gSenha", "Senha temporária", { senha: true, valor: gerarSenhaTemporaria(), auto: "new-password", copiar: true });
     const av = avisoPadrao(box, "O analista troca a senha no primeiro acesso.");
@@ -235,11 +227,11 @@ function novoAnalista() {
     const ok = botoesPadrao(box, "Cancelar", "Salvar", () => fim(false), async () => {
       er.textContent = "";
       const v = nome.value.trim();
-      if (!v) { er.textContent = "Digite o nome."; nome.focus(); return; }
-      if (perfilPorNome(v)) { er.textContent = "Já existe um perfil com esse nome."; return; }
       const m = normMat(mat.value);
+      const en = validarNomePessoa(v, { temp: s.value, matricula: m }); if (en) { er.textContent = en; nome.focus(); return; } // v3.0.3 (item 2)
+      if (perfilPorNome(v)) { er.textContent = "Já existe um perfil com esse nome."; return; }
       if (!matriculaValida(m)) { er.textContent = "Matrícula: só números, de 6 ou 7 dígitos."; mat.focus(); return; }
-      if (matriculaEmUso(m, "")) { er.textContent = "Essa matrícula já é de outra pessoa."; mat.focus(); return; }
+      if (matriculaEmUso(m, "")) { er.textContent = "Essa matrícula já é de outra pessoa (ativa, inativa ou excluída)."; mat.focus(); return; } // v3.0.3 (item 11)
       if (!senhaForte(s.value)) { er.textContent = REGRAS_SENHA; return; }
       ok.disabled = true;
       try {
@@ -270,12 +262,12 @@ function acoesPessoa(id) {
     const acao = (rot, fn, o) => { const b = botaoDlg(o && o.perigo ? "perigo" : "", rot, async () => { fim(true); await fn(); render(); }); b.dataset.acao = o && o.id || ""; if (o && o.off) { b.disabled = true; b.title = o.off; } lista.appendChild(b); return b; };
     const souEu = eu && eu.id === p.id;
     acao("Resetar senha", () => resetarSenha(p), { id: "resetar", off: souEu ? "Para trocar a sua senha, use Entrar como administrador" : "" });
-    if (p.bloqueado) acao("Desbloquear", async () => { gravarTentativas(p.id, 0); await alterarPerfil(p.id, { bloqueado: false }, "Conta desbloqueada: " + p.nome); toast(p.nome + " desbloqueado(a)"); }, { id: "desbloquear" });
+    if (p.bloqueado) acao("Desbloquear", async () => { gravarTentativas(p.id, 0); limparTravaPerfil(p); await alterarPerfil(p.id, { bloqueado: false }, "Conta desbloqueada: " + p.nome); toast(p.nome + " desbloqueado(a)"); }, { id: "desbloquear" });
     if (p.papel !== "admin" && p.ativo) acao("Tornar administrador", () => tornarAdmin(p), { id: "tornar" });
     if (p.papel === "admin") acao("Remover administrador", () => removerAdmin(p), { id: "remover", off: ultimoAdmin ? "Não dá para remover o último Administrador" : "" });
     if (p.ativo) acao("Desativar", () => confirmarAcao("Desativar " + p.nome + "?", "Nos cards da Equipe, " + p.nome + " fica só leitura. Pode ser reativado depois.", "Desativar", () => alterarPerfil(p.id, { ativo: false }, "Perfil desativado: " + p.nome)), { id: "desativar", perigo: true, off: ultimoAdmin ? "Não dá para desativar o último Administrador" : "" });
-    else acao("Reativar", () => alterarPerfil(p.id, { ativo: true }, "Perfil reativado: " + p.nome), { id: "reativar" });
-    acao("Renomear", async () => { const v = await pedirTexto("Renomear " + p.nome, "Novo nome", p.nome); if (v && v !== p.nome) { if (perfilPorNome(v) && perfilPorNome(v).id !== p.id) toast("Já existe um perfil com esse nome"); else await alterarPerfil(p.id, { nome: v }, "Perfil renomeado: " + p.nome + " → " + v); } }, { id: "renomear" });
+    else acao("Reativar", () => reativarPessoa(p), { id: "reativar" }); // v3.0.3 (item 12)
+    acao("Renomear", async () => { const v = await pedirTexto("Renomear " + p.nome, "Novo nome", p.nome); const en = v && v !== p.nome ? validarNomePessoa(v, { matricula: p.matricula }) : ""; if (en) { toast(en); return; } if (v && v !== p.nome) { if (perfilPorNome(v) && perfilPorNome(v).id !== p.id) toast("Já existe um perfil com esse nome"); else await alterarPerfil(p.id, { nome: v }, "Perfil renomeado: " + p.nome + " → " + v); } }, { id: "renomear" });
     botoesPadrao(box, "Fechar", null, () => fim(false));
   });
 }
@@ -285,22 +277,26 @@ function confirmarAcao(titulo, texto, rotOk, fn) {
     const ok = botoesPadrao(box, "Cancelar", rotOk, () => fim(false), async () => { ok.disabled = true; try { await fn(); } finally { fim(true); } });
   });
 }
-function resetarSenha(p) {
+function resetarSenha(p, op) {
+  op = op || {}; // v3.0.3 (item 12): { reativar: true } = reativar com senha temporária (inativo 7+ dias)
   return janela("dlgSE", (box, fim) => {
-    dlgPadrao(box, "Resetar senha de " + p.nome, "A senha atual de " + p.nome + " deixa de valer, a conta é desbloqueada e os aparelhos de " + p.nome + " pedem a senha de novo.");
+    if (op.reativar) dlgPadrao(box, "Reativar " + p.nome, p.nome + " ficou inativo(a) ou sem entrar por " + DIAS_REATIVAR_RESET + " dias ou mais. Para reativar, defina uma senha temporária: a senha antiga deixa de valer e a nova não pode repetir as últimas.");
+    else dlgPadrao(box, "Resetar senha de " + p.nome, "A senha atual de " + p.nome + " deixa de valer, a conta é desbloqueada e os aparelhos de " + p.nome + " pedem a senha de novo.");
     const s = campoPadrao(box, "gResetSenha", "Senha temporária", { senha: true, valor: gerarSenhaTemporaria(), auto: "new-password", copiar: true });
     avisoPadrao(box, (p.papel === "admin" ? "O Administrador troca a senha no primeiro acesso." : "O analista troca a senha no primeiro acesso.") + " Passe a senha pessoalmente, nunca por e-mail ou chat.");
     regrasPadrao(box);
     const er = erroPadrao(box);
     const ok = botoesPadrao(box, "Cancelar", "Salvar", () => fim(false), async () => {
       er.textContent = ""; if (!senhaForte(s.value)) { er.textContent = REGRAS_SENHA; return; }
+      if (op.reativar && await senhaJaUsada((await perfisCompletos()).find((x) => x.id === p.id), s.value)) { er.textContent = "A senha temporária não pode repetir uma das últimas senhas de " + p.nome + "."; return; } // v3.0.3 (item 12)
       ok.disabled = true;
       try {
         const mud = p.papel === "admin" ? Object.assign(await hashAdmin(s.value), await gerarChavesAdmin(s.value), { trocarSenha: true, bloqueado: false }) : Object.assign(await hashPessoal(s.value), { senhaTemp: true, bloqueado: false });
-        gravarTentativas(p.id, 0);
+        if (op.reativar) mud.ativo = true;
+        gravarTentativas(p.id, 0); limparTravaPerfil(p);
         if (typeof limparBloqueioPendente === "function") limparBloqueioPendente(p.id); // v2.5.2 (item 2)
-        await alterarPerfil(p.id, mud, "Senha resetada (temporária): " + p.nome);
-        s.value = ""; fim(true); toast("Senha de " + p.nome + " resetada (temporária)");
+        await alterarPerfil(p.id, mud, op.reativar ? "Perfil reativado com senha temporária (inativo " + DIAS_REATIVAR_RESET + "+ dias): " + p.nome : "Senha resetada (temporária): " + p.nome);
+        s.value = ""; fim(true); toast(op.reativar ? p.nome + " reativado(a) com senha temporária" : "Senha de " + p.nome + " resetada (temporária)");
       } catch (e) { er.textContent = "Não foi possível resetar (" + ((e && e.name) || "erro") + ")."; }
       finally { ok.disabled = false; }
     });
