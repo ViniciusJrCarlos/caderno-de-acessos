@@ -102,3 +102,4 @@ body.selecionando .fab { display:none !important; }
 body.selecionando { padding-bottom:120px; }
 @media (min-width:720px) { .sel-bar { flex-wrap:nowrap; justify-content:flex-end; padding:12px 24px; } .sel-bar span { flex:1; } .sel-bar .btn { flex:0 0 auto; min-width:120px; } }
 
+[hidden].so-desktop, [hidden].so-mobile, .fab[hidden] { display:none !important; } /* v3.0.2: esconder vale também no desktop/celular */

@@ -236,7 +236,6 @@ async function salvarEmMeusESugerir(o) {
   o.visibilidade = "Individual";
   gravar(o, "Salvo em Meus");
   const card = atual(o) || o;
-  if (!syncEstado.vinculado || !autor()) { toast("Salvo em Meus. Para sugerir à equipe, vincule a pasta e salve seu nome em Mais › Arquivo da equipe."); return; }
-  await compartilharModelo(card, { para: [], parecidoCom: parecido ? nomeDe(parecido) : "" });
-  toast("Salvo em Meus e sugerido à equipe (sem login e senha)");
+  void card; void parecido; // v3.0.2 (item 7): não sugere mais à equipe; envio só por Selecionar e enviar (Administrador)
+  toast("Salvo em Meus. Para enviar a analistas: Selecionar e enviar (Administrador).");
 }

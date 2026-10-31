@@ -204,7 +204,19 @@ function prepararTelaLogin() {
   $("loginDica").hidden = !comP;
   const pv = $("loginPrimeiraVez"); if (pv) pv.hidden = !aparelhoNovo(); // v2.5.1 (item 5)
   mostrarPassoLogin(1);
-  if (comP && sessaoPerfilId) { const p = lerPerfis().find((x) => x.id === sessaoPerfilId); if (p && $("loginMatricula").value === "") $("loginMatricula").value = p.matricula || p.nome; }
+  if (comP) modoLoginNome(false);
+  if (comP && sessaoPerfilId) { const p = lerPerfis().find((x) => x.id === sessaoPerfilId); if (p && p.matricula && $("loginMatricula").value === "") $("loginMatricula").value = p.matricula; }
+}
+/* v3.0.2 (item 4): perfil antigo sem matrícula ainda entra pelo nome, só se existir um assim (o Administrador deve cadastrar a matrícula). */
+function modoLoginNome(nome) {
+  const i = $("loginMatricula"); if (!i) return;
+  const temAntigo = lerPerfis().some((p) => p.ativo && !p.excluido && !p.matricula);
+  let a = $("loginPeloNome");
+  if (!a && temAntigo) { a = el("button", "link-btn", ""); a.type = "button"; a.id = "loginPeloNome"; a.addEventListener("click", () => modoLoginNome(i.dataset.nome !== "1")); $("loginMatWrap").after(a); }
+  if (a) { a.hidden = !temAntigo; a.textContent = nome ? "Entrar com a matrícula" : "Perfil antigo sem matrícula? Entrar pelo nome"; }
+  i.dataset.nome = nome && temAntigo ? "1" : "";
+  i.maxLength = i.dataset.nome ? 40 : 7; i.inputMode = i.dataset.nome ? "text" : "numeric"; i.placeholder = i.dataset.nome ? "Seu nome" : "Ex.: 1234567";
+  i.value = "";
 }
 /* v2.5.1 (item 5): aparelho sem nada da equipe ainda (sem perfis, nunca sincronizou, nenhum card da Equipe). */
 function aparelhoNovo() {
@@ -224,11 +236,10 @@ function acharPerfilLogin(v) {
 async function loginPasso1(mat, senha) {
   if (!normMat(mat)) return { erro: "Digite a sua matrícula." };
   // v3.0.0 (item 3): matrícula só com números (6 ou 7 dígitos). Perfil antigo sem matrícula (entra pelo nome) continua entrando.
-  if (!matriculaValida(mat) && !lerPerfis().some((p) => !p.excluido && (p.matricula ? p.matricula === normMat(mat) : normTxt(p.nome) === normTxt(mat)))) return { erro: "Matrícula: só números, de 6 ou 7 dígitos." };
+  if (!matriculaValida(mat) && !lerPerfis().some((p) => !p.excluido && (p.matricula ? p.matricula === normMat(mat) : normTxt(p.nome) === normTxt(mat)))) return { erro: "Matrícula ou senha inválida." }; // v3.0.2 (item 4): mensagem genérica
   if (!senha) return { erro: "Digite a sua senha." };
-  const excl = lerPerfis().find((p) => p.excluido && p.matricula && p.matricula === normMat(mat));
   const p = acharPerfilLogin(mat);
-  if (!p) return { erro: excl ? "Perfil excluído. Fale com o Administrador." : "Matrícula não encontrada. Só entra quem o Administrador cadastrou." };
+  if (!p) return { erro: "Matrícula ou senha inválida." }; // v3.0.2 (item 4): não revela se a matrícula existe
   if (!p.ativo) return { erro: "Perfil desativado. Fale com o Administrador." };
   if (p.bloqueado) return { erro: "Conta bloqueada depois de " + MAX_TENTATIVAS + " senhas erradas. Peça ao Administrador para resetar a sua senha." };
   if (p.papel !== "admin" && await bloqueadoNoArquivo(p.id)) return { erro: "Conta bloqueada depois de " + MAX_TENTATIVAS + " senhas erradas. Peça ao Administrador para resetar a sua senha." }; // v2.5.2 (item 2)
@@ -237,7 +248,7 @@ async function loginPasso1(mat, senha) {
     if (Date.now() < esperaLoginAte) return { erro: "Muitas tentativas. Aguarde alguns segundos." };
     if (!c || !c.adminHash) return { erro: "A senha deste perfil ainda não chegou neste aparelho. Peça o arquivo da equipe ao Administrador." };
     const h = await derivarSenha(senha, c.adminSalt, c.adminIter || PERFIS_ITER);
-    if (!hashIguais(h, c.adminHash)) { tentativasLoginAdmin++; if (tentativasLoginAdmin >= 5) { tentativasLoginAdmin = 0; esperaLoginAte = Date.now() + 30000; } return { erro: "Matrícula ou senha incorreta." }; }
+    if (!hashIguais(h, c.adminHash)) { tentativasLoginAdmin++; if (tentativasLoginAdmin >= 5) { tentativasLoginAdmin = 0; esperaLoginAte = Date.now() + 30000; } return { erro: "Matrícula ou senha inválida." }; }
     tentativasLoginAdmin = 0;
     if (c.trocarSenha) return { trocar: true, c: c };
     const ch = await prepararChaveAdmin(c, senha, "");
@@ -251,7 +262,7 @@ async function loginPasso1(mat, senha) {
   if (!hashIguais(h, c.senhaHash)) {
     const n = tentativasDe(c.id) + 1; gravarTentativas(c.id, n);
     if (n >= MAX_TENTATIVAS) { gravarTentativas(c.id, 0); await alterarPerfil(c.id, { bloqueado: true }, "Conta bloqueada (" + MAX_TENTATIVAS + " senhas erradas): " + c.nome); marcarBloqueioPendente(c.id); await publicarBloqueio(c.id); setTimeout(renderPessoasSeAberto, 0); return { erro: "Conta bloqueada depois de " + MAX_TENTATIVAS + " senhas erradas. Peça ao Administrador para resetar a sua senha." }; }
-    return { erro: "Matrícula ou senha incorreta. Restam " + (MAX_TENTATIVAS - n) + " tentativa(s)." };
+    return { erro: "Matrícula ou senha inválida. Restam " + (MAX_TENTATIVAS - n) + " tentativa(s)." };
   }
   gravarTentativas(c.id, 0);
   if (c.senhaTemp) return { trocar: true, c: c };
@@ -666,7 +677,7 @@ function renderConfig(box) {
     btn("btn", "book", "Excel para consulta", exportarExcelConsulta), btn("btn", "lock", "Backup pessoal (inclui minhas senhas)", backupPessoal)], "cfg-export");
   blocoCfg(box, "Cards da equipe", "Cria um card novo direto na Equipe.", [btn("btn pri", "plus", "Novo fornecedor da equipe", novoFornecedorEquipe)]);
   try { blocoAvisos(box); } catch (e) {}
-  blocoModelos(box);
+
   try { blocoLixeira(box); } catch (e) {}
   if (!perfisAtivos()) { try { blocoPerfis(box); } catch (e) {} blocoCfg(box, "Senha deste aparelho", "Sem perfis, cada aparelho tem a própria senha de entrada.", [btn("btn", "lock", "Trocar senha", abrirTrocaSenha)]); }
   blocoCfg(box, "Instalação e saída", "Instale o app uma vez com internet; depois funciona offline.", [btn("btn", "download", appJaInstalado() ? "App instalado" : "Instalar app", () => abrirInstalar(true)), btn("btn", "logout", "Sair (bloquear)", sair)]);
@@ -686,7 +697,7 @@ function renderContaArquivo(box) {
   const bloco = (titulo, texto, botoes) => blocoCfg(box, titulo, texto, botoes);
   blocoArquivoEquipe(box, bloco, "mais");
   blocoCfg(box, "Receber arquivo da equipe", "No celular (ou sem a pasta), escolha o arquivo que o Administrador enviou. O app só aceita o que o Administrador assinou, recusa e avisa se algo foi mexido e nunca apaga o que você já tem.", [btn("btn pri", "upload", "Receber arquivo da equipe", escolherArquivoEquipe)]);
-  blocoModelos(box);
+
   try { blocoLixeira(box); } catch (e) {}
   blocoCfg(box, "Backup pessoal (inclui minhas senhas)", "Arquivo completo com os seus cards de Meus. Use só para levar para outro aparelho seu. Não compartilhe.", [btn("btn", "lock", "Backup pessoal", backupPessoal), btn("btn", "upload", "Importar backup", () => $("imp").click())]);
   blocoCfg(box, "Planilha Excel (Meus)", "Só os seus cards (Meus). Senhas individuais saem em branco.", [btn("btn", "table", "Excel para importar", exportarExcelImportar), btn("btn", "book", "Excel para consulta", exportarExcelConsulta)]);
@@ -701,7 +712,10 @@ function ligarArea() {
   $("navRodape").addEventListener("click", () => { if (syncEstado.vinculado) sincronizar(true); });
   $("impEquipe").addEventListener("change", lerArquivoEquipe);
   $("loginVoltar").addEventListener("click", () => { mostrarPassoLogin(1); $("loginErro").textContent = ""; $("loginSenha").value = ""; $("loginSenha").focus(); });
-  $("loginMatricula").addEventListener("input", (ev) => { const i = ev.target; const p = i.selectionStart; i.value = i.value.toUpperCase(); try { i.setSelectionRange(p, p); } catch (e) {} });
+  $("loginMatricula").addEventListener("input", (ev) => { // v3.0.2 (item 4): só números, até 7 (perfil antigo sem matrícula: modo nome)
+    const i = ev.target; if (i.dataset.nome === "1") { i.value = i.value.toUpperCase(); return; }
+    const v = i.value.replace(/\D/g, "").slice(0, 7); if (v !== i.value) i.value = v;
+  });
   prepararTelaLogin();
 }
 

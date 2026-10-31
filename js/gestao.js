@@ -74,6 +74,9 @@ function aplicarPapelNaTela() {
   const imp = $("dImport"); if (imp) { imp.textContent = so ? "Importar backup" : "Importar JSON"; imp.title = so ? "Juntar os cards de um backup pessoal em Meus" : "Juntar os cards de um arquivo JSON"; }
   const di = document.querySelector('.dr-item[data-acao="importar"] .dr-rot'); if (di) di.textContent = so ? "Importar backup (Meus)" : "Importar JSON";
   const nota = $("excelNota"); if (nota) nota.textContent = so ? "Só os seus cards (Meus). Senhas individuais saem em branco." : "Senhas individuais saem em branco.";
+  const restr = typeof analistaPuro === "function" && analistaPuro(); // v3.0.2 (item 6): analista não cria card
+  ["dNovo", "novo"].forEach((i) => { const b = $(i); if (b) b.hidden = restr; });
+  document.querySelectorAll('[data-acao="novo"]').forEach((x) => { x.hidden = restr; });
   const dn = $("drExcelNota"); if (dn) dn.textContent = so ? "Excel: só os seus cards (Meus). Senhas individuais saem em branco." : "Senhas individuais saem em branco.";
 }
 /* ---------- Senha pessoal do analista ---------- */

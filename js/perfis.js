@@ -198,13 +198,13 @@ async function filtrarPermissoesRemoto(r, base, perfis, primeiraSync, ctx) {
         h("pv-" + it.id, nomeDe(it), "Restauração sem permissão desfeita (feita por " + (quem || "sem nome") + "): " + nomeDe(it));
         continue;
       }
-      if (syncSoLeituraAtual && !primeiraSync && !v) { out.mudou = true; out.recusados = (out.recusados || 0) + 1; continue; } // v2.5.0: card novo sem assinatura do Administrador não entra
+      if (syncSoLeituraAtual && !primeiraSync && !v) { out.mudou = true; out.recusados = (out.recusados || 0) + 1; (out.recusadosNomes = out.recusadosNomes || []).push("card novo " + nomeDe(it)); out.hist.push({ id: "pr-" + it.id, tipo: "texto", card: nomeDe(it), quem: eu, quando: agora, escopo: "Equipe", texto: "Card novo sem a assinatura do Administrador recusado (feito por " + (quem || "sem nome") + "): " + nomeDe(it) }); continue; } // v2.5.0: card novo sem assinatura do Administrador não entra
       if (!primeiraSync && !v) out.hist.push({ id: "pn-" + it.id, tipo: "texto", card: nomeDe(it), quem: quem, quando: agora, escopo: "Equipe", texto: "Card da Equipe criado sem ser Administrador (" + (quem || "sem nome") + "); o Administrador deve revisar: " + nomeDe(it) });
       saida.push(it); continue;
     }
     const s = sanearEquipe(b, it, papel);
     if (!s.barrados.length) { saida.push(it); continue; }
-    out.mudou = true; out.recusados = (out.recusados || 0) + 1;
+    out.mudou = true; out.recusados = (out.recusados || 0) + 1; (out.recusadosNomes = out.recusadosNomes || []).push(nomeDe(b)); 
     out.hist.push({ id: "pd-" + it.id + "-" + Date.now().toString(36), tipo: "texto", card: nomeDe(b), quem: eu, quando: agora, escopo: "Equipe", texto: "Mudança sem permissão desfeita (" + s.barrados.map(rotuloCampoP).join(", ") + ", feita por " + (quem || "sem nome") + "): " + nomeDe(b) });
     delete s.card.assin;
     saida.push(Object.assign(s.card, { updatedAt: agora, updatedBy: eu || s.card.updatedBy }));
@@ -217,7 +217,7 @@ async function filtrarPermissoesRemoto(r, base, perfis, primeiraSync, ctx) {
     if (!b || ativos.has(t.id) || pend.has("t:" + t.id)) continue;
     if (await ehAdminRemoto(t.deletedBy, t.assin, msgTomb(t), perfis)) continue;
     const c = Object.assign({}, b, { updatedAt: agora, updatedBy: eu || b.updatedBy }); delete c.assin;
-    r.itens.push(c); ativos.add(t.id); out.recusados = (out.recusados || 0) + 1;
+    r.itens.push(c); ativos.add(t.id); out.recusados = (out.recusados || 0) + 1; (out.recusadosNomes = out.recusadosNomes || []).push("exclusão de " + nomeDe(b)); 
     r.removidos = r.removidos.filter((x) => x !== t);
     if (ctx.remAqui) for (let i = ctx.remAqui.length - 1; i >= 0; i--) if (ctx.remAqui[i].item && ctx.remAqui[i].item.id === t.id) ctx.remAqui.splice(i, 1);
     out.mudou = true;
@@ -240,10 +240,7 @@ async function mesclarPerfisSync(remoto, remoto0, copias) {
   // v2.4.0: mudança de perfil sem a assinatura de um Administrador conhecido é desfeita (js/assinatura.js)
   const fp = await filtrarPerfisRemoto(cache, l); l = fp.itens;
   fp.desfeitos.forEach((n) => addHist({ id: "pp-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), tipo: "texto", card: "", escopo: "Equipe", texto: "Mudança de perfil sem a assinatura do Administrador desfeita: " + n }));
-  if (remoto && !remP && adminsAtivos(cache).length && remoto0 && remoto0.atualizado_por && CadernoSync.ts(remoto0.atualizado_em) > Math.min(...adminsAtivos(cache).map((a) => CadernoSync.ts(a.criadoEm) || Infinity))) { // v2.5.0: só conta o que foi gravado depois de os perfis existirem
-    const av = lerJSON(PERFIS_ANTIGOS_KEY, {}); av[String(remoto0.atualizado_por).slice(0, 60)] = new Date().toISOString();
-    Dados.gravarTexto(PERFIS_ANTIGOS_KEY, JSON.stringify(av));
-  }
+  // v3.0.2 (item 5): o aviso "versão antiga" não vem mais de quem gravou o arquivo (dava falso positivo); só da versão gravada no perfil
   const eu = meuPerfil(l);
   if (eu && (eu.papel !== "admin" || adminConfirmado(eu.id))) { // v2.3.0: ninguém atualiza o último acesso de um admin sem a senha dele
     // v2.5.1 (item 4): presença a cada login/sincronização, no máximo uma gravação a cada 15 min (antes: 6 h)
@@ -254,7 +251,7 @@ async function mesclarPerfisSync(remoto, remoto0, copias) {
   if (eu && eu.nome !== autor()) Dados.gravarTexto(AUTOR_KEY, eu.nome); // o admin renomeou: o nome deste aparelho acompanha
   const gravar = !!lerSE().atual; // perfis (com hashes) só vão para um arquivo cifrado
   const precisa = gravar && l.length > 0 && JSON.stringify(CadernoSync.limparPerfis(remP || [])) !== JSON.stringify(CadernoSync.limparPerfis(l));
-  return { itens: l, precisa: precisa, gravar: gravar, desfeitos: fp.desfeitos.length };
+  return { itens: l, precisa: precisa, gravar: gravar, desfeitos: fp.desfeitos.length, desfeitosNomes: fp.desfeitos.slice() };
 }
 async function concluirPerfisSync(l) {
   if (l && l.length) await gravarPerfis(l);
@@ -263,11 +260,10 @@ async function concluirPerfisSync(l) {
   if (modoAdmin && !(eu && eu.ativo && eu.papel === "admin")) sairModoAdmin(true);
   desenharSeloAdmin();
 }
-function avisosVersaoAntiga() {
-  const av = lerJSON(PERFIS_ANTIGOS_KEY, {}), lim = Date.now() - 30 * 864e5, out = [];
-  Object.keys(av).forEach((n) => { if (CadernoSync.ts(av[n]) >= lim) out.push(n); });
-  lerPerfis().forEach((p) => { if (p.ativo && p.papel === "admin" && p.versao && cmpVersao(p.versao, APP_VERSAO) < 0 && out.indexOf(p.nome) < 0) out.push(p.nome); });
-  return out;
+const VERSAO_MIN_PERMISSOES = "2.5.0"; // a partir daqui o app respeita as permissões assinadas
+function avisosVersaoAntiga() { // v3.0.2 (item 5): só pela versão que o próprio perfil gravou ao sincronizar
+  try { Dados.remover && Dados.remover(PERFIS_ANTIGOS_KEY); } catch (e) {}
+  return lerPerfis().filter((p) => p.ativo && !p.excluido && p.versao && cmpVersao(p.versao, VERSAO_MIN_PERMISSOES) < 0).map((p) => p.nome + " (v" + p.versao + ")");
 }
 function cmpVersao(a, b) { const x = String(a).split(".").map(Number), y = String(b).split(".").map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0); } return 0; }
 function histPerfil(texto) { addHist({ tipo: "texto", card: "", escopo: "Equipe", texto: texto }); }

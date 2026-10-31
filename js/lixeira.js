@@ -49,7 +49,7 @@ function lerLixeiraMeus() {
   const l = lerJSON(LIX_MEUS_KEY, []);
   return (Array.isArray(l) ? l : []).filter((e) => e && e.id && e.card && typeof e.card === "object" && new Date(e.excluidoEm).getTime() >= lim);
 }
-function lixeiraMeusVisivel() { return lerLixeiraMeus().filter((e) => individualVisivel(e.card)); } // v2.5.2 (item 1)
+function lixeiraMeusVisivel() { if (typeof analistaPuro === "function" && analistaPuro()) return []; /* v3.0.2 (item 6) */ return lerLixeiraMeus().filter((e) => individualVisivel(e.card)); } // v2.5.2 (item 1)
 function gravarLixeiraMeus(l) { Dados.gravarTexto(LIX_MEUS_KEY, JSON.stringify(l)); }
 function restaurarDaLixeira(ids) {
   if (negarAnalista()) return; // v3.0.1 (item 4)

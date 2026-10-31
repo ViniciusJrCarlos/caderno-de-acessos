@@ -29,7 +29,8 @@
    * Lista branca: só estes campos podem sair. Login e senha NUNCA. */
   /* v2.0.1: sugeridoPara (lista de nomes que recebem o aviso de card novo; vazio = todos) e parecidoCom (nome do card da Equipe com o
    * mesmo link, para o selo "Card parecido"). Versões antigas descartam os dois: o card aparece para todos, como um compartilhado comum. */
-  const CAMPOS_MODELO = ["id", "nome", "url", "sistema", "escalonamento", "escalonamentos", "obs", "sharedBy", "createdAt", "updatedAt", "updatedBy", "sugeridoPara", "parecidoCom"];
+  const CAMPOS_MODELO = ["id", "nome", "url", "sistema", "escalonamento", "escalonamentos", "obs", "sharedBy", "createdAt", "updatedAt", "updatedBy", "sugeridoPara", "parecidoCom", "destinatarios", "assin"];
+  /* v3.0.2: destinatarios (ids de perfil que recebem o card direto em Meus) e assin (assinatura do Administrador sobre id + quem enviou + destinatarios). */
   const CAMPOS_NIVEL = ["nivel", "canal", "nome", "valor", "horario", "obs"];
   function limparModelo(m) {
     const o = {};
@@ -41,8 +42,14 @@
       } else if (k === "sugeridoPara") {
         if (!Array.isArray(m[k])) return;
         const vistos = new Set(); const l = [];
-        m[k].forEach((n) => { if (typeof n !== "string") return; const t = n.trim().slice(0, 120); const c = t.toLowerCase(); if (t && !vistos.has(c) && l.length < 20) { vistos.add(c); l.push(t); } });
+        m[k].forEach((n) => { if (typeof n !== "string") return; const t = n.trim().slice(0, 120); const c = t.toLowerCase(); if (t && !vistos.has(c) && l.length < 200) { vistos.add(c); l.push(t); } });
         if (l.length) o[k] = l;
+      } else if (k === "destinatarios") {
+        if (!Array.isArray(m[k])) return;
+        const l = []; m[k].forEach((n) => { if (typeof n === "string" && n && n.length <= 80 && l.indexOf(n) < 0 && l.length < 200) l.push(n); });
+        if (l.length) o[k] = l;
+      } else if (k === "assin") {
+        if (typeof m[k] === "string" && m[k].length <= 400) o[k] = m[k];
       } else if (k === "parecidoCom") {
         if (typeof m[k] === "string" && m[k].trim()) o[k] = m[k].trim().slice(0, 200);
       } else o[k] = typeof m[k] === "string" || typeof m[k] === "number" ? m[k] : String(m[k]);

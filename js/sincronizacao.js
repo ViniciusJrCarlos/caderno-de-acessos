@@ -227,7 +227,7 @@ async function sincronizarAgora(interativo, fixo) {
   let soLeitura = syncSoLeitura(); syncSoLeituraAtual = soLeitura;
   let antigo = ""; syncEstado.appAntigo = "";
   const idAntes = typeof identidadeSessao === "function" ? identidadeSessao() : null; // v2.5.1 (item 1)
-  let recusados = 0;
+  let recusados = 0, recusadosNomes = [];
   reconciliarAbas(); // v3.0.1 (item 1): antes de carimbar, junta o que outra aba deste navegador gravou
   syncEstado.rodando = true; desenharBotaoSync();
   const acoes = syncEstado.acoes.splice(0);
@@ -283,7 +283,7 @@ async function sincronizarAgora(interativo, fixo) {
       if (pf.precisa) precisa = true;
       const perm = await filtrarPermissoesRemoto(r, base, pf.itens, !meta.ultimaSync, { remoto: remoto, copias: copias, remAqui: remAqui, voltaram: voltaram });
       if (perm.mudou) { precisa = true; localMudou = true; }
-      recusados = (perm.recusados || 0) + (pf.desfeitos || 0);
+      recusados = (perm.recusados || 0) + (pf.desfeitos || 0); recusadosNomes = (perm.recusadosNomes || []).concat((pf.desfeitosNomes || []).map((n) => "perfil: " + n));
       const ex = mesclarExtras(remoto, copias, r, conf, remAqui, voltaram);
       if (ex.precisa) precisa = true;
       const histLocal = lerHist();
@@ -319,7 +319,7 @@ async function sincronizarAgora(interativo, fixo) {
       catch (e) { await registrarErro("apagar cópia de conflito", nome, e, a); }
     }
     syncEstado.pendente = false;
-    if (recusados && soLeitura) setTimeout(() => aviso("Dados recusados", "O arquivo da equipe tem " + recusados + (recusados === 1 ? " alteração" : " alterações") + " sem a assinatura do Administrador. " + (recusados === 1 ? "Ela foi recusada" : "Elas foram recusadas") + " e os seus dados continuam como estavam. Avise o Administrador."), 0);
+    if (recusados && soLeitura) setTimeout(() => aviso("Dados recusados", "O arquivo da equipe tem " + recusados + (recusados === 1 ? " alteração" : " alterações") + " sem a assinatura do Administrador. " + (recusados === 1 ? "Ela foi recusada" : "Elas foram recusadas") + " e os seus dados continuam como estavam. Avise o Administrador." + (recusadosNomes.length ? " Itens: " + recusadosNomes.slice(0, 12).join("; ") + (recusadosNomes.length > 12 ? " e mais " + (recusadosNomes.length - 12) : "") + "." : "") + " Fica registrado no Histórico."), 0);
     const textos = resultado.mud.map(textoMudanca);
     resultado.conf.forEach((c) => textos.push(tituloConflito(c) + ": " + c.titulo + ". Ficou a versão mais recente; a outra está guardada (Mais › Conflitos de edição)."));
     registrarHistorico(textos);
@@ -331,7 +331,7 @@ async function sincronizarAgora(interativo, fixo) {
     else if (textos.length === 1) toast(textos[0]);
     else if (textos.length > 1) toast(textos.length + " alterações da equipe recebidas");
     else if (interativo) toast("Arquivo da equipe sincronizado");
-    setTimeout(() => verificarModelos(false), 0);
+    setTimeout(() => { try { limparRepetidos302(); } catch (e) {} verificarModelos(false); }, 0); // v3.0.2: limpeza única + entrega dos envios
     if (typeof verificarSessaoAtiva === "function") setTimeout(() => verificarSessaoAtiva(trocouIdentidade), 0);
     return true;
   } catch (e) {

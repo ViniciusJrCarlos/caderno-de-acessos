@@ -159,11 +159,10 @@ function renderMais(box) {
   if (comPerfis()) { try { blocoPerfis(box); } catch (e) {} }
   blocoArquivoEquipe(box, bloco, comPerfis() ? "mais" : "");
   if (!comPerfis()) { try { blocoPerfis(box); } catch (e) {} }
-  blocoModelos(box);
   try { blocoLixeira(box); } catch (e) {}
   if (equipe) bloco("Compartilhar com a equipe", "Gera o JSON para os outros analistas. Cards Individuais vão sem usuário e sem senha (só título, aplicação, cliente, URL etc.).",
     [btn("btn pri", "download", "Exportar JSON", exportarEquipe)]);
-  bloco("Novo acesso", "Cria um card seu em Meus" + (equipe ? " ou da Equipe." : ". Login e senha ficam só neste aparelho."), [btn("btn", "plus", "Novo acesso", () => abrirFicha(null))]);
+  if (!(typeof analistaPuro === "function" && analistaPuro())) bloco("Novo acesso", "Cria um card seu em Meus" + (equipe ? " ou da Equipe." : ". Login e senha ficam só neste aparelho."), [btn("btn", "plus", "Novo acesso", () => abrirFicha(null))]);
   bloco("Backup pessoal (inclui minhas senhas)", "Arquivo completo, com os usuários e senhas dos seus acessos Individuais. Use só para levar para outro aparelho seu. Não compartilhe.",
     [btn("btn", "lock", "Backup pessoal (inclui minhas senhas)", backupPessoal)]);
   if (equipe) bloco("Importar", "Junta os cards do arquivo com os deste aparelho, só pelo id (cards diferentes com o mesmo nome não se juntam). Cards que só existem aqui continuam. Se o arquivo tiver uma versão mais antiga de um card seu, o app pergunta antes (o padrão é manter o seu). Um usuário ou senha vazio no arquivo nunca apaga o que você já tem; um preenchido substitui o seu se você escolher substituir.",

@@ -7,9 +7,16 @@ document.addEventListener("pointerdown", () => { ignorarClique = false; }, true)
 document.addEventListener("click", (ev) => { if (!ev.target.closest(".menu-card")) fecharMenus(); });
 document.addEventListener("click", () => { if (renderPendente) setTimeout(renderSePendente, 50); });
 /* ---------- v1.9.3+: Novidades (texto vai junto com o app; mais recente primeiro) ---------- */
-const APP_VERSAO = "3.0.1";
+const APP_VERSAO = "3.0.2";
 const NOVIDADES_VISTA = "caderno-novidades-vista";
 const NOVIDADES = [
+  { v: "3.0.2", data: "31/10/2026", itens: [
+    "⏰ Selecionar e enviar: antes o card ia para “Cards compartilhados” e o analista podia ignorar; agora chega direto em Meus de cada analista marcado (sem aceitar nem ignorar), assinado pelo Administrador.",
+    "⏰ Envio: antes dava para enviar o mesmo card de novo e cards da Equipe/arquivados; agora só cards de Meus, quem já recebeu não recebe de novo e o Administrador vê “já recebeu: …” em cada card.",
+    "⏰ Analista: antes via Novo, Novo acesso e a Lixeira de Meus; agora não vê (só preenche os cards recebidos). Cada card recebido é só de quem recebeu, mesmo no mesmo navegador.",
+    "⏰ Entrar: antes a matrícula aceitava letras e dizia o motivo do erro; agora só números (até 7) e a mensagem é “Matrícula ou senha inválida.”.",
+    "⏰ Aviso “versão antiga”: antes aparecia por quem gravou o arquivo (falso aviso); agora só pela versão do perfil. “Dados recusados” lista os itens e tudo fica no Histórico.",
+    "Limpeza única: cópias repetidas em Meus (do mesmo envio ou de card da Equipe, sem senha própria) vão para a Lixeira de Meus, com registro no Histórico."] },
   { v: "3.0.1", data: "31/10/2026", itens: [
     "⏰ Duas abas no mesmo navegador: antes uma aba desfazia a senha trocada na outra; agora uma junta o que a outra salvou (ex.: o Admin troca a senha do Coy crm numa aba e a aba do José recebe a nova, sem voltar a antiga).",
     "⏰ Analista: antes criava, compartilhava e excluía cards em Meus; agora em Meus ficam só os cards que o Administrador enviou (Selecionar e enviar), e ele preenche login, senha, datas e escalonamento. Arquivados ficam só para ver. Criar, compartilhar, arquivar, excluir e reativar são do Administrador.",

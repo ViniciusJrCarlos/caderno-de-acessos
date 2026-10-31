@@ -9,12 +9,12 @@ let itens = [];
  * em lista, busca, contadores, Vencendo, Arquivo, exportações nem na Lixeira. Nada Individual vai para o arquivo da equipe. */
 let itensOcultos = [];
 function individualVisivel(it) {
-  if (it && !compartilhado(it) && !it.modeloId && typeof analistaPuro === "function" && analistaPuro()) return false; // v3.0.1 (item 4): o analista só vê em Meus os cards que o Administrador enviou
-  return true; // v3.0.0 (item 2): sem dono automático nem "São meus?": todos os Meus deste aparelho voltam a aparecer (nada se perde)
-  /* eslint-disable no-unreachable */
   if (!it || compartilhado(it)) return true;
-  if (typeof perfisAtivos !== "function" || !perfisAtivos()) return true; // aparelho sem perfis: como antes
-  return !!it.dono && typeof sessaoPerfilId !== "undefined" && !!sessaoPerfilId && it.dono === sessaoPerfilId;
+  // v3.0.2 (item 2): card recebido do Administrador tem dono = perfil que recebeu; só esse perfil vê (navegador compartilhado)
+  if (it.dono && it.modeloId) return typeof sessaoPerfilId !== "undefined" && !!sessaoPerfilId && it.dono === sessaoPerfilId;
+  if (!it.modeloId && typeof analistaPuro === "function" && analistaPuro()) return false; // v3.0.1 (item 4): o analista só vê em Meus os cards que recebeu
+  // recebido antes da v3.0.2 (sem dono) continua visível como na v3.0.1 (não some com login e senha); vira do perfil quando o envio é reconhecido
+  return true; // v3.0.0 (item 2): os demais Meus deste aparelho aparecem para quem não é analista
 }
 function todosItens() { return itens.concat(itensOcultos); }
 function separarOcultos() {
@@ -22,11 +22,7 @@ function separarOcultos() {
   itens = todos.filter(individualVisivel); itensOcultos = todos.filter((it) => !individualVisivel(it));
   if (typeof fotoIndividuais === "function") fotoMeus = fotoIndividuais();
 }
-function carimbarDono() {
-  return; // v3.0.0 (item 2): não carimba mais dono nos Meus
-  if (typeof sessaoPerfilId === "undefined" || !sessaoPerfilId) return;
-  itens.forEach((it) => { if (it && !compartilhado(it) && !it.dono) it.dono = sessaoPerfilId; });
-}
+function carimbarDono() { /* v3.0.0 (item 2): não carimba mais dono nos Meus (v3.0.2: dono só nos cards recebidos) */ }
 function cardsSemDono() { return itensOcultos.filter((it) => !compartilhado(it) && !it.dono && it.id !== "s12"); }
 let edit = null;
 function hoje() {

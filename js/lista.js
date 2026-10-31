@@ -86,7 +86,7 @@ function render() {
   document.getElementById("contVenc").textContent = nVenc ? String(nVenc) : "";
   // v2.3.0 (item 11): cards compartilhados esperando você decidir (adicionar em Meus ou ignorar)
   const cm = document.getElementById("contMais");
-  if (cm) { let n = 0; try { n = syncEstado.vinculado ? modelosNovos(false).filter(paraMim).length : 0; } catch (e) { n = 0; } cm.textContent = n ? String(n) : ""; cm.title = n ? n + (n === 1 ? " card compartilhado esperando você (Mais › Cards compartilhados)" : " cards compartilhados esperando você (Mais › Cards compartilhados)") : ""; }
+  if (cm) { let n = 0; try { n = 0; } catch (e) { n = 0; } cm.textContent = n ? String(n) : ""; cm.title = n ? n + (n === 1 ? " card compartilhado esperando você (Mais › Cards compartilhados)" : " cards compartilhados esperando você (Mais › Cards compartilhados)") : ""; }
   try { aplicarPapelNaTela(); } catch (e) {} // v2.4.0: menus por papel e aba Gestão
   if (aba === "mais" || aba === "gestao") aba = podeAdminEquipe() ? "adm-pessoas" : "conta-arquivo"; // v2.5.0: a aba Mais saiu
   try { aplicarShell(); } catch (e) {}
@@ -303,10 +303,8 @@ function cardDe(it) {
   if (!it.url) bAb.disabled = true;
   acoes.appendChild(bAb);
   c.appendChild(acoes);
-  if (ind && !it.arquivado_em && aba !== "arquivo" && (it.modeloDono || podeAdminEquipe())) { // v2.3.0 (item 9): só o admin compartilha
-    if (it.modeloDono) c.appendChild(el("div", "mod-compartilhado", "Compartilhado com a equipe (sem login e senha)"));
-    else c.appendChild(btn("btn mod-share", "share", "Compartilhar meu card", () => compartilharMeuCard(it), null, "Envia nome, link, sistema, escalonamento e observações para a equipe, sem login e senha"));
-  }
+  if (ind && it.modeloDono && podeAdminEquipe()) { const ja = destinatariosDe(it).map(nomePerfil).filter(Boolean); if (ja.length) c.appendChild(el("div", "mod-compartilhado", "Enviado para: " + ja.join(", "))); } // v3.0.2
+  else if (ind && it.modeloId && !podeAdminEquipe()) c.appendChild(el("div", "mod-compartilhado", "Recebido do Administrador")); // v3.0.2
   return c;
 }
 function fecharMenus() { document.querySelectorAll(".menu-card").forEach((m) => m.remove()); }
@@ -323,10 +321,6 @@ function abrirMenuCard(it, ancora) {
   m.appendChild(btn("mi", soVer ? "eye" : "edit", soVer ? "Ver detalhes" : "Editar", cur((c) => abrirFicha(c)), null, soVer ? "Ver este acesso (só leitura)" : "Editar este acesso"));
   m.appendChild(btn("mi", "copy", "Copiar usuário", cur((c) => copiar(c.usuario, "Usuário"))));
   if (restr) { m.appendChild(el("p", "mi-dica", "🔒 " + DICA_ANALISTA)); ancora.parentNode.appendChild(m); return; }
-  if (it.visibilidade === "Individual" && !it.arquivado_em) {
-    if (it.modeloDono) m.appendChild(btn("mi", "x", "Parar de compartilhar", () => { fecharMenus(); pararCompartilhar(atual(it) || it); }));
-    else if (podeAdminEquipe()) m.appendChild(btn("mi", "share", "Compartilhar meu card", cur((c) => compartilharMeuCard(c))));
-  }
   if (it.arquivado_em && compartilhado(it) && !podeAdminEquipe()) m.appendChild(el("p", "mi-dica", "🔒 Reativar e excluir: " + DICA_ADMIN));
   else if (it.arquivado_em) {
     m.appendChild(btn("mi ok", "restore", "Reativar", cur((c) => { c.arquivado_em = null; save(); toast("Card reativado"); avisarDuplicadosReativados([c]); })));
