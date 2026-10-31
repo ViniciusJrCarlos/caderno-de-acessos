@@ -16,7 +16,7 @@ const MAX_TENTATIVAS = 5;                              // v2.4.0: 5 erros seguid
 const PERFIS_ITER = 310000;                     // o mesmo padrão da senha de login
 const DICA_ADMIN = "Só o Administrador pode alterar";
 /* Campos do card da Equipe que o analista pode mudar. Observações e horário do card ficam só leitura (fácil de ajustar aqui). */
-const CAMPOS_ANALISTA = []; // v2.5.0: a Equipe é só leitura para o analista (antes: escalonamento, senha, datas e ciclo)
+const CAMPOS_ANALISTA = ["escalonamentos", "escalonamento", "senha", "ultima", "senha_atualizada_em", "ciclo"]; // restaurado da v2.3.0: analista edita senha, ciclo, datas e escalonamento
 const CAMPOS_META = new Set(["id", "updatedAt", "updatedBy", "baseAt", "assin"]);
 let modoAdmin = false;          // só em memória: some no bloqueio, no logout e ao fechar/recarregar a página
 let baseEquipe = null;          // foto dos cards da Equipe aceitos (para desfazer o que o analista não pode mudar)
@@ -509,7 +509,7 @@ function aplicarTravasFicha(it) {
   if (!it) { $("fVisibilidade").value = "Individual"; $("avisoInd").hidden = false; edit.visibilidade = "Individual"; travar("fVisibilidade"); return; }
   if (!compartilhado(it)) { travar("fVisibilidade"); return; } // card de Meus não vira card da Equipe
   CAMPOS_FICHA_ADMIN.forEach(travar);
-  if (papel === "leitura" || papel === "analista") { CAMPOS_FICHA_ANALISTA.forEach(travar); sheet.classList.add("ficha-leitura"); $("fichaTitulo").textContent = "Ver acesso (só leitura)"; sheet.querySelectorAll("#escEdit input, #escEdit select, #escEdit textarea, #escEdit button").forEach((x) => { x.disabled = true; x.setAttribute("data-trava", "1"); x.title = DICA_ADMIN; }); }
+  if (papel === "leitura") { CAMPOS_FICHA_ANALISTA.forEach(travar); sheet.classList.add("ficha-leitura"); $("fichaTitulo").textContent = "Ver acesso (só leitura)"; sheet.querySelectorAll("#escEdit input, #escEdit select, #escEdit textarea, #escEdit button").forEach((x) => { x.disabled = true; x.setAttribute("data-trava", "1"); x.title = DICA_ADMIN; }); } else if (papel === "analista") { $("fichaTitulo").textContent = "Editar acesso (operação)"; }
 }
 /* Importação: o analista não importa para a Equipe (os cards da Equipe do arquivo ficam de fora). */
 function filtrarImportacaoEquipe(lista) {

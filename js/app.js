@@ -35,7 +35,7 @@ const NOVIDADES = [
     "Senha temporária: na primeira entrada, o app pede para criar a sua senha ali mesmo.",
     "Administrador: menu “Administrador ▾” com Pessoas, Perfis, Logs, Configurações e Novidades. A aba Mais e o selo amarelo saíram.",
     "Pessoas: busca por matrícula, ativar/desativar, Resetar senha, Desbloquear, Editar e Excluir (só depois de desativar).",
-    "Analista: Equipe só para ver; Meus continua só no aparelho. A sincronização só recebe o que o Administrador assinou, recusa e avisa o resto e nunca apaga nada.",
+    "Analista: atualiza senha, ciclo, datas e escalonamento na Equipe; Meus continua só no aparelho. A sincronização só recebe o que o Administrador assinou, recusa e avisa o resto e nunca apaga nada.",
     "No celular: receba o arquivo que o Administrador envia em Arquivo e backup › Receber arquivo da equipe.",
     "Nova tela de instalação com o passo a passo do seu aparelho."
   ], fazer: "Entre com a matrícula que o Administrador cadastrou. Quem veio da v2.4.0 sem matrícula entra digitando o nome no campo Matrícula até o Administrador cadastrar." },

@@ -572,7 +572,7 @@ function renderPerfisPag(box) {
     box.appendChild(c);
   };
   card("Administrador", l.filter((p) => p.papel === "admin" && p.ativo).length, ["Cria, edita, arquiva, compartilha e exclui os cards da Equipe", "Cadastra pessoas, define a matrícula, reseta senhas, desbloqueia, desativa e exclui", "Publica o arquivo da equipe (as mudanças saem assinadas)", "Troca a senha da equipe, exporta e importa, vê os Logs"], "perfil-card--admin");
-  card("Analista", l.filter((p) => p.papel !== "admin" && p.ativo).length, ["Vê os cards da Equipe (só leitura: copiar usuário e senha, abrir o link, ver o escalonamento)", "Cria e edita os próprios cards em Meus (ficam só no aparelho dele)", "Só recebe o arquivo da equipe: aceita apenas o que o Administrador assinou e nunca grava nele", "No celular, recebe o arquivo que o Administrador envia"], "perfil-card--analista");
+  card("Analista", l.filter((p) => p.papel !== "admin" && p.ativo).length, ["Vê os cards da Equipe e atualiza senha, ciclo, datas e escalonamento", "Cria e edita os próprios cards em Meus (ficam só no aparelho dele)", "Só recebe o arquivo da equipe: aceita apenas o que o Administrador assinou e nunca grava nele", "No celular, recebe o arquivo que o Administrador envia"], "perfil-card--analista");
   box.appendChild(el("p", "meta gestao__nota", textoHonestoPerfis()));
 }
 const LOGS_POR_PAG = 10;
