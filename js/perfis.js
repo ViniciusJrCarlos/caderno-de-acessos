@@ -16,7 +16,7 @@ const MAX_TENTATIVAS = 5;                              // v2.4.0: 5 erros seguid
 const PERFIS_ITER = 310000;                     // o mesmo padrão da senha de login
 const DICA_ADMIN = "Só o Administrador pode alterar";
 /* Campos do card da Equipe que o analista pode mudar. Observações e horário do card ficam só leitura (fácil de ajustar aqui). */
-const CAMPOS_ANALISTA = ["escalonamentos", "escalonamento", "senha", "ultima", "senha_atualizada_em", "ciclo"]; // restaurado da v2.3.0: analista edita senha, ciclo, datas e escalonamento
+const CAMPOS_ANALISTA = ["escalonamentos", "escalonamento", "senha", "ultima", "senha_atualizada_em", "ciclo", "horario"]; // v3.0.5 (item c): horário do card da Equipe liberado para o analista // restaurado da v2.3.0: analista edita senha, ciclo, datas e escalonamento
 const CAMPOS_META = new Set(["id", "updatedAt", "updatedBy", "baseAt", "assin"]);
 let modoAdmin = false;          // só em memória: some no bloqueio, no logout e ao fechar/recarregar a página
 let baseEquipe = null;          // foto dos cards da Equipe aceitos (para desfazer o que o analista não pode mudar)
@@ -150,7 +150,7 @@ function guardarPermissoes() {
       vm.add(it.id);
       const o = Object.assign({}, it); let mudou = false;
       new Set(Object.keys(b).concat(Object.keys(it))).forEach((k) => {
-        if (CAMPOS_META.has(k) || k === "modeloVersao" || igualP(b[k], it[k])) return;
+        if (CAMPOS_META.has(k) || k === "modeloVersao" || k === "escVersao" || igualP(b[k], it[k])) return; // v3.0.5 (item b): escVersao é controle interno (sem aviso falso)
         if (!b.arquivado_em && CAMPOS_MEUS_ANALISTA.indexOf(k) >= 0) return;
         if (Object.prototype.hasOwnProperty.call(b, k)) o[k] = b[k]; else delete o[k]; mudou = true;
       });
@@ -544,7 +544,7 @@ function aplicarTravasFicha(it) {
   const tudo = () => { CAMPOS_FICHA_ADMIN.concat(CAMPOS_FICHA_ANALISTA).forEach(travar); sheet.classList.add("ficha-leitura"); $("fichaTitulo").textContent = "Ver acesso (só leitura)"; sheet.querySelectorAll("#escEdit input, #escEdit select, #escEdit textarea, #escEdit button, #escAdd").forEach((x) => { x.disabled = true; x.setAttribute("data-trava", "1"); }); };
   if (restr && it.arquivado_em) { tudo(); return; } // arquivado: só leitura
   if (!compartilhado(it)) { if (restr) CAMPOS_FICHA_ADMIN.filter((k) => k !== "fUsuario" && k !== "fHorario").forEach(travar); else travar("fVisibilidade"); return; } // card de Meus não vira card da Equipe; analista só preenche login, senha, datas, horário (v3.0.3), resumo e escalonamento
-  CAMPOS_FICHA_ADMIN.forEach(travar);
+  CAMPOS_FICHA_ADMIN.filter((k) => papel !== "analista" || k !== "fHorario").forEach(travar); // v3.0.5 (item c): analista edita só o Horário (além dos campos de operação)
   if (papel === "leitura") { CAMPOS_FICHA_ANALISTA.forEach(travar); sheet.classList.add("ficha-leitura"); $("fichaTitulo").textContent = "Ver acesso (só leitura)"; sheet.querySelectorAll("#escEdit input, #escEdit select, #escEdit textarea, #escEdit button").forEach((x) => { x.disabled = true; x.setAttribute("data-trava", "1"); x.title = DICA_ADMIN; }); } else if (papel === "analista") { $("fichaTitulo").textContent = "Editar acesso (operação)"; }
 }
 /* Importação: o analista não importa para a Equipe (os cards da Equipe do arquivo ficam de fora). */

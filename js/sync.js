@@ -259,6 +259,8 @@
     const o = { id: e.id.slice(0, 120), tipo: tipo, card: txt(e.card, 200), quem: txt(e.quem, 120), quando: txt(e.quando, 40), escopo: e.escopo === "Meu" ? "Meu" : "Equipe" };
     if (e.texto) o.texto = txt(e.texto, 300);
     if (e.local) o.local = true;
+    if (e.re) o.re = /^(\d{1,7}|ADMIN)$/.test(String(e.re)) ? String(e.re) : ""; // v3.0.5 (item f): matrícula de quem fez (Administrador: ADMIN)
+    if (!o.re) delete o.re;
     return o;
   }
   function limparHistorico(l) { return (Array.isArray(l) ? l : []).slice(0, 500).map(limparEntrada).filter(Boolean); }

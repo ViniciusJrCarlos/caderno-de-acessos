@@ -641,13 +641,13 @@ function renderLogs(box) {
   const pg = l.slice((logsFiltro.pag - 1) * LOGS_POR_PAG, logsFiltro.pag * LOGS_POR_PAG);
   const tab = el("div", "logs-tabela"); tab.id = "logsTabela"; tab.setAttribute("role", "table");
   const cab = el("div", "logs-linha logs-cab"); cab.setAttribute("role", "row");
-  ["Data (BRT)", "Usuário", "Ação", "Detalhes"].forEach((t) => { const c = el("span", "", t); c.setAttribute("role", "columnheader"); cab.appendChild(c); });
+  ["Data (BRT)", "Usuário", "RE", "Ação", "Detalhes"].forEach((t) => { const c = el("span", "", t); c.setAttribute("role", "columnheader"); cab.appendChild(c); });
   tab.appendChild(cab);
   if (!pg.length) tab.appendChild(el("p", "vazio logs-vazio", "Nenhuma ação neste período."));
   pg.forEach((e) => {
     const r = el("div", "logs-linha"); r.setAttribute("role", "row");
     const det = e.tipo === "texto" ? String(e.texto || "").replace(/^[^:]+:\s*/, "") : (e.card || "") + (e.escopo ? " · " + (e.escopo === "Meu" ? "Meus" : "Equipe") : "");
-    [["Data", dataBRT(e.quando)], ["Usuário", e.quem || "—"], ["Ação", acaoDoLog(e)], ["Detalhes", det || "—"]].forEach(([k, v]) => { const c = el("span", "logs-cel", v); c.dataset.rot = k; c.setAttribute("role", "cell"); r.appendChild(c); });
+    [["Data", dataBRT(e.quando)], ["Usuário", e.quem || "—"], ["RE", reDoLog(e)], ["Ação", acaoDoLog(e)], ["Detalhes", det || "—"]].forEach(([k, v]) => { const c = el("span", "logs-cel", v); c.dataset.rot = k; c.setAttribute("role", "cell"); r.appendChild(c); });
     tab.appendChild(r);
   });
   box.appendChild(tab);

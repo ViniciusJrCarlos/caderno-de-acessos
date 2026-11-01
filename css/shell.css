@@ -131,7 +131,7 @@ main.area-pag .painel-mais { margin:0 0 12px; }
 @media (max-width:999px) { .topo .sync-btn .sync-txt { display:none; } .topo .sync-btn { padding:8px; } #navRodape { display:none !important; } }
 @media (min-width:720px) {
   .logs-cab { display:grid; color:var(--muted); font-weight:600; font-size:12.5px; background:var(--surface2); }
-  .logs-linha { grid-template-columns:150px 150px 200px minmax(0,1fr); gap:12px; }
+  .logs-linha { grid-template-columns:150px 150px 80px 200px minmax(0,1fr); gap:12px; } /* v3.0.5: coluna RE */
   .logs-cel::before { content:none; }
   .pessoa-linha { grid-template-columns:48px minmax(0,1fr) auto; }
   .pessoa-acoes { grid-column:auto; flex-wrap:nowrap; }

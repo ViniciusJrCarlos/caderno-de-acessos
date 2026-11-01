@@ -7,9 +7,17 @@ document.addEventListener("pointerdown", () => { ignorarClique = false; }, true)
 document.addEventListener("click", (ev) => { if (!ev.target.closest(".menu-card")) fecharMenus(); });
 document.addEventListener("click", () => { if (renderPendente) setTimeout(renderSePendente, 50); });
 /* ---------- v1.9.3+: Novidades (texto vai junto com o app; mais recente primeiro) ---------- */
-const APP_VERSAO = "3.0.4";
+const APP_VERSAO = "3.0.5";
 const NOVIDADES_VISTA = "caderno-novidades-vista";
 const NOVIDADES = [
+  { v: "3.0.5", data: "01/11/2026", itens: [
+    "Log: não aparece mais “Card excluído” falso quando o Administrador e o analista usam o mesmo navegador em abas diferentes.",
+    "Card enviado: editar o escalonamento em Meus não mostra mais o aviso falso “Só o Administrador pode alterar”.",
+    "⏰ Card da Equipe: o analista passa a editar também o campo Horário (os demais campos continuam com o Administrador).",
+    "Log: mover um card de Meus para a Equipe (ou da Equipe para Meus) vira uma linha só, “Card movido de Meus para Equipe”.",
+    "Selecionar e enviar: aparecem todos os cards ativos de Meus do Administrador (Equipe, arquivados e recebidos continuam fora).",
+    "⏰ Logs: nova coluna RE com a matrícula de quem fez a ação (Administrador aparece como ADMIN).",
+  ] },
   { v: "3.0.4", data: "31/10/2026", itens: [
     "⏰ Bloqueio por senha errada: em Pessoas aparece “Bloqueado até HH:MM” em vermelho, com “5 senhas erradas às HH:MM” e o botão Desbloquear em vermelho; ao fim dos 15 minutos volta sozinho para Ativo.",
     "⏰ O bloqueio de 15 minutos e o Desbloquear do Administrador agora valem em todos os aparelhos (pelo arquivo da equipe) e acabam no horário certo.",

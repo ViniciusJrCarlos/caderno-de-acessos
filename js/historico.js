@@ -15,8 +15,20 @@ function idAparelho() {
 }
 function lerHist() { return window.CadernoSync ? CadernoSync.limparHistorico(lerJSON(HIST2_KEY, [])) : []; }
 function gravarHist(l) { Dados.gravarTexto(HIST2_KEY, JSON.stringify(window.CadernoSync ? CadernoSync.mesclarHistorico([l], 100) : l.slice(0, 100))); }
+/* v3.0.5 (item f): RE (matrícula) do perfil da sessão desta aba; Administrador = "ADMIN". */
+function reSessao() {
+  try { if (typeof sessaoPerfilId === "undefined" || !sessaoPerfilId || typeof lerPerfis !== "function") return ""; const p = lerPerfis().find((x) => x.id === sessaoPerfilId); if (!p) return ""; return p.papel === "admin" ? "ADMIN" : String(p.matricula || ""); } catch (e) { return ""; }
+}
+function reDoLog(e) {
+  if (e && e.re) return e.re;
+  try { const ps = e && e.quem && typeof lerPerfis === "function" ? lerPerfis().filter((p) => normTxt(p.nome) === normTxt(e.quem)) : []; if (ps.length === 1) return ps[0].papel === "admin" ? "ADMIN" : String(ps[0].matricula || "") || "—"; } catch (x) {}
+  return "—"; // registro antigo sem RE e nome repetido/desconhecido
+}
+/* v3.0.5 (item d): ids movidos entre Meus e Equipe neste save (uma linha clara no log, sem "Parou de compartilhar"/"Card adicionado"/"Card excluído"). */
+const movidosMeusEquipe = new Set();
 function addHist(e) {
   const o = Object.assign({ id: "h-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), card: "", quem: autor(), quando: new Date().toISOString(), escopo: "Equipe" }, e);
+  if (!o.re && !e.quem) { const re = reSessao(); if (re) o.re = re; }
   const l = lerHist().filter((x) => x.id !== o.id); l.unshift(o); gravarHist(l);
 }
 function tipoMudanca(antes, it) {
@@ -43,14 +55,16 @@ function registrarMeus() {
     nova.forEach((j, id) => {
       const a = fotoMeus.get(id); if (a === j) return;
       const antes = a ? JSON.parse(a) : null, it = JSON.parse(j);
-      if (restaurandoMeus.has(id)) addHist({ id: "ir-" + id + "-" + agora, tipo: "restaurado", card: String(nomeDe(it)).slice(0, 200), texto: "Card restaurado por " + (autor() || "você"), escopo: "Meu", local: true, quando: agora });
+      if (!a && movidosMeusEquipe.has(id)) { /* v3.0.5 (item d): veio da Equipe, a linha "movido" já foi registrada */ }
+      else if (restaurandoMeus.has(id)) addHist({ id: "ir-" + id + "-" + agora, tipo: "restaurado", card: String(nomeDe(it)).slice(0, 200), texto: "Card restaurado por " + (autor() || "você"), escopo: "Meu", local: true, quando: agora });
       else histAcao(tipoMudanca(antes, it), it, "Meu", "i-" + id + "-" + agora, agora);
       // v2.0.0: card Meu também ganha data de alteração (só neste aparelho), para a reimportação não voltar a uma versão antiga
       const vivo = itens.find((x) => x.id === id); if (vivo && !histLote) { vivo.updatedAt = agora; nova.set(id, JSON.stringify(vivo)); }
     });
-    fotoMeus.forEach((j, id) => { if (!nova.has(id) && !itens.some((x) => x.id === id)) { if (paraLixeiraMeus.has(id)) addHist({ id: "ix-" + id + "-" + agora, tipo: "lixeira", card: String(nomeDe(JSON.parse(j))).slice(0, 200), escopo: "Meu", local: true, quando: agora }); else histAcao("excluido", JSON.parse(j), "Meu", "ix-" + id + "-" + agora, agora); } });
+    fotoMeus.forEach((j, id) => { if (!nova.has(id) && !todosItens().some((x) => x.id === id)) { /* v3.0.5 (item a): oculto (de outro perfil) não é exclusão */ if (movidosMeusEquipe.has(id)) return; if (paraLixeiraMeus.has(id)) addHist({ id: "ix-" + id + "-" + agora, tipo: "lixeira", card: String(nomeDe(JSON.parse(j))).slice(0, 200), escopo: "Meu", local: true, quando: agora }); else histAcao("excluido", JSON.parse(j), "Meu", "ix-" + id + "-" + agora, agora); } });
   }
   fotoMeus = nova;
+  movidosMeusEquipe.clear();
 }
 /* Entradas vindas da sincronização (mudanças de outros analistas). Mesmo id da entrada criada por quem fez: não duplica. */
 function histDeMudanca(m) {

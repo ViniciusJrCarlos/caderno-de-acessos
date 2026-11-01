@@ -46,6 +46,8 @@ function carimbarMudancas() {
       let antes = null; try { antes = meta.marcas[it.id] ? JSON.parse(meta.marcas[it.id]) : null; } catch (e) { antes = {}; }
       registrarAcao(!antes ? "novo card" : (!antes.arquivado_em && it.arquivado_em) ? "arquivar" : (antes.arquivado_em && !it.arquivado_em) ? "reativar" : antes.senha !== it.senha ? "atualizar senha" : "salvar", nomeDe(it));
       if (restaurando.has(it.id)) addHist({ id: "r-" + it.id + "-" + agora, tipo: "restaurado", card: String(nomeDe(it)).slice(0, 200), texto: "Card restaurado por " + (quem || "analista"), escopo: "Equipe", quando: agora });
+      else if (!antes && fotoMeus && fotoMeus.has(it.id)) { movidosMeusEquipe.add(it.id); addHist({ id: "mv-" + it.id + "-" + agora, tipo: "texto", card: String(nomeDe(it)).slice(0, 200), escopo: "Equipe", quando: agora, texto: "Card movido de Meus para Equipe: " + String(nomeDe(it)).slice(0, 200) }); } // v3.0.5 (item d)
+      else if (antes && antes.modeloDono && !it.modeloDono && tipoMudanca(antes, it) === "parou") { /* v3.0.5 (item d): limpeza automática do envio ao mover para a Equipe, não é ação de ninguém */ }
       else histAcao(tipoMudanca(antes, it), it, "Equipe", "c-" + it.id + "-" + agora, agora);
       // v2.0.0: baseAt = versão em que esta edição se baseou (a última vista na sincronização), para detectar edição simultânea
       it.baseAt = Object.prototype.hasOwnProperty.call(bases, it.id) ? (bases[it.id] || "") : (it.updatedAt || "");
@@ -60,7 +62,8 @@ function carimbarMudancas() {
       rem = rem.filter((t) => t.id !== id);
       let titulo = antigo ? nomeDe(antigo) : ""; try { if (!titulo) titulo = nomeDe(JSON.parse(meta.marcas[id])); } catch (e) {}
       registrarAcao("excluir", titulo);
-      if (paraLixeira.has(id)) addHist({ id: "x-" + id + "-" + agora, tipo: "lixeira", card: String(titulo).slice(0, 200), escopo: "Equipe", quando: agora });
+      if (antigo && !compartilhado(antigo)) { movidosMeusEquipe.add(id); addHist({ id: "mv-" + id + "-" + agora, tipo: "texto", card: String(titulo).slice(0, 200), escopo: "Equipe", quando: agora, texto: "Card movido da Equipe para Meus: " + String(titulo).slice(0, 200) }); } // v3.0.5 (item d)
+      else if (paraLixeira.has(id)) addHist({ id: "x-" + id + "-" + agora, tipo: "lixeira", card: String(titulo).slice(0, 200), escopo: "Equipe", quando: agora });
       else histAcao("excluido", { titulo: titulo }, "Equipe", "x-" + id + "-" + agora, agora);
       rem.push({ id: id, deletedAt: agora, deletedBy: quem, titulo: titulo });
       if (typeof marcarAssinar === "function") marcarAssinar("t:" + id);

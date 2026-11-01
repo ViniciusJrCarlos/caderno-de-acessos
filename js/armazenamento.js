@@ -96,7 +96,7 @@ function reconciliarAbas() {
   itens = saida; itensOcultos = []; separarOcultos();
   deFora.forEach((r) => {
     const j = JSON.stringify(r);
-    if (fotoMeus && !compartilhado(r)) fotoMeus.set(r.id, j);
+    if (fotoMeus && !compartilhado(r) && individualVisivel(r)) fotoMeus.set(r.id, j); // v3.0.5 (item a): card oculto de outra aba não entra na foto (sem "Card excluído" falso)
     if (typeof baseEquipe !== "undefined" && baseEquipe && compartilhado(r)) baseEquipe.set(r.id, JSON.parse(j));
     if (typeof baseMeus !== "undefined" && baseMeus && !compartilhado(r)) baseMeus.set(r.id, JSON.parse(j));
   });
