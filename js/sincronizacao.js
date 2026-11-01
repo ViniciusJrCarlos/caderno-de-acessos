@@ -73,6 +73,7 @@ function carimbarMudancas() {
   Dados.gravarTexto(REMOVIDOS_KEY, JSON.stringify(rem));
   itens.filter(compartilhado).forEach((it) => { novas[it.id] = marcaDe(it); });
   meta.marcas = novas; gravarMeta(meta);
+  try { if (capturarEscRecebidos()) mudou = true; } catch (e) {} // v3.0.4 (item 6)
   if (atualizarMeusModelos()) mudou = true;
   return mudou;
 }
@@ -200,17 +201,36 @@ function senhaPropriaParaGravar(doc, perfis, bruto) {
   const eu = meuPerfil(perfis); if (!eu || eu.papel === "admin" || !eu.senhaHash) return false;
   const i = doc.perfis.findIndex((p) => p && String(p.id) === eu.id); if (i < 0) return false;
   const rp = doc.perfis[i];
-  if (!rp.senhaTemp || eu.senhaTemp || eu.senhaHash === rp.senhaHash || CadernoSync.ts(eu.updatedAt) <= CadernoSync.ts(rp.updatedAt)) return false;
+  // v3.0.4 (item 3): também a troca normal ("Trocar minha senha"), com a prova de que sabia a senha anterior (trocaProva)
+  if (!(rp.senhaTemp || eu.trocaProva) || eu.senhaTemp || eu.senhaHash === rp.senhaHash || CadernoSync.ts(eu.updatedAt) <= CadernoSync.ts(rp.updatedAt)) return false;
   const novo = Object.assign({}, rp); CAMPOS_TROCA_SENHA.forEach((k) => { novo[k] = eu[k]; });
+  if (eu.trocaProva && !rp.senhaTemp) novo.trocaProva = eu.trocaProva; else delete novo.trocaProva;
   novo.updatedAt = eu.updatedAt; novo.updatedBy = eu.updatedBy || eu.nome;
   doc.perfis[i] = novo; return true;
+}
+/* v3.0.4 (item 6): o destinatário grava só o escComp dos envios para ele. */
+function escCompParaGravar(doc) {
+  if (!doc || !Array.isArray(doc.modelos)) return 0;
+  const loc = new Map(modelosLocais().itens.map((x) => [x.id, x])); let n = 0;
+  doc.modelos.forEach((rm, i) => {
+    const l = rm && loc.get(rm.id); if (!l || !l.escComp || !paraMim(rm) || normTxt(l.escComp.por) !== normTxt(autor())) return;
+    if (rm.escComp && CadernoSync.ts(rm.escComp.em) >= CadernoSync.ts(l.escComp.em)) return;
+    doc.modelos[i] = Object.assign({}, rm, { escComp: JSON.parse(JSON.stringify(l.escComp)) }); n++;
+  });
+  return n;
+}
+/* v3.0.4 (item 7): bloqueio de 15 min (5 senhas erradas) que aconteceu neste aparelho vai para o arquivo (só bloqueio; desbloqueio é do Administrador). */
+function travasParaGravar(doc, perfis) {
+  if (!doc || !Array.isArray(doc.perfis) || !perfis) return 0; let n = 0;
+  perfis.forEach((p) => { if (p && p.trava && !p.trava.livre && p.trava.ate > Date.now() && travaNoDoc(doc, p.id, p.trava)) n++; });
+  return n;
 }
 function restritoParaGravar(remoto0, perfis, histEq, bruto) {
   if (!remoto0 || typeof remoto0 !== "object") return null;
   const doc = presencaParaGravar(remoto0, perfis) || JSON.parse(JSON.stringify(remoto0));
   let mudou = JSON.stringify(doc.perfis) !== JSON.stringify(remoto0.perfis);
   if (senhaPropriaParaGravar(doc, perfis, bruto)) mudou = true;
-  const n = operacaoParaGravar(doc);
+  const n = operacaoParaGravar(doc) + escCompParaGravar(doc) + travasParaGravar(doc, perfis);
   if (n) {
     mudou = true;
     const ids = new Set((remoto0.historico || []).map((e) => e.id)), eu = normTxt(autor());
@@ -220,7 +240,7 @@ function restritoParaGravar(remoto0, perfis, histEq, bruto) {
   // v3.0.3 (item 13): linhas de Log da própria pessoa ("Senha alterada pelo próprio usuário") que a gravação direta perdeu
   // (corrida com a sincronização logo após entrar) vão de novo, mesmo sem operação de card. Só essas linhas, só do próprio autor.
   const idsR = new Set((doc.historico || []).map((e) => e.id)), eu2 = normTxt(autor());
-  const linhasPl = (histEq || []).filter((e) => e && /^pl-/.test(String(e.id)) && !idsR.has(e.id) && normTxt(e.quem || "") === eu2 && /^Senha alterada pelo próprio usuário: /.test(String(e.texto || "")));
+  const linhasPl = (histEq || []).filter((e) => e && /^(pl|ec)-/.test(String(e.id)) && !idsR.has(e.id) && normTxt(e.quem || "") === eu2 && (/^Senha alterada pelo próprio usuário: /.test(String(e.texto || "")) || (/^ec-/.test(String(e.id)) && /^Escalonamento do card enviado editado: /.test(String(e.texto || ""))))); // v3.0.4 (item 6)
   if (linhasPl.length) { doc.historico = CadernoSync.mesclarHistorico([doc.historico || [], linhasPl], CadernoSync.HIST_MAX); mudou = true; }
   if (!mudou) return null;
   delete doc.gravacao;
@@ -280,6 +300,10 @@ async function sincronizarAgora(interativo, fixo) {
         localMudou = localMudou || r2.localMudou; precisa = true; r = r2;
         rm = CadernoSync.mesclar({ itens: rm.itens, removidos: rm.removidos }, CadernoSync.modelosDoDoc(c.doc), "", null);
       });
+      // v3.0.4 (item 6): escalonamento compartilhado do card enviado (o mais novo vale, nos dois sentidos)
+      { const remM = CadernoSync.modelosDoDoc(remoto); mesclarEscComp(rm, [modelosLocais(), remM].concat(copias.map((c) => CadernoSync.modelosDoDoc(c.doc))));
+        const rmap = new Map(((remM && remM.itens) || []).map((x) => [x.id, x]));
+        if (rm.itens.some((x) => JSON.stringify(x.escComp || null) !== JSON.stringify((rmap.get(x.id) || {}).escComp || null) && rmap.has(x.id))) precisa = true; }
       copiasFechadas = copiasFechadas.filter((n, i, l) => l.indexOf(n) === i);
       // v1.9.7: histórico da Equipe viaja no arquivo; primeiro o que veio do arquivo (vence pelo id), depois o deste aparelho e o deduzido das mudanças
       // v2.0.0: lixeira da Equipe e cópias de conflito (juntadas com a cópia local, que repõe o que um app v1.9.x tenha apagado)

@@ -90,14 +90,69 @@ function registrarErroLogin(mat, perfil) {
   Object.keys(o).forEach((x) => { if (o[x] && o[x].ate && o[x].ate < agora - TRAVA_LOGIN_MS) delete o[x]; });
   const t = o[k] && !(o[k].ate && agora >= o[k].ate) ? o[k] : { n: 0, ate: 0 };
   t.n = (t.n || 0) + 1; let travou = false;
-  if (t.n >= TRAVA_LOGIN_MAX) { t.n = 0; t.ate = agora + TRAVA_LOGIN_MS; t.s = saltAtual(perfil); travou = true; }
+  if (t.n >= TRAVA_LOGIN_MAX) { t.n = 0; t.ate = agora + TRAVA_LOGIN_MS; t.s = saltAtual(perfil); t.em = new Date(agora).toISOString(); travou = true; }
   o[k] = t; Dados.gravarTexto(TRAVA_LOGIN_KEY, JSON.stringify(o));
-  if (travou && perfil) publicarLinhaLog("Bloqueio temporário (" + TRAVA_LOGIN_MAX + " senhas erradas): " + perfil.nome, perfil.nome);
+  if (travou && perfil) {
+    const tv = { em: t.em, ate: t.ate }; if (t.s) tv.s = t.s;
+    (async () => { // v3.0.4 (item 7): o bloqueio vai no arquivo da equipe e vale nos outros aparelhos depois da sincronização
+      try { await gravarTravaPerfil(perfil.id, tv); } catch (e) {}
+      await publicarLinhaLog("Bloqueio temporário (" + TRAVA_LOGIN_MAX + " senhas erradas): " + perfil.nome, perfil.nome, (doc) => travaNoDoc(doc, perfil.id, tv));
+      try { renderPessoasSeAberto(); agendarFimTravas(); } catch (e) {}
+    })();
+  }
   return travou;
 }
+/* ---------- v3.0.4 (item 7): bloqueio de 15 min e Desbloquear pelo arquivo da equipe ----------
+ * O perfil leva "trava" { em, ate, s } (bloqueio) ou { em, livre:1, assin } (desbloqueio assinado pelo Administrador). Vence o mais
+ * novo (em), sem mexer no updatedAt nem na assinatura do perfil. Desbloqueio sem assinatura válida é ignorado (js/assinatura.js). */
+function travaNoDoc(doc, id, tv) {
+  if (!doc || !Array.isArray(doc.perfis)) return false;
+  const rp = doc.perfis.find((x) => x && x.id === id); if (!rp) return false;
+  if (rp.trava && CadernoSync.ts(rp.trava.em) >= CadernoSync.ts(tv.em)) return false;
+  rp.trava = Object.assign({}, tv); return true;
+}
+async function gravarTravaPerfil(id, tv) {
+  const l = await perfisCompletos(); const p = l.find((x) => x.id === id); if (!p) return false;
+  if (p.trava && CadernoSync.ts(p.trava.em) >= CadernoSync.ts(tv.em)) return false;
+  p.trava = Object.assign({}, tv); await gravarPerfis(l); return true;
+}
+function msgTrava(id, tv) { return "tl|" + id + "|" + (tv.em || "") + "|" + (tv.livre ? 1 : 0); }
+/* Desbloquear (Administrador): limpa aqui e publica o desbloqueio assinado. */
+async function desbloquearPessoa(p) {
+  gravarTentativas(p.id, 0); limparTravaPerfil(p);
+  const tv = { em: new Date().toISOString(), ate: 0, livre: 1 };
+  try { if (chaveAdmin) tv.assin = await assinar(msgTrava(p.id, tv)); } catch (e) {}
+  await gravarTravaPerfil(p.id, tv);
+  histPerfil("Conta desbloqueada: " + p.nome);
+  toast(p.nome + " desbloqueado(a)");
+  agendarSync();
+}
+/* Depois de juntar os perfis: aplica neste aparelho os bloqueios e desbloqueios que vieram do arquivo. */
+function aplicarTravasPerfis(l) {
+  const o = lerTravas(); let mudou = false; const agora = Date.now();
+  (l || []).forEach((p) => {
+    if (!p || !p.trava || !p.matricula) return;
+    const k = chaveTrava(p.matricula), loc = o[k], tv = p.trava;
+    if (tv.livre) { if (loc && (loc.ate || loc.n) && CadernoSync.ts(loc.em) <= CadernoSync.ts(tv.em)) { delete o[k]; mudou = true; } return; }
+    if (tv.ate > agora && (!loc || (loc.ate || 0) < tv.ate)) { o[k] = { n: 0, ate: tv.ate, s: tv.s || "", em: tv.em }; mudou = true; }
+  });
+  if (mudou) Dados.gravarTexto(TRAVA_LOGIN_KEY, JSON.stringify(o));
+  agendarFimTravas();
+  return mudou;
+}
+/* Item 1: quando o bloqueio acaba, Pessoas volta sozinho para "Ativo". */
+let fimTravasTimer = 0;
+function agendarFimTravas() {
+  try {
+    clearTimeout(fimTravasTimer); const agora = Date.now();
+    const prox = Object.values(lerTravas()).map((t) => (t && t.ate) || 0).filter((a) => a > agora).sort((a, b) => a - b)[0];
+    if (prox) fimTravasTimer = setTimeout(() => { try { renderPessoasSeAberto(); } catch (e) {} agendarFimTravas(); }, Math.min(prox - agora + 300, 2147483000));
+  } catch (e) {}
+}
+function horaHM(ms) { const d = new Date(ms); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
 function limparTravaPerfil(p) { if (!p) return; if (p.matricula) limparTrava(p.matricula); limparTrava("id-" + p.id); }
 /* Linha de Log: no histórico deste aparelho e, quando a pasta está liberada, direto no arquivo da equipe (o Administrador vê). Sem senha. */
-async function publicarLinhaLog(texto, quem) {
+async function publicarLinhaLog(texto, quem, extra) {
   const linha = { id: "pl-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), tipo: "texto", card: "", quem: quem || autor(), quando: new Date().toISOString(), escopo: "Equipe", texto: texto };
   try { addHist(linha); } catch (e) {}
   try {
@@ -107,6 +162,7 @@ async function publicarLinhaLog(texto, quem) {
     if (!d || !CadernoSync.docValido(d) || versaoArquivoNova(d)) return false;
     const doc = JSON.parse(JSON.stringify(d));
     doc.historico = CadernoSync.mesclarHistorico([doc.historico || [], [linha]], CadernoSync.HIST_MAX);
+    if (extra) { try { extra(doc); } catch (e) {} } // v3.0.4 (item 7): o bloqueio vai na mesma gravação
     delete doc.gravacao;
     await a.gravar(await fecharDocEquipe(doc, bruto));
     return true;

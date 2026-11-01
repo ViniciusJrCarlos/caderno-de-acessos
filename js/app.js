@@ -7,9 +7,18 @@ document.addEventListener("pointerdown", () => { ignorarClique = false; }, true)
 document.addEventListener("click", (ev) => { if (!ev.target.closest(".menu-card")) fecharMenus(); });
 document.addEventListener("click", () => { if (renderPendente) setTimeout(renderSePendente, 50); });
 /* ---------- v1.9.3+: Novidades (texto vai junto com o app; mais recente primeiro) ---------- */
-const APP_VERSAO = "3.0.3";
+const APP_VERSAO = "3.0.4";
 const NOVIDADES_VISTA = "caderno-novidades-vista";
 const NOVIDADES = [
+  { v: "3.0.4", data: "31/10/2026", itens: [
+    "⏰ Bloqueio por senha errada: em Pessoas aparece “Bloqueado até HH:MM” em vermelho, com “5 senhas erradas às HH:MM” e o botão Desbloquear em vermelho; ao fim dos 15 minutos volta sozinho para Ativo.",
+    "⏰ O bloqueio de 15 minutos e o Desbloquear do Administrador agora valem em todos os aparelhos (pelo arquivo da equipe) e acabam no horário certo.",
+    "⏰ Saiu o bloqueio definitivo antigo: contas que ainda estavam bloqueadas são liberadas pelo Administrador ao entrar (com registro no Log). Resetar senha e Inativar continuam iguais.",
+    "⏰ Trocar minha senha (analista): a senha nova passa a valer nos outros aparelhos, a antiga deixa de valer e as sessões abertas nos outros aparelhos saem.",
+    "⏰ Matrícula: não pode mais ser alterada depois do cadastro (nem por sincronização ou importação). Se estiver errada, desative e cadastre de novo.",
+    "Envio de cards: o aviso mostra primeiro para quem foi enviado e depois quem já tinha o card.",
+    "⏰ Card enviado: o escalonamento é compartilhado entre o Administrador e quem recebeu (editar de um lado aparece do outro, com o autor no Log). Usuário e senha continuam individuais.",
+  ] },
   { v: "3.0.3", data: "31/10/2026", itens: [
     "⏰ Senha errada: antes 5 erros bloqueavam a conta até o Administrador desbloquear e a tela dizia “Restam N”; agora 5 erros bloqueiam a entrada por 15 minutos (também para o Administrador, mesmo apertando F5), sem contador, com a mensagem “Matrícula ou senha inválida.” e registro no Histórico.",
     "⏰ Senha pessoal: antes bastava ser forte; agora também não pode ter a matrícula, o nome, “caderno” ou “acessos”, nem ser uma senha comum, nem repetir uma das 3 últimas.",

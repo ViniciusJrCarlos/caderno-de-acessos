@@ -71,7 +71,9 @@ main.area-pag { column-width:auto; columns:auto; display:block; padding:12px; ma
 .chip-st { display:inline-flex; align-items:center; gap:5px; border-radius:999px; padding:2px 9px; font-size:12px; font-weight:600; background:var(--surface2); color:var(--muted); border:1px solid var(--line); }
 .chip-st::before { content:""; width:6px; height:6px; border-radius:50%; background:currentColor; }
 .chip-st--ativo { color:var(--green); }
-.chip-st--bloqueado { color:var(--red); }
+.chip-st--bloqueado { color:#fff; background:var(--red); border-color:var(--red); } /* v3.0.4 (item 1) */
+.btn.btn-bloq, .btn-bloq { background:var(--red); border-color:var(--red); color:#fff; } /* v3.0.4 (item 1): Desbloquear vermelho cheio */
+.trava-dica { display:block; color:var(--muted); font-size:12px; margin-top:4px; } /* v3.0.4 (item 4) */
 .chip-st--desativado { color:var(--muted); }
 .chip-st--sem-senha { color:var(--ylw); }
 .chip-st--admin { color:var(--info); }

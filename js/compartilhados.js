@@ -52,6 +52,7 @@ function reporExtrasModelos(rm, remotoModelos) {
 function atualizarMeusModelos() {
   if (!window.CadernoSync || (typeof analistaPuro === "function" && analistaPuro())) return false; // v3.0.2: a aba do analista nunca mexe nos envios do admin (mesmo navegador)
   adotarModelosOrfaos();
+  try { adotarEscRecebidos(); } catch (e) {} // v3.0.4 (item 6)
   const meus = meusModelos(); if (!meus.length) return false;
   const base = lerJSON(MODELOS_BASE_KEY, {}); let baseMudou = false;
   const m = modelosLocais(); const agora = new Date().toISOString(); const quem = autor();
@@ -68,7 +69,11 @@ function atualizarMeusModelos() {
     if (i < 0) return;
     const novo = conteudoModelo(card);
     if (base[tid]) { if (mesmoConteudo(novo, base[tid])) return; delete base[tid]; baseMudou = true; }
-    if (!mesmoConteudo(novo, m.itens[i])) { m.itens[i] = Object.assign({}, m.itens[i], novo, { id: tid, updatedAt: agora, updatedBy: quem }); mudou = true; }
+    if (!mesmoConteudo(novo, escNovo(m.itens[i]) ? Object.assign({}, m.itens[i], { escalonamentos: m.itens[i].escComp.l }) : m.itens[i])) { // v3.0.4 (item 6): o escalonamento compartilhado já vale
+      const em = new Date(Math.max(Date.now(), CadernoSync.ts(escVer(m.itens[i])) + 1)).toISOString();
+      m.itens[i] = Object.assign({}, m.itens[i], novo, { id: tid, updatedAt: em, updatedBy: quem });
+      mudou = true;
+    }
   });
   Dados.gravarTexto(MEUS_MODELOS_KEY, JSON.stringify(ficam));
   Object.keys(base).forEach((k) => { if (ficam.indexOf(k) < 0) { delete base[k]; baseMudou = true; } });
@@ -158,18 +163,73 @@ async function selecionarEEnviar() {
     });
   });
   if (!ok) return;
-  let n = 0; const pulos = [], linhas = [];
+  let n = 0; const pulos = [], linhas = [], enviados = [];
   for (const id of ok.ids) {
     const c = itens.find((x) => x.id === id); if (!c || !cardEnviavel(c)) continue;
     const ja = destinatariosDe(c);
     ok.para.filter((p) => ja.indexOf(p) >= 0).forEach((p) => pulos.push(nomePerfil(p) + " já tem esse card" + (ok.ids.length > 1 ? " (" + nomeDe(c) + ")" : "") + "."));
     const k = await compartilharModelo(c, { ids: ok.para, semSync: true });
-    if (k) { n += k; linhas.push(nomeDe(c) + " → " + ok.para.filter((p) => ja.indexOf(p) < 0).map(nomePerfil).join(", ")); }
+    if (k) { const qs = ok.para.filter((p) => ja.indexOf(p) < 0).map(nomePerfil); n += k; linhas.push(nomeDe(c) + " → " + qs.join(", ")); enviados.push(nomeDe(c) + " enviado para " + listaE(qs) + "."); }
   }
   linhas.forEach((t) => addHist({ id: "se-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), tipo: "texto", card: "", escopo: "Equipe", texto: "Administrador enviou: " + t }));
   if (n) await sincronizar(true);
-  if (pulos.length) aviso(n ? "Enviado (alguns já tinham recebido)" : "Já recebeu", pulos.slice(0, 10).join(" ") + (pulos.length > 10 ? " E mais " + (pulos.length - 10) + "." : "")); // v3.0.3 (item 10): "Fulano já tem esse card."
+  // v3.0.4 (item 5): primeiro o que foi enviado, depois quem foi pulado; o título acompanha o resultado
+  if (pulos.length) aviso(n ? "Enviado (alguns já tinham recebido)" : "Já recebeu", enviados.concat(pulos.slice(0, 10)).join(" ") + (pulos.length > 10 ? " E mais " + (pulos.length - 10) + "." : ""));
   else toast(linhas.length ? "Enviado: " + linhas.join("; ") + ". Chega direto em Meus." : "Nenhum card novo para enviar");
+}
+function listaE(l) { return l.length <= 1 ? (l[0] || "") : l.slice(0, -1).join(", ") + " e " + l[l.length - 1]; }
+/* ---------- v3.0.4 (item 6): escalonamento compartilhado do card enviado ----------
+ * O modelo leva "escComp" { l: níveis, em, por }: a última edição do escalonamento feita pelo Administrador ou por um destinatário.
+ * Vale quando é mais nova que o modelo (updatedAt). Usuário, senha e o resto do card continuam individuais. Só o Administrador cria,
+ * arquiva ou exclui o envio; o destinatário só muda os níveis (com o nome dele no Log). */
+function fmtNiveis(l) { return JSON.stringify((l || []).map(limparNivelEsc).filter(Boolean).sort((a, b) => a.nivel - b.nivel).map((n) => ({ nivel: n.nivel, canal: n.canal || "", nome: n.nome || "", valor: n.valor || "", horario: n.horario || "", obs: n.obs || "" }))); }
+function escNovo(m) { return !!(m && m.escComp && CadernoSync.ts(m.escComp.em) > CadernoSync.ts(m.updatedAt)); }
+function escEfetivo(m) { return escNovo(m) ? m.escComp.l : (m && m.escalonamentos) || []; }
+function escVer(m) { return escNovo(m) ? m.escComp.em : (m && m.updatedAt) || ""; }
+function podeEditarEsc(m, nome) { // Administrador ativo ou destinatário do envio (pelo nome do perfil)
+  const n = normTxt(nome || ""); if (!n || !m) return false;
+  return lerPerfis().some((p) => p.ativo && !p.excluido && normTxt(p.nome) === n && (p.papel === "admin" || (Array.isArray(m.destinatarios) && m.destinatarios.indexOf(p.id) >= 0)));
+}
+/* Na sincronização: o escComp mais novo (cópia local, arquivo, cópias de conflito) vale para o modelo. */
+function mesclarEscComp(rm, fontes) {
+  let mudou = false;
+  rm.itens.forEach((it) => {
+    let melhor = it.escComp && podeEditarEsc(it, it.escComp.por) ? it.escComp : null;
+    fontes.forEach((f) => { const x = ((f && f.itens) || []).find((y) => y && y.id === it.id); const e = x && x.escComp; if (e && podeEditarEsc(it, e.por) && (!melhor || CadernoSync.ts(e.em) > CadernoSync.ts(melhor.em))) melhor = e; });
+    if (JSON.stringify(melhor || null) !== JSON.stringify(it.escComp || null)) { if (melhor) it.escComp = JSON.parse(JSON.stringify(melhor)); else delete it.escComp; mudou = true; }
+  });
+  return mudou;
+}
+/* Em carimbarMudancas(): edição do escalonamento no card recebido (destinatário) vira escComp do modelo. */
+function capturarEscRecebidos() {
+  const eu = typeof meuPerfil === "function" ? meuPerfil() : null; if (!eu || !window.CadernoSync) return false;
+  const m = modelosLocais(); let mudou = false; const quem = autor();
+  todosItens().forEach((c) => {
+    if (!c.modeloId || c.dono !== eu.id || compartilhado(c)) return;
+    const mod = m.itens.find((x) => x.id === c.modeloId); if (!mod || !paraMim(mod)) return;
+    const ver = escVer(mod), visto = (c.escVersao || c.modeloVersao) === ver;
+    if (!visto || fmtNiveis(niveisDe(c)) === fmtNiveis(escEfetivo(mod))) return;
+    const em = new Date(Math.max(Date.now(), CadernoSync.ts(ver) + 1)).toISOString();
+    mod.escComp = { l: niveisDe(c).map((n) => ({ nivel: n.nivel, canal: n.canal, nome: n.nome, valor: n.valor, horario: n.horario, obs: n.obs })), em: em, por: quem };
+    c.escVersao = em; mudou = true;
+    addHist({ id: "ec-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), tipo: "texto", card: nomeDe(c), escopo: "Equipe", texto: "Escalonamento do card enviado editado: " + nomeDe(c) + " (por " + quem + ")" });
+  });
+  if (mudou) { gravarModelosLocais(m); modelosPendentesEnvio = true; try { save(); } catch (e) {} setTimeout(() => { try { agendarSync(); } catch (e) {} }, 0); }
+  return mudou;
+}
+/* Administrador: a edição do destinatário entra no card de origem (o modelo acompanha em atualizarMeusModelos). */
+function adotarEscRecebidos() {
+  if (!window.CadernoSync || (typeof analistaPuro === "function" && analistaPuro())) return false;
+  const m = modelosLocais(); let mudou = false;
+  meusModelos().forEach((tid) => {
+    const mod = m.itens.find((x) => x.id === tid); const card = todosItens().find((c) => c.modeloDono === tid);
+    if (!mod || !card || !escNovo(mod) || card.escVersao === mod.escComp.em) return;
+    card.escVersao = mod.escComp.em;
+    if (fmtNiveis(niveisDe(card)) !== fmtNiveis(mod.escComp.l)) { card.escalonamentos = mod.escComp.l.map((n) => Object.assign({}, n)); card.updatedAt = new Date().toISOString(); card.updatedBy = mod.escComp.por; }
+    mudou = true;
+  });
+  if (mudou) { try { save(); render(); } catch (e) {} }
+  return mudou;
 }
 /* Analista: todo envio para o meu perfil, assinado pelo Administrador, vira card em Meus (dono = eu). Nunca duplica (modelo + dono). */
 const RECUSA_ENVIO_KEY = "caderno-envios-recusados";
@@ -189,13 +249,20 @@ async function entregarEnvios() {
     if (!c) {
       c = { id: "r-" + m.id + "-" + eu.id, titulo: m.nome || m.sistema || "", aplicacao: m.sistema || m.nome || "", cliente: m.cliente || "", categoria: m.categoria === "Externo" ? "Externo" : "Interno", visibilidade: "Individual",
         url: CadernoSync.urlPermitida(m.url || ""), usuario: "", senha: "", ciclo: "90", ultima: hoje(), horario: m.horario || "", /* v3.0.3 (item 9): chega preenchido */ escalonamento: m.escalonamento || "",
-        escalonamentos: (m.escalonamentos || []).map((n) => Object.assign({}, n)), obs: m.obs || "", modeloId: m.id, modeloVersao: m.updatedAt || "", modeloPor: m.sharedBy || "", dono: eu.id, updatedAt: agora, updatedBy: autor() };
+        escalonamentos: escEfetivo(m).map((n) => Object.assign({}, n)), obs: m.obs || "", modeloId: m.id, modeloVersao: m.updatedAt || "", escVersao: escVer(m), modeloPor: m.sharedBy || "", dono: eu.id, updatedAt: agora, updatedBy: autor() };
       itensOcultos.push(c); novos++; mexidos.push(c);
       addHist({ id: "rc-" + c.id, tipo: "texto", card: c.titulo, escopo: "Individual", texto: "Recebido do Administrador (" + (m.sharedBy || "") + "): " + (c.titulo || "card") + " — preencha seu login e senha" });
       continue;
     }
+    if (CadernoSync.ts(m.updatedAt) <= CadernoSync.ts(c.modeloVersao) && escNovo(m) && c.escVersao !== m.escComp.em) { // v3.0.4 (item 6)
+      c.escVersao = m.escComp.em;
+      if (fmtNiveis(niveisDe(c)) !== fmtNiveis(m.escComp.l)) { c.escalonamentos = m.escComp.l.map((n) => Object.assign({}, n)); atu++; }
+      if (mexidos.indexOf(c) < 0) mexidos.push(c);
+      continue;
+    }
     if (CadernoSync.ts(m.updatedAt) > CadernoSync.ts(c.modeloVersao)) {
-      Object.assign(c, { titulo: m.nome || c.titulo, aplicacao: m.sistema || c.aplicacao, cliente: m.cliente || "", categoria: m.categoria === "Externo" ? "Externo" : "Interno", url: CadernoSync.urlPermitida(m.url || ""), /* v3.0.3: horário do analista é mantido */ escalonamento: m.escalonamento || "", escalonamentos: (m.escalonamentos || []).map((n) => Object.assign({}, n)), obs: m.obs || "", modeloVersao: m.updatedAt });
+      c.escVersao = escVer(m);
+      Object.assign(c, { titulo: m.nome || c.titulo, aplicacao: m.sistema || c.aplicacao, cliente: m.cliente || "", categoria: m.categoria === "Externo" ? "Externo" : "Interno", url: CadernoSync.urlPermitida(m.url || ""), /* v3.0.3: horário do analista é mantido */ escalonamento: m.escalonamento || "", escalonamentos: escEfetivo(m).map((n) => Object.assign({}, n)), obs: m.obs || "", modeloVersao: m.updatedAt });
       atu++; if (mexidos.indexOf(c) < 0) mexidos.push(c);
     }
   }

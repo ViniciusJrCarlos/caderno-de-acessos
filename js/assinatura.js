@@ -146,7 +146,7 @@ function mudancaPropria(a, b) {
   const d = difPerfil(a, b); if (!d.length) return true;
   const so = (lista) => d.every((k) => lista.indexOf(k) >= 0);
   if (a.senhaTemp && !b.senhaTemp && b.senhaHash && so(["senhaHash", "senhaSalt", "senhaIter", "senhaTemp"])) return true; // trocou a temporária
-  if (!a.bloqueado && b.bloqueado && so(["bloqueado"])) return true;                                                            // 5 erros: bloqueou
+  // v3.0.4 (item 2): o bloqueio definitivo antigo ("bloqueado") não existe mais; ninguém liga esse campo sem assinatura
   // Administrador legado (sem chave): cria a própria chave e troca a senha temporária no "Entrar como administrador"
   if (a.papel === "admin" && b.papel === "admin" && !a.chavePub && !pinsChaves()[a.id] && so(["chavePub", "chavePriv", "chaveSalt", "adminHash", "adminSalt", "adminIter", "trocarSenha"])) return true;
   return false;
@@ -161,6 +161,15 @@ async function filtrarPerfisRemoto(cache, l) {
   const res = [];
   for (const p of l) {
     const a = ant.get(p.id);
+    // v3.0.4 (item 7): desbloqueio que chega pelo arquivo só vale com a assinatura de um Administrador conhecido
+    if (p.trava && p.trava.livre && JSON.stringify(p.trava) !== JSON.stringify((a && a.trava) || null) && !(p.trava.assin && await verificarAssin(p.trava.assin, msgTrava(p.id, p.trava), cache))) { if (a && a.trava) p.trava = a.trava; else delete p.trava; }
+    // v3.0.4 (item 4): a matrícula não muda depois do cadastro (nem assinada, nem por sincronização ou importação)
+    if (a && a.matricula && p.matricula !== a.matricula) {
+      out.desfeitos.push((p.nome || p.id) + " (matrícula)");
+      const v = Object.assign({}, a, { ultimoAcesso: p.ultimoAcesso, ultimaSync: p.ultimaSync, versao: p.versao }); if (p.trava) v.trava = p.trava;
+      if (chaveAdmin) { v.updatedAt = new Date().toISOString(); v.updatedBy = autor(); await assinarPerfil(v); }
+      res.push(v); continue;
+    }
     // v2.5.1 (item 3): mudança só de presença (ultimoAcesso/ultimaSync/versao, fora de CAMPOS_PERFIL_PODER) entra sem assinatura
     if (a && (a.updatedAt === p.updatedAt || !difPerfil(a, p).length)) { res.push(p); continue; }
     const assinOk = p.assinP && await verificarAssin(p.assinP, msgPerfil(p), cache);
@@ -170,9 +179,10 @@ async function filtrarPerfisRemoto(cache, l) {
       res.push(p); continue;
     }
     if (a && mudancaPropria(a, p)) { res.push(p); continue; }
+    if (a && await trocaPropriaValida(a, p)) { res.push(p); continue; } // v3.0.4 (item 3): "Trocar minha senha" do analista
     out.desfeitos.push(p.nome || p.id);
     if (a) {
-      const v = Object.assign({}, a, { ultimoAcesso: p.ultimoAcesso, ultimaSync: p.ultimaSync, versao: p.versao });
+      const v = Object.assign({}, a, { ultimoAcesso: p.ultimoAcesso, ultimaSync: p.ultimaSync, versao: p.versao }); if (p.trava) v.trava = p.trava;
       // no modo Administrador a versão certa volta mais nova e assinada, e corrige também o aparelho que mexeu
       if (chaveAdmin) { v.updatedAt = new Date().toISOString(); v.updatedBy = autor(); await assinarPerfil(v); }
       res.push(v);
@@ -180,4 +190,25 @@ async function filtrarPerfisRemoto(cache, l) {
   }
   out.itens = res;
   return out;
+}
+/* v3.0.4 (item 3): troca da própria senha (não temporária) como no ambiente corporativo. O aparelho que trocou grava no perfil
+ * "trocaProva" = sal anterior + HMAC-SHA256 (chave = hash PBKDF2 da senha anterior) sobre id + sal novo + hash novo. Só quem sabia a
+ * senha anterior (ou tinha o hash dela, que só existe no cofre e no arquivo cifrado) consegue gerar. Nada de senha em texto. */
+async function hmacHex(chaveHex, msg) {
+  const k = await crypto.subtle.importKey("raw", hexParaBytes(chaveHex), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return bytesParaHex(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(msg)));
+}
+function msgTrocaProva(id, salt, hash) { return "tp|" + id + "|" + salt + "|" + hash; }
+async function gerarTrocaProva(antes, novo) {
+  if (!antes || !antes.senhaHash || !antes.senhaSalt) return "";
+  return antes.senhaSalt + ":" + await hmacHex(antes.senhaHash, msgTrocaProva(antes.id, novo.senhaSalt, novo.senhaHash));
+}
+async function trocaPropriaValida(a, b) {
+  try {
+    if (!a || !b || a.papel === "admin" || b.papel === "admin" || a.senhaTemp || b.senhaTemp || !a.senhaHash || !a.senhaSalt || !b.senhaHash || !b.senhaSalt || !b.trocaProva) return false;
+    if (a.senhaHash === b.senhaHash) return false;
+    const d = difPerfil(a, b); if (!d.every((k) => ["senhaHash", "senhaSalt", "senhaIter"].indexOf(k) >= 0)) return false;
+    const i = b.trocaProva.indexOf(":"); if (b.trocaProva.slice(0, i) !== a.senhaSalt) return false;
+    return hashIguais(await hmacHex(a.senhaHash, msgTrocaProva(a.id, b.senhaSalt, b.senhaHash)), b.trocaProva.slice(i + 1));
+  } catch (e) { return false; }
 }

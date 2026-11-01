@@ -89,7 +89,7 @@ function notarPerfisNoArquivo(bruto) {
 function papelAtual() {
   if (!perfisAtivos()) return perfisNoArquivo() ? "analista" : "livre";
   const p = meuPerfil();
-  if (p && (!p.ativo || p.bloqueado)) return "leitura"; // v2.4.0: conta bloqueada também fica só leitura
+  if (p && !p.ativo) return "leitura"; // v3.0.4 (item 2): sem o bloqueio definitivo antigo
   if (modoAdmin && p && p.papel === "admin" && p.ativo) return "admin";
   return "analista";
 }
@@ -257,6 +257,7 @@ async function mesclarPerfisSync(remoto, remoto0, copias) {
 async function concluirPerfisSync(l) {
   if (l && l.length) await gravarPerfis(l);
   if (l && l.length) fixarChaves(l);
+  try { aplicarTravasPerfis(l); } catch (e) {} // v3.0.4 (item 7): bloqueio/desbloqueio vindo do arquivo da equipe
   const eu = meuPerfil(l);
   if (modoAdmin && !(eu && eu.ativo && eu.papel === "admin")) sairModoAdmin(true);
   desenharSeloAdmin();
@@ -273,6 +274,8 @@ async function hashAdmin(senha) { const salt = saltAleatorio(); return { adminHa
 async function alterarPerfil(id, mud, texto) {
   const l = await perfisCompletos(); const p = l.find((x) => x.id === id); if (!p) return null;
   const antes = Object.assign({}, p);
+  if (antes.matricula && mud.matricula !== undefined && mud.matricula !== antes.matricula) { toast("A matrícula não pode ser alterada. Se estiver errada, desative e cadastre de novo."); return null; } // v3.0.4 (item 4)
+  if (mud.senhaHash !== undefined && !mud.trocaProva) delete p.trocaProva; // v3.0.4 (item 3): a prova só vale para a troca feita pelo próprio usuário
   Object.assign(p, mud, { updatedAt: new Date().toISOString(), updatedBy: autor() });
   try { empurrarHistSenha(antes, p, mud); } catch (e) {} // v3.0.3 (item 5): guarda o hash anterior (nunca o texto)
   if (mud.ativo === false && antes.ativo !== false) p.inativoDesde = p.updatedAt; // v3.0.3 (item 12)
@@ -458,7 +461,7 @@ function blocoPerfis(box) {
     // v2.4.0: "Meu perfil" — sem painel de perfis e sem dicas de Administrador para o analista
     c.querySelector("h3").textContent = "Meu perfil";
     const p = meuPerfil(), papel = papelAtual();
-    const rot = papel === "admin" ? "Administrador (modo Administrador ativo)" : p && p.bloqueado ? "conta bloqueada: peça ao Administrador para desbloquear" : p && !p.ativo ? "desativado (cards da Equipe só leitura)" : "Analista";
+    const rot = papel === "admin" ? "Administrador (modo Administrador ativo)" : p && !p.ativo ? "desativado (cards da Equipe só leitura)" : "Analista";
     c.appendChild(el("p", "meta perfil-eu", p ? "Você: " + p.nome + " · " + rot : "Escolha o seu nome e digite a sua senha pessoal. Até lá você usa como analista."));
     if (!p) {
       const lista = lerPerfis().filter((x) => x.ativo);

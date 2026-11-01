@@ -29,7 +29,7 @@
    * Lista branca: só estes campos podem sair. Login e senha NUNCA. */
   /* v2.0.1: sugeridoPara (lista de nomes que recebem o aviso de card novo; vazio = todos) e parecidoCom (nome do card da Equipe com o
    * mesmo link, para o selo "Card parecido"). Versões antigas descartam os dois: o card aparece para todos, como um compartilhado comum. */
-  const CAMPOS_MODELO = ["id", "nome", "url", "sistema", "escalonamento", "escalonamentos", "obs", "sharedBy", "createdAt", "updatedAt", "updatedBy", "sugeridoPara", "parecidoCom", "destinatarios", "assin", "cliente", "categoria", "horario"]; // v3.0.3 (item 9): cliente, categoria e horário do card enviado
+  const CAMPOS_MODELO = ["id", "nome", "url", "sistema", "escalonamento", "escalonamentos", "obs", "sharedBy", "createdAt", "updatedAt", "updatedBy", "sugeridoPara", "parecidoCom", "destinatarios", "assin", "cliente", "categoria", "horario", "escComp"]; // v3.0.4 (item 6): escComp = escalonamento compartilhado editado por quem recebeu; v3.0.3 (item 9): cliente, categoria e horário do card enviado
   /* v3.0.2: destinatarios (ids de perfil que recebem o card direto em Meus) e assin (assinatura do Administrador sobre id + quem enviou + destinatarios). */
   const CAMPOS_NIVEL = ["nivel", "canal", "nome", "valor", "horario", "obs"];
   function limparModelo(m) {
@@ -48,6 +48,10 @@
         if (!Array.isArray(m[k])) return;
         const l = []; m[k].forEach((n) => { if (typeof n === "string" && n && n.length <= 80 && l.indexOf(n) < 0 && l.length < 200) l.push(n); });
         if (l.length) o[k] = l;
+      } else if (k === "escComp") {
+        const e = m[k]; if (!e || typeof e !== "object" || !Array.isArray(e.l)) return;
+        const em = isoValido(e.em); if (!em) return;
+        o[k] = { em: em, por: String(e.por || "").slice(0, 120), l: e.l.slice(0, 30).map((n) => { const x = {}; CAMPOS_NIVEL.forEach((c) => { if (n && n[c] != null) x[c] = String(n[c]).slice(0, 500); }); return x; }) };
       } else if (k === "assin") {
         if (typeof m[k] === "string" && m[k].length <= 400) o[k] = m[k];
       } else if (k === "parecidoCom") {
@@ -202,9 +206,21 @@
     // v3.0.3 (itens 5 e 12): histórico das 3 últimas senhas (só hash PBKDF2, nunca o texto) e desde quando o perfil está inativo
     if (Array.isArray(p.senhaHist)) { const hl = p.senhaHist.filter((x) => x && typeof x === "object" && HEX.test(txt(x.h, 128)) && txt(x.h, 128) && HEX.test(txt(x.s, 64)) && txt(x.s, 64)).slice(0, 3).map((x) => { const it2 = parseInt(x.i, 10); return { h: txt(x.h, 128), s: txt(x.s, 64), i: it2 > 0 && it2 <= 5e6 ? it2 : 310000 }; }); if (hl.length) o.senhaHist = hl; }
     const ind = isoValido(p.inativoDesde); if (ind && !o.ativo) o.inativoDesde = ind;
+    // v3.0.4 (itens 3 e 7): prova da troca da própria senha (HMAC com o hash anterior, sem senha) e o bloqueio de 15 min / desbloqueio
+    const tp = txt(p.trocaProva, 200); if (tp && /^[0-9a-f]+:[0-9a-f]+$/i.test(tp)) o.trocaProva = tp;
+    const tv = limparTravaP(p.trava); if (tv) o.trava = tv;
     const ap = txt(p.assinP, 200); if (ap && /^[A-Za-z0-9_\-]+:[A-Za-z0-9+\/=]+$/.test(ap)) o.assinP = ap;
     return o;
   }
+  function limparTravaP(t) {
+    if (!t || typeof t !== "object" || Array.isArray(t)) return null;
+    const em = isoValido(t.em); if (!em || ts(em) > Date.now() + 10 * 6e4) return null;
+    const o = { em: em, ate: Math.max(0, Math.min(Number(t.ate) || 0, ts(em) + 16 * 6e4)) };
+    if (t.livre) { o.livre = 1; o.ate = 0; const as = txt(t.assin, 200); if (as && /^[A-Za-z0-9_\-]+:[A-Za-z0-9+\/=]+$/.test(as)) o.assin = as; }
+    const s = txt(t.s, 64); if (s && HEX.test(s)) o.s = s;
+    return o;
+  }
+  function travaMaisNova(a, b) { return !a ? b : !b ? a : ts(b.em) > ts(a.em) ? b : a; }
   function limparPerfis(l) {
     const vistos = new Set();
     return (Array.isArray(l) ? l : []).map(limparPerfil).filter((p) => p && !vistos.has(p.id) && vistos.add(p.id)).slice(0, 300);
@@ -225,6 +241,7 @@
       if (!novo.senhaHash && outro.senhaHash && novo.updatedAt === outro.updatedAt) { novo.senhaHash = outro.senhaHash; novo.senhaSalt = outro.senhaSalt; novo.senhaIter = outro.senhaIter; }
       if (novo.papel === "admin" && !novo.chavePriv && outro.chavePriv && (!novo.chavePub || novo.chavePub === outro.chavePub)) { novo.chavePriv = outro.chavePriv; novo.chaveSalt = outro.chaveSalt; }
       novo.ultimaSync = vivo.ultimaSync; novo.versao = vivo.versao;
+      const tv = travaMaisNova(a.trava, p.trava); if (tv) novo.trava = tv; else delete novo.trava; // v3.0.4 (item 7): o mais novo vale, sem mexer no updatedAt
       novo.ultimoAcesso = ts(p.ultimoAcesso) > ts(a.ultimoAcesso) ? p.ultimoAcesso : a.ultimoAcesso;
       m.set(p.id, novo);
     }));

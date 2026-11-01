@@ -84,7 +84,6 @@ function tentativasDe(id) { return (lerJSON(TENTATIVAS_KEY, {})[id]) || 0; }
 function gravarTentativas(id, n) { const o = lerJSON(TENTATIVAS_KEY, {}); if (n) o[id] = n; else delete o[id]; Dados.gravarTexto(TENTATIVAS_KEY, JSON.stringify(o)); }
 function confirmarSenhaPessoal(p0) {
   const p = lerPerfis().find((x) => x.id === p0.id) || p0;
-  if (p.bloqueado) return aviso("Conta bloqueada", "A conta de " + p.nome + " foi bloqueada depois de " + MAX_TENTATIVAS + " senhas erradas. Peça ao Administrador para desbloquear.").then(() => false);
   if (!p.ativo) return aviso("Perfil desativado", "O perfil de " + p.nome + " está desativado. Fale com o Administrador.").then(() => false);
   if (!p.senhaSalt) return aviso("Primeiro acesso", "O Administrador ainda não definiu a sua senha temporária. Peça para ele em Gestão › " + p.nome + " › Resetar senha. Depois sincronize e escolha o seu nome de novo. Até lá você usa como analista, sem nome.").then(() => false);
   return janela("dlgPerfis", (box, fim) => {
@@ -99,7 +98,6 @@ function confirmarSenhaPessoal(p0) {
         try {
           const c = (await perfisCompletos()).find((x) => x.id === p.id);
           if (!c || !c.senhaHash) { er.textContent = "A sua senha ainda não chegou neste aparelho. Sincronize e tente de novo."; return; }
-          if (c.bloqueado) { er.textContent = "Conta bloqueada. Peça ao Administrador para desbloquear."; return; }
           const kt = p.matricula || ("id-" + p.id); // v3.0.3 (item 14): o mesmo bloqueio temporário do login (15 min, sem contador)
           if (travaAte(kt)) { er.textContent = MSG_LOGIN_TRAVADO; return; }
           const h = await derivarSenha(s.value, c.senhaSalt, c.senhaIter || PERFIS_ITER);
@@ -147,7 +145,7 @@ function confirmarSenhaPessoal(p0) {
 }
 /* ---------- Aba Gestão ---------- */
 function iniciais(n) { const p = String(n || "").trim().split(/\s+/).filter(Boolean); return ((p[0] || "?")[0] + (p.length > 1 ? p[p.length - 1][0] : "")).toUpperCase(); }
-function situacaoDe(p) { return !p.ativo ? "desativado" : p.bloqueado ? "bloqueado" : "ativo"; }
+function situacaoDe(p) { return !p.ativo ? "desativado" : p.matricula && travaAte(p.matricula) ? "bloqueado" : "ativo"; }
 function abrirGestao() {
   if (papelAtual() !== "admin") { toast("Entre como administrador para abrir a Gestão"); return Promise.resolve(false); }
   irPara("adm-pessoas"); return Promise.resolve(true);
@@ -262,7 +260,7 @@ function acoesPessoa(id) {
     const acao = (rot, fn, o) => { const b = botaoDlg(o && o.perigo ? "perigo" : "", rot, async () => { fim(true); await fn(); render(); }); b.dataset.acao = o && o.id || ""; if (o && o.off) { b.disabled = true; b.title = o.off; } lista.appendChild(b); return b; };
     const souEu = eu && eu.id === p.id;
     acao("Resetar senha", () => resetarSenha(p), { id: "resetar", off: souEu ? "Para trocar a sua senha, use Entrar como administrador" : "" });
-    if (p.bloqueado) acao("Desbloquear", async () => { gravarTentativas(p.id, 0); limparTravaPerfil(p); await alterarPerfil(p.id, { bloqueado: false }, "Conta desbloqueada: " + p.nome); toast(p.nome + " desbloqueado(a)"); }, { id: "desbloquear" });
+    if (p.matricula && travaAte(p.matricula)) acao("Desbloquear", async () => { await desbloquearPessoa(p); }, { id: "desbloquear" }); // v3.0.4 (itens 1 e 7)
     if (p.papel !== "admin" && p.ativo) acao("Tornar administrador", () => tornarAdmin(p), { id: "tornar" });
     if (p.papel === "admin") acao("Remover administrador", () => removerAdmin(p), { id: "remover", off: ultimoAdmin ? "Não dá para remover o último Administrador" : "" });
     if (p.ativo) acao("Desativar", () => confirmarAcao("Desativar " + p.nome + "?", "Nos cards da Equipe, " + p.nome + " fica só leitura. Pode ser reativado depois.", "Desativar", () => alterarPerfil(p.id, { ativo: false }, "Perfil desativado: " + p.nome)), { id: "desativar", perigo: true, off: ultimoAdmin ? "Não dá para desativar o último Administrador" : "" });
@@ -294,7 +292,7 @@ function resetarSenha(p, op) {
         const mud = p.papel === "admin" ? Object.assign(await hashAdmin(s.value), await gerarChavesAdmin(s.value), { trocarSenha: true, bloqueado: false }) : Object.assign(await hashPessoal(s.value), { senhaTemp: true, bloqueado: false });
         if (op.reativar) mud.ativo = true;
         gravarTentativas(p.id, 0); limparTravaPerfil(p);
-        if (typeof limparBloqueioPendente === "function") limparBloqueioPendente(p.id); // v2.5.2 (item 2)
+        limparTravaPerfil(p);
         await alterarPerfil(p.id, mud, op.reativar ? "Perfil reativado com senha temporária (inativo " + DIAS_REATIVAR_RESET + "+ dias): " + p.nome : "Senha resetada (temporária): " + p.nome);
         s.value = ""; fim(true); toast(op.reativar ? p.nome + " reativado(a) com senha temporária" : "Senha de " + p.nome + " resetada (temporária)");
       } catch (e) { er.textContent = "Não foi possível resetar (" + ((e && e.name) || "erro") + ")."; }
