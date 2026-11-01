@@ -57,6 +57,7 @@ function registrarMeus() {
       const antes = a ? JSON.parse(a) : null, it = JSON.parse(j);
       if (!a && movidosMeusEquipe.has(id)) { /* v3.0.5 (item d): veio da Equipe, a linha "movido" já foi registrada */ }
       else if (restaurandoMeus.has(id)) addHist({ id: "ir-" + id + "-" + agora, tipo: "restaurado", card: String(nomeDe(it)).slice(0, 200), texto: "Card restaurado por " + (autor() || "você"), escopo: "Meu", local: true, quando: agora });
+      else if (typeof escAdotados !== "undefined" && escAdotados.has(id) && tipoMudanca(antes, it) === "editado") { /* v3.0.7 (item 5): cópia automática da edição de quem recebeu; a linha já é do analista */ }
       else histAcao(tipoMudanca(antes, it), it, "Meu", "i-" + id + "-" + agora, agora);
       // v2.0.0: card Meu também ganha data de alteração (só neste aparelho), para a reimportação não voltar a uma versão antiga
       const vivo = itens.find((x) => x.id === id); if (vivo && !histLote) { vivo.updatedAt = agora; nova.set(id, JSON.stringify(vivo)); }
@@ -65,6 +66,7 @@ function registrarMeus() {
   }
   fotoMeus = nova;
   movidosMeusEquipe.clear();
+  if (typeof escAdotados !== "undefined") escAdotados.clear();
 }
 /* Entradas vindas da sincronização (mudanças de outros analistas). Mesmo id da entrada criada por quem fez: não duplica. */
 function histDeMudanca(m) {

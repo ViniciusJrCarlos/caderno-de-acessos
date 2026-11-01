@@ -51,7 +51,7 @@
       } else if (k === "escComp") {
         const e = m[k]; if (!e || typeof e !== "object" || !Array.isArray(e.l)) return;
         const em = isoValido(e.em); if (!em) return;
-        o[k] = { em: em, por: String(e.por || "").slice(0, 120), l: e.l.slice(0, 30).map((n) => { const x = {}; CAMPOS_NIVEL.forEach((c) => { if (n && n[c] != null) x[c] = String(n[c]).slice(0, 500); }); return x; }) };
+        o[k] = { em: em, por: String(e.por || "").slice(0, 120), /* v3.0.7: r = Resumo compartilhado */ ...(e.r != null ? { r: String(e.r).slice(0, 5000) } : {}), l: e.l.slice(0, 30).map((n) => { const x = {}; CAMPOS_NIVEL.forEach((c) => { if (n && n[c] != null) x[c] = String(n[c]).slice(0, 500); }); return x; }) };
       } else if (k === "assin") {
         if (typeof m[k] === "string" && m[k].length <= 400) o[k] = m[k];
       } else if (k === "parecidoCom") {

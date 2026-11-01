@@ -7,9 +7,10 @@ document.addEventListener("pointerdown", () => { ignorarClique = false; }, true)
 document.addEventListener("click", (ev) => { if (!ev.target.closest(".menu-card")) fecharMenus(); });
 document.addEventListener("click", () => { if (renderPendente) setTimeout(renderSePendente, 50); });
 /* ---------- v1.9.3+: Novidades (texto vai junto com o app; mais recente primeiro) ---------- */
-const APP_VERSAO = "3.0.6";
+const APP_VERSAO = "3.0.7";
 const NOVIDADES_VISTA = "caderno-novidades-vista";
 const NOVIDADES = [
+  { v: "3.0.7", data: "01/11/2026", itens: ["Resumo do card enviado em Meus agora é de todos, como o escalonamento (login e senha continuam só seus).", "O Resumo de quem recebeu não volta mais ao do Administrador, nem no reenvio.", "Cards antigos de Meus aparecem em Selecionar e enviar.", "O aviso diz quem atualizou o card, e o Log não mostra mais 'Card editado' falso do Administrador."] },
   { v: "3.0.6", data: "01/11/2026", itens: ["Preparação interna, sem mudança de uso."] },
   { v: "3.0.5", data: "01/11/2026", itens: [
     "Log: não aparece mais “Card excluído” falso quando o Administrador e o analista usam o mesmo navegador em abas diferentes.",

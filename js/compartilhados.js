@@ -69,7 +69,7 @@ function atualizarMeusModelos() {
     if (i < 0) return;
     const novo = conteudoModelo(card);
     if (base[tid]) { if (mesmoConteudo(novo, base[tid])) return; delete base[tid]; baseMudou = true; }
-    if (!mesmoConteudo(novo, escNovo(m.itens[i]) ? Object.assign({}, m.itens[i], { escalonamentos: m.itens[i].escComp.l }) : m.itens[i])) { // v3.0.4 (item 6): o escalonamento compartilhado já vale
+    if (!mesmoConteudo(novo, escNovo(m.itens[i]) ? Object.assign({}, m.itens[i], { escalonamentos: m.itens[i].escComp.l, escalonamento: resumoEfetivo(m.itens[i]) }) : m.itens[i])) { // v3.0.7 (item 6): o Resumo compartilhado também já vale // v3.0.4 (item 6): o escalonamento compartilhado já vale
       const em = new Date(Math.max(Date.now(), CadernoSync.ts(escVer(m.itens[i])) + 1)).toISOString();
       m.itens[i] = Object.assign({}, m.itens[i], novo, { id: tid, updatedAt: em, updatedBy: quem });
       mudou = true;
@@ -97,7 +97,7 @@ function msgEnvio(m) { return "e|" + m.id + "|" + (m.sharedBy || "") + "|" + (Ar
 function nomePerfil(id) { const p = lerPerfis().find((x) => x.id === id); return p ? p.nome : ""; }
 function modeloDoCard(card) { const tid = card.modeloDono || ("m-" + card.id); return modelosLocais().itens.find((x) => x.id === tid) || null; }
 function destinatariosDe(card) { const m = modeloDoCard(card); return m && Array.isArray(m.destinatarios) ? m.destinatarios : []; }
-function cardEnviavel(it) { return !!it && it.id !== "s12" && !compartilhado(it) && !it.arquivado_em && !it.dono; } // v3.0.5 (item e): todos os Meus ativos do admin (fora: Equipe, arquivados, recebidos com dono e s12)
+function cardEnviavel(it) { return !!it && it.id !== "s12" && !compartilhado(it) && !it.arquivado_em && !(it.dono && it.modeloId); } // v3.0.7 (item 3): "dono" legado (v2.5.2) sem modeloId não é card recebido. v3.0.5 (item e): todos os Meus ativos do admin (fora: Equipe, arquivados, recebidos com dono e s12)
 function cardDoModelo(mod) { return itens.find((c) => c.modeloId === mod.id); }
 function modelosNovos() { return []; } // v3.0.2: não existe mais "esperando você decidir"
 function paraMim(m) { const eu = typeof meuPerfil === "function" ? meuPerfil() : null; return !!eu && Array.isArray(m.destinatarios) && m.destinatarios.indexOf(eu.id) >= 0; }
@@ -111,9 +111,12 @@ async function compartilharModelo(card, op) {
   const ja = Array.isArray(antigo && antigo.destinatarios) ? antigo.destinatarios.slice() : [];
   const novos = (op.ids || []).filter((id, i, l) => id && ja.indexOf(id) < 0 && l.indexOf(id) === i);
   if (!novos.length) return 0;
+  // v3.0.7 (item 2): o reenvio parte da última edição de quem recebeu (escalonamento e Resumo), nunca da versão antiga do admin
+  if (antigo && escNovo(antigo)) { try { adotarEscRecebidos(); } catch (e) {} }
   const dest = ja.concat(novos);
   const novo = Object.assign({ id: tid, sharedBy: autor(), createdAt: (antigo && antigo.createdAt) || agora }, conteudoModelo(card),
     { updatedAt: agora, updatedBy: autor(), destinatarios: dest, sugeridoPara: dest.map(nomePerfil).filter(Boolean) });
+  if (antigo && antigo.escComp) novo.escComp = antigo.escComp; // v3.0.7 (item 2): mantém o histórico da edição compartilhada
   if (chaveAdmin) novo.assin = await assinar(msgEnvio(novo));
   m.itens = m.itens.filter((x) => x.id !== tid).concat([CadernoSync.limparModelo(novo)]);
   m.removidos = m.removidos.filter((t) => t.id !== tid);
@@ -185,6 +188,8 @@ function listaE(l) { return l.length <= 1 ? (l[0] || "") : l.slice(0, -1).join("
 function fmtNiveis(l) { return JSON.stringify((l || []).map(limparNivelEsc).filter(Boolean).sort((a, b) => a.nivel - b.nivel).map((n) => ({ nivel: n.nivel, canal: n.canal || "", nome: n.nome || "", valor: n.valor || "", horario: n.horario || "", obs: n.obs || "" }))); }
 function escNovo(m) { return !!(m && m.escComp && CadernoSync.ts(m.escComp.em) > CadernoSync.ts(m.updatedAt)); }
 function escEfetivo(m) { return escNovo(m) ? m.escComp.l : (m && m.escalonamentos) || []; }
+function resumoEfetivo(m) { return escNovo(m) && m.escComp.r != null ? m.escComp.r : (m && m.escalonamento) || ""; } // v3.0.7 (item 6): Resumo compartilhado
+const escAdotados = new Set(); // v3.0.7 (item 5): ids de cards do admin atualizados pela cópia automática (sem "Card editado" falso no Log)
 function escVer(m) { return escNovo(m) ? m.escComp.em : (m && m.updatedAt) || ""; }
 function podeEditarEsc(m, nome) { // Administrador ativo ou destinatário do envio (pelo nome do perfil)
   const n = normTxt(nome || ""); if (!n || !m) return false;
@@ -208,9 +213,9 @@ function capturarEscRecebidos() {
     if (!c.modeloId || c.dono !== eu.id || compartilhado(c)) return;
     const mod = m.itens.find((x) => x.id === c.modeloId); if (!mod || !paraMim(mod)) return;
     const ver = escVer(mod), visto = (c.escVersao || c.modeloVersao) === ver;
-    if (!visto || fmtNiveis(niveisDe(c)) === fmtNiveis(escEfetivo(mod))) return;
+    if (!visto || (fmtNiveis(niveisDe(c)) === fmtNiveis(escEfetivo(mod)) && (c.escalonamento || "") === resumoEfetivo(mod))) return; // v3.0.7 (item 6): Resumo também
     const em = new Date(Math.max(Date.now(), CadernoSync.ts(ver) + 1)).toISOString();
-    mod.escComp = { l: niveisDe(c).map((n) => ({ nivel: n.nivel, canal: n.canal, nome: n.nome, valor: n.valor, horario: n.horario, obs: n.obs })), em: em, por: quem };
+    mod.escComp = { l: niveisDe(c).map((n) => ({ nivel: n.nivel, canal: n.canal, nome: n.nome, valor: n.valor, horario: n.horario, obs: n.obs })), r: c.escalonamento || "", em: em, por: quem };
     c.escVersao = em; mudou = true;
     addHist({ id: "ec-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), tipo: "texto", card: nomeDe(c), escopo: "Equipe", texto: "Escalonamento do card enviado editado: " + nomeDe(c) + " (por " + quem + ")" });
   });
@@ -225,7 +230,9 @@ function adotarEscRecebidos() {
     const mod = m.itens.find((x) => x.id === tid); const card = todosItens().find((c) => c.modeloDono === tid);
     if (!mod || !card || !escNovo(mod) || card.escVersao === mod.escComp.em) return;
     card.escVersao = mod.escComp.em;
-    if (fmtNiveis(niveisDe(card)) !== fmtNiveis(mod.escComp.l)) { card.escalonamentos = mod.escComp.l.map((n) => Object.assign({}, n)); card.updatedAt = new Date().toISOString(); card.updatedBy = mod.escComp.por; }
+    const r = mod.escComp.r, mudaR = r != null && (card.escalonamento || "") !== r;
+    if (fmtNiveis(niveisDe(card)) !== fmtNiveis(mod.escComp.l) || mudaR) { card.escalonamentos = mod.escComp.l.map((n) => Object.assign({}, n)); if (mudaR) card.escalonamento = r; card.updatedAt = new Date().toISOString(); card.updatedBy = mod.escComp.por; }
+    escAdotados.add(card.id);
     mudou = true;
   });
   if (mudou) { try { save(); render(); } catch (e) {} }
@@ -237,7 +244,7 @@ async function entregarEnvios() {
   if (!window.CadernoSync || typeof perfisAtivos !== "function" || !perfisAtivos()) return 0;
   const eu = meuPerfil(); if (!eu || !eu.ativo || !sessaoPerfilId || eu.id !== sessaoPerfilId) return 0;
   const perfis = lerPerfis(); const todos = todosItens(); const agora = new Date().toISOString();
-  const recusa = lerJSON(RECUSA_ENVIO_KEY, {}); let novos = 0, atu = 0, recMud = false; const mexidos = [];
+  const recusa = lerJSON(RECUSA_ENVIO_KEY, {}); let novos = 0, atu = 0, recMud = false; const mexidos = []; const porQuem = []; // v3.0.7 (item 4)
   for (const m of modelosAtivos()) {
     if (!Array.isArray(m.destinatarios) || m.destinatarios.indexOf(eu.id) < 0) continue;
     if (!(await ehAdminRemoto(m.sharedBy, m.assin, msgEnvio(m), perfis))) {
@@ -248,7 +255,7 @@ async function entregarEnvios() {
     if (!c) { c = todos.find((x) => !compartilhado(x) && x.modeloId === m.id && !x.dono); if (c) { c.dono = eu.id; mexidos.push(c); } } // cópia antiga (antes da v3.0.2): vira a minha, mantém login e senha
     if (!c) {
       c = { id: "r-" + m.id + "-" + eu.id, titulo: m.nome || m.sistema || "", aplicacao: m.sistema || m.nome || "", cliente: m.cliente || "", categoria: m.categoria === "Externo" ? "Externo" : "Interno", visibilidade: "Individual",
-        url: CadernoSync.urlPermitida(m.url || ""), usuario: "", senha: "", ciclo: "90", ultima: hoje(), horario: m.horario || "", /* v3.0.3 (item 9): chega preenchido */ escalonamento: m.escalonamento || "",
+        url: CadernoSync.urlPermitida(m.url || ""), usuario: "", senha: "", ciclo: "90", ultima: hoje(), horario: m.horario || "", /* v3.0.3 (item 9): chega preenchido */ escalonamento: resumoEfetivo(m),
         escalonamentos: escEfetivo(m).map((n) => Object.assign({}, n)), obs: m.obs || "", modeloId: m.id, modeloVersao: m.updatedAt || "", escVersao: escVer(m), modeloPor: m.sharedBy || "", dono: eu.id, updatedAt: agora, updatedBy: autor() };
       itensOcultos.push(c); novos++; mexidos.push(c);
       addHist({ id: "rc-" + c.id, tipo: "texto", card: c.titulo, escopo: "Individual", texto: "Recebido do Administrador (" + (m.sharedBy || "") + "): " + (c.titulo || "card") + " — preencha seu login e senha" });
@@ -256,14 +263,15 @@ async function entregarEnvios() {
     }
     if (CadernoSync.ts(m.updatedAt) <= CadernoSync.ts(c.modeloVersao) && escNovo(m) && c.escVersao !== m.escComp.em) { // v3.0.4 (item 6)
       c.escVersao = m.escComp.em;
-      if (fmtNiveis(niveisDe(c)) !== fmtNiveis(m.escComp.l)) { c.escalonamentos = m.escComp.l.map((n) => Object.assign({}, n)); atu++; }
+      const r = m.escComp.r, mudaR = r != null && (c.escalonamento || "") !== r;
+      if (fmtNiveis(niveisDe(c)) !== fmtNiveis(m.escComp.l) || mudaR) { c.escalonamentos = m.escComp.l.map((n) => Object.assign({}, n)); if (mudaR) c.escalonamento = r; atu++; porQuem.push(m.escComp.por || ""); }
       if (mexidos.indexOf(c) < 0) mexidos.push(c);
       continue;
     }
     if (CadernoSync.ts(m.updatedAt) > CadernoSync.ts(c.modeloVersao)) {
       c.escVersao = escVer(m);
-      Object.assign(c, { titulo: m.nome || c.titulo, aplicacao: m.sistema || c.aplicacao, cliente: m.cliente || "", categoria: m.categoria === "Externo" ? "Externo" : "Interno", url: CadernoSync.urlPermitida(m.url || ""), /* v3.0.3: horário do analista é mantido */ escalonamento: m.escalonamento || "", escalonamentos: escEfetivo(m).map((n) => Object.assign({}, n)), obs: m.obs || "", modeloVersao: m.updatedAt });
-      atu++; if (mexidos.indexOf(c) < 0) mexidos.push(c);
+      Object.assign(c, { titulo: m.nome || c.titulo, aplicacao: m.sistema || c.aplicacao, cliente: m.cliente || "", categoria: m.categoria === "Externo" ? "Externo" : "Interno", url: CadernoSync.urlPermitida(m.url || ""), /* v3.0.3: horário do analista é mantido */ escalonamento: resumoEfetivo(m), escalonamentos: escEfetivo(m).map((n) => Object.assign({}, n)), obs: m.obs || "", modeloVersao: m.updatedAt });
+      atu++; porQuem.push(m.updatedBy || m.sharedBy || ""); if (mexidos.indexOf(c) < 0) mexidos.push(c);
     }
   }
   if (recMud) Dados.gravarTexto(RECUSA_ENVIO_KEY, JSON.stringify(recusa));
@@ -272,7 +280,11 @@ async function entregarEnvios() {
   if (typeof baseMeus !== "undefined" && baseMeus) mexidos.forEach((c) => baseMeus.set(c.id, JSON.parse(JSON.stringify(c))));
   save(); render();
   if (novos) toast(novos === 1 ? "1 card novo do Administrador em Meus: preencha seu login e senha" : novos + " cards novos do Administrador em Meus: preencha seu login e senha");
-  else if (atu) toast(atu === 1 ? "1 card de Meus atualizado pelo Administrador (login e senha mantidos)" : atu + " cards de Meus atualizados pelo Administrador (login e senha mantidos)");
+  else if (atu) { // v3.0.7 (item 4): diz quem mudou de verdade
+    const ps = porQuem.filter(Boolean).filter((x, i, l) => l.indexOf(x) === i);
+    const quem = ps.length ? "por " + listaE(ps) : "pelo Administrador";
+    toast(atu === 1 ? "1 card de Meus atualizado " + quem + " (login e senha mantidos)" : atu + " cards de Meus atualizados " + quem + " (login e senha mantidos)");
+  }
   return novos + atu;
 }
 async function verificarModelos() { try { await entregarEnvios(); } catch (e) { /* tenta de novo na próxima sincronização */ } }
