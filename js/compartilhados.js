@@ -97,7 +97,7 @@ function msgEnvio(m) { return "e|" + m.id + "|" + (m.sharedBy || "") + "|" + (Ar
 function nomePerfil(id) { const p = lerPerfis().find((x) => x.id === id); return p ? p.nome : ""; }
 function modeloDoCard(card) { const tid = card.modeloDono || ("m-" + card.id); return modelosLocais().itens.find((x) => x.id === tid) || null; }
 function destinatariosDe(card) { const m = modeloDoCard(card); return m && Array.isArray(m.destinatarios) ? m.destinatarios : []; }
-function cardEnviavel(it) { return !!it && it.id !== "s12" && !compartilhado(it) && !it.arquivado_em && !(it.dono && it.modeloId); } // v3.0.7 (item 3): "dono" legado (v2.5.2) sem modeloId não é card recebido. v3.0.5 (item e): todos os Meus ativos do admin (fora: Equipe, arquivados, recebidos com dono e s12)
+function cardEnviavel(it) { return !!it && it.id !== "s12" && !compartilhado(it) && !it.arquivado_em && individualVisivel(it) && !(it.modeloId && it.dono && it.dono !== sessaoPerfilId); } // v3.0.8: mesmo critério da aba Meus do admin (fora: s12, Equipe, arquivados e recebidos de outro perfil). v3.0.7 (item 3): "dono" legado (v2.5.2) sem modeloId não é card recebido. v3.0.5 (item e): todos os Meus ativos do admin (fora: Equipe, arquivados, recebidos com dono e s12)
 function cardDoModelo(mod) { return itens.find((c) => c.modeloId === mod.id); }
 function modelosNovos() { return []; } // v3.0.2: não existe mais "esperando você decidir"
 function paraMim(m) { const eu = typeof meuPerfil === "function" ? meuPerfil() : null; return !!eu && Array.isArray(m.destinatarios) && m.destinatarios.indexOf(eu.id) >= 0; }
