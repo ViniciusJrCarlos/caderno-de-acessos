@@ -166,6 +166,10 @@ async function selecionarEEnviar() {
     });
   });
   if (!ok) return;
+  return enviarSelecionados(ok);
+}
+/* v3.0.9: o mesmo envio do "Selecionar e enviar", reaproveitado pela aba Envios (sem mudar a lógica). ok = { ids, para } */
+async function enviarSelecionados(ok) {
   let n = 0; const pulos = [], linhas = [], enviados = [];
   for (const id of ok.ids) {
     const c = itens.find((x) => x.id === id); if (!c || !cardEnviavel(c)) continue;
