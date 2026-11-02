@@ -142,14 +142,15 @@ async function selecionarEEnviar() {
     const fs = el("fieldset", "mod-para"); fs.appendChild(el("legend", "", "Meus (" + cards.length + ")"));
     const cbCards = cards.map((it) => {
       const l = el("label", "mod-chk"); const cb = el("input"); cb.type = "checkbox"; cb.value = it.id; cb.dataset.envCard = "1"; l.appendChild(cb);
-      l.appendChild(document.createTextNode(" " + (it.aplicacao || it.titulo || "(sem nome)") + (it.cliente ? " · " + it.cliente : "")));
+      const tx = el("span", ""); tx.appendChild(document.createTextNode(" ")); tx.appendChild(el("b", "env-tit", it.aplicacao || it.titulo || "(sem nome)")); // v3.0.10: título em negrito, como na aba Envios
+      if (it.cliente) tx.appendChild(document.createTextNode(" · " + it.cliente)); l.appendChild(tx);
       const ja = destinatariosDe(it).map(nomePerfil).filter(Boolean);
-      l.appendChild(el("span", "meta env-ja", ja.length ? " — já recebeu: " + ja.join(", ") : " — ainda não enviado"));
+      l.appendChild(el("span", "meta env-ja" + (ja.length ? " env-ja--sim" : ""), ja.length ? " — já recebeu: " + ja.join(", ") : " — ainda não enviado"));
       fs.appendChild(l); return cb;
     });
     box.appendChild(fs);
     const fp = el("fieldset", "mod-para"); fp.appendChild(el("legend", "", "Para"));
-    const cbP = pessoas.map((p) => { const l = el("label", "mod-chk"); const cb = el("input"); cb.type = "checkbox"; cb.value = p.nome; cb.dataset.envPara = "1"; cb.dataset.pid = p.id; l.appendChild(cb); l.appendChild(document.createTextNode(" " + p.nome + (p.matricula ? " · " + p.matricula : ""))); const j = el("span", "meta env-ja-pessoa", ""); l.appendChild(j); cb._ja = j; fp.appendChild(l); return cb; });
+    const cbP = pessoas.map((p) => { const l = el("label", "mod-chk"); const cb = el("input"); cb.type = "checkbox"; cb.value = p.nome; cb.dataset.envPara = "1"; cb.dataset.pid = p.id; l.appendChild(cb); const tx = el("span", ""); tx.appendChild(document.createTextNode(" ")); tx.appendChild(el("b", "env-tit", p.nome)); if (p.matricula) tx.appendChild(document.createTextNode(" · " + p.matricula)); l.appendChild(tx); const j = el("span", "meta env-ja-pessoa", ""); l.appendChild(j); cb._ja = j; fp.appendChild(l); return cb; });
     box.appendChild(fp);
     // v3.0.3 (item 10): quem já recebeu TODOS os cards marcados aparece desabilitado com "já recebeu"
     const atualizarPara = () => {
@@ -158,31 +159,59 @@ async function selecionarEEnviar() {
     };
     cbCards.forEach((c) => c.addEventListener("change", atualizarPara));
     const er = erroPadrao(box);
-    botoesPadrao(box, "Cancelar", "Enviar", () => fim(false), () => {
+    const bEnv = botoesPadrao(box, "Cancelar", "Enviar", () => fim(false), () => {
       const ids = cbCards.filter((c) => c.checked).map((c) => c.value), para = cbP.filter((c) => c.checked).map((c) => c.dataset.pid);
       if (!ids.length) { er.textContent = "Marque ao menos um card."; return; }
       if (!para.length) { er.textContent = "Marque ao menos um analista."; return; }
       fim({ ids: ids, para: para });
     });
+    bEnv.textContent = ""; bEnv.insertAdjacentHTML("beforeend", svg("send", 18)); bEnv.appendChild(el("span", "", "Enviar")); // v3.0.10: mesmo ícone da aba Envios
   });
   if (!ok) return;
   return enviarSelecionados(ok);
 }
 /* v3.0.9: o mesmo envio do "Selecionar e enviar", reaproveitado pela aba Envios (sem mudar a lógica). ok = { ids, para } */
 async function enviarSelecionados(ok) {
-  let n = 0; const pulos = [], linhas = [], enviados = [];
+  let n = 0; const linhas = [], enviados = [], pulados = [];
   for (const id of ok.ids) {
     const c = itens.find((x) => x.id === id); if (!c || !cardEnviavel(c)) continue;
     const ja = destinatariosDe(c);
-    ok.para.filter((p) => ja.indexOf(p) >= 0).forEach((p) => pulos.push(nomePerfil(p) + " já tem esse card" + (ok.ids.length > 1 ? " (" + nomeDe(c) + ")" : "") + "."));
+    const pul = ok.para.filter((p) => ja.indexOf(p) >= 0).map(nomePerfil);
+    if (pul.length) pulados.push({ card: nomeDe(c), nomes: pul });
     const k = await compartilharModelo(c, { ids: ok.para, semSync: true });
-    if (k) { const qs = ok.para.filter((p) => ja.indexOf(p) < 0).map(nomePerfil); n += k; linhas.push(nomeDe(c) + " → " + qs.join(", ")); enviados.push(nomeDe(c) + " enviado para " + listaE(qs) + "."); }
+    if (k) { const qs = ok.para.filter((p) => ja.indexOf(p) < 0).map(nomePerfil); n += k; linhas.push(nomeDe(c) + " → " + qs.join(", ")); enviados.push({ card: nomeDe(c), nomes: qs }); }
   }
   linhas.forEach((t) => addHist({ id: "se-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5), tipo: "texto", card: "", escopo: "Equipe", texto: "Administrador enviou: " + t }));
   if (n) await sincronizar(true);
-  // v3.0.4 (item 5): primeiro o que foi enviado, depois quem foi pulado; o título acompanha o resultado
-  if (pulos.length) aviso(n ? "Enviado (alguns já tinham recebido)" : "Já recebeu", enviados.concat(pulos.slice(0, 10)).join(" ") + (pulos.length > 10 ? " E mais " + (pulos.length - 10) + "." : ""));
-  else toast(linhas.length ? "Enviado: " + linhas.join("; ") + ". Chega direto em Meus." : "Nenhum card novo para enviar");
+  // v3.0.10: aviso com resumo, "Enviados" (chips verdes) e "Já tinham" recolhido (chips cinza). A lógica do envio não mudou.
+  if (enviados.length || pulados.length) return avisoEnvio(n, enviados, pulados);
+  toast("Nenhum card novo para enviar");
+}
+function avisoEnvio(n, enviados, pulados) {
+  const np = pulados.reduce((s, x) => s + x.nomes.length, 0);
+  const linha = (x, cls) => { const d = el("div", "envr-lin"); d.appendChild(el("div", "envr-card", x.card)); const cs = el("div", "envr-chips"); x.nomes.forEach((nm) => cs.appendChild(el("span", "envr-chip " + cls, nm))); d.appendChild(cs); return d; };
+  return janela("dlgMod", (box, fim) => {
+    box.dataset.dlg = "resultado-envio"; box.classList.add("dlg-padrao", "envr");
+    box.appendChild(el("h3", "", "Resultado do envio"));
+    const res = el("div", "envr-res");
+    res.appendChild(el("span", "envr-pill envr-pill--ok", "✅ " + n + (n === 1 ? " envio feito" : " envios feitos")));
+    if (np) res.appendChild(el("span", "envr-pill envr-pill--sk", "⏭️ " + np + " já tinham"));
+    box.appendChild(res);
+    const corpo = el("div", "envr-corpo");
+    if (enviados.length) { corpo.appendChild(el("div", "envr-sec", "Enviados")); enviados.forEach((x) => corpo.appendChild(linha(x, "envr-chip--ok"))); }
+    if (pulados.length) {
+      corpo.appendChild(el("div", "envr-sec" + (enviados.length ? " envr-sec--mt" : ""), "Já tinham (não reenviado)"));
+      const det = el("div", "envr-det"); det.hidden = true; pulados.forEach((x) => det.appendChild(linha(x, "envr-chip--sk")));
+      const tg = el("button", "envr-tog"); tg.type = "button"; tg.setAttribute("aria-expanded", "false");
+      const tt = el("span", ""), ts = el("span", ""); tg.appendChild(tt); tg.appendChild(ts);
+      const qt = " · " + pulados.length + (pulados.length === 1 ? " card, " : " cards, ") + np + (np === 1 ? " pessoa" : " pessoas");
+      const pinta = () => { tt.textContent = (det.hidden ? "Ver detalhes" : "Ocultar detalhes") + qt; ts.textContent = det.hidden ? "▾" : "▴"; tg.setAttribute("aria-expanded", String(!det.hidden)); };
+      tg.addEventListener("click", () => { det.hidden = !det.hidden; pinta(); }); pinta();
+      corpo.appendChild(tg); corpo.appendChild(det);
+    }
+    box.appendChild(corpo);
+    const b = botaoDlg("pri envr-ok", "OK", () => fim(true)); box.appendChild(b);
+  });
 }
 function listaE(l) { return l.length <= 1 ? (l[0] || "") : l.slice(0, -1).join(", ") + " e " + l[l.length - 1]; }
 /* ---------- v3.0.4 (item 6): escalonamento compartilhado do card enviado ----------

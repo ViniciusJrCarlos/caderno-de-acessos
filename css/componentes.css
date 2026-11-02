@@ -434,3 +434,26 @@ body.travado .login { animation:caderno-fade .2s ease; }
   .env-grade { grid-template-columns:minmax(0,1fr) 320px; }
   .env-para { position:sticky; top:80px; }
 }
+/* v3.0.10: Selecionar e enviar com os estilos de texto da aba Envios */
+[data-dlg="selecionar-enviar"] .env-tit { color:var(--text); font-weight:700; }
+[data-dlg="selecionar-enviar"] .env-ja--sim, [data-dlg="selecionar-enviar"] .env-ja-pessoa { color:var(--green); }
+[data-dlg="selecionar-enviar"] .env-ja-pessoa { font-weight:600; }
+/* v3.0.10: aviso "Resultado do envio" (aba Envios e Selecionar e enviar) */
+.dlg.envr { width:min(520px, 100%); display:flex; flex-direction:column; overflow:hidden; max-height:min(92vh, 640px); }
+.envr h3 { margin:0 0 10px; }
+.envr-res { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+.envr-pill { padding:6px 12px; border-radius:999px; font-weight:700; font-size:14px; }
+.envr-pill--ok { background:color-mix(in srgb, var(--green) 12%, var(--surface)); color:var(--green); }
+.envr-pill--sk { background:var(--chip-int-bg); color:var(--icon); }
+.envr-corpo { flex:1 1 auto; min-height:0; overflow-y:auto; padding-right:4px; }
+.envr-sec { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:6px 0; }
+.envr-sec--mt { margin-top:12px; }
+.envr-lin { border:1px solid var(--line2); background:var(--surface2); border-radius:10px; padding:10px 12px; margin-bottom:8px; }
+.envr-card { font-weight:700; color:var(--head); font-size:15px; margin-bottom:6px; overflow-wrap:anywhere; }
+.envr-chips { display:flex; flex-wrap:wrap; gap:6px; }
+.envr-chip { font-size:13px; padding:3px 10px; border-radius:999px; }
+.envr-chip--ok { background:color-mix(in srgb, var(--green) 12%, var(--surface)); color:var(--green); border:1px solid color-mix(in srgb, var(--green) 30%, var(--surface)); }
+.envr-chip--sk { background:var(--surface); color:var(--icon); border:1px solid var(--line); }
+.envr-tog { width:100%; display:flex; justify-content:space-between; align-items:center; gap:8px; background:none; border:1px solid var(--line); border-radius:10px; padding:10px 12px; font-size:14px; color:var(--teal); font-weight:600; margin:4px 0 8px; cursor:pointer; font-family:inherit; text-align:left; }
+.envr-tog:hover { background:var(--hover); }
+.btn.envr-ok { width:100%; margin-top:14px; padding:12px; font-size:15px; flex:0 0 auto; }
