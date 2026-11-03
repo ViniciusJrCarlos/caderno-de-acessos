@@ -96,6 +96,7 @@ function render() {
   box.classList.toggle("mais", painel);
   box.classList.remove("area-pag");
   if (aba === "envios") { renderEnvios(box); return; } // v3.0.9
+  if (aba === "relatorios") { renderRelatorios(box); return; } // v3.1.0
   if (aba !== "gerador" && painel) { renderArea(box); return; }
   if (aba === "gerador") { renderGerador(box); return; }
   if (aba === "equipe") { try { faixaAvisos(box); } catch (e) { /* aviso é melhor esforço */ } }

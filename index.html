@@ -61,7 +61,7 @@
     <button type="submit" id="loginBtn">Abrir caderno</button>
     <button type="button" class="link-discreto login-voltar" id="loginVoltar" hidden>‹ Voltar</button>
     <p id="loginErro" class="login-erro" role="alert"></p>
-    <p class="login-rodape" id="loginRodape">Caderno de Acessos v3.0.10 · © Todos os direitos reservados · Desenv. WebDev</p>
+    <p class="login-rodape" id="loginRodape">Caderno de Acessos v3.1.2 · © Todos os direitos reservados · Desenv. WebDev</p>
     <p class="login-instalar" id="loginInstalarWrap" hidden><button type="button" class="link-instalar" id="btnInstalarApp">Instalar app</button></p>
   </form>
 </section>
@@ -88,6 +88,7 @@
     <button type="button" data-aba="arquivo"><span data-ic="archive"></span><span class="nav-rot">Arquivo</span></button>
     <button type="button" data-aba="gerador"><span data-ic="key"></span><span class="nav-rot">Gerador</span></button>
     <button type="button" data-aba="envios" id="navEnvios" hidden><span data-ic="send"></span><span class="nav-rot">Envios</span></button>
+    <button type="button" data-aba="relatorios" id="navRelatorios" hidden><span data-ic="chart"></span><span class="nav-rot">Relatórios</span></button>
   </div>
   <div class="nav-grupo nav-adm" id="navArea" hidden>
     <p class="nav-tit">Administrador</p>
@@ -172,7 +173,7 @@
   <div class="panel pequeno">
     <div class="panel-topo"><h3>Sobre</h3><button type="button" class="ico-btn escuro" data-fecha="sobre" aria-label="Fechar" data-ic="x"></button></div>
     <div class="panel-corpo">
-      <p class="meta">Caderno de Acessos v3.0.10 · © Todos os direitos reservados · Desenv. WebDev</p>
+      <p class="meta">Caderno de Acessos v3.1.2 · © Todos os direitos reservados · Desenv. WebDev</p>
       <h4 class="sobre-tit">Novidades</h4>
       <div class="sobre-novidades" id="sobreNovidades"></div>
       <h4 class="sobre-tit">Perfis Administrador e Analista</h4>
@@ -275,6 +276,10 @@
 <script src="js/mais.js"></script>
 <script src="js/gerador.js"></script>
 <script src="js/envios.js"></script>
+<script src="js/relatorios/base.js"></script>
+<script src="js/relatorios/principais.js"></script>
+<script src="js/relatorios/extras.js"></script>
+<script src="js/relatorios/exportar.js"></script>
 <script src="js/importar-exportar.js"></script>
 <script src="js/planilhas.js"></script>
 <script src="js/ficha.js"></script>

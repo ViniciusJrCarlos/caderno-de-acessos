@@ -5,25 +5,25 @@
  * tela de entrada, "Trocar minha senha", receber no celular o arquivo que o Administrador envia (só leitura, mesmas regras da
  * sincronização) e gerar esse arquivo no computador do Administrador.
  * Script clássico (sem módulos): tudo fica no escopo global, carregado em ordem pelo index.html. Ver docs/ARQUITETURA.md. */
-const ABAS_CARDS = ["equipe", "meu", "vencendo", "arquivo", "gerador", "envios"];
+const ABAS_CARDS = ["equipe", "meu", "vencendo", "arquivo", "gerador", "envios", "relatorios"];
 const ABAS_ADMIN = ["adm-pessoas", "adm-perfis", "adm-logs", "adm-config", "adm-novidades"];
 let sessaoPapel = "";               // v2.5.1 (item 1): papel com que a sessão entrou
 let sessaoPerfilId = null;           // perfil que entrou por matrícula nesta aba (null: aparelho sem perfis, senha do aparelho)
 let loginPendente = null;            // { c: perfil completo, senha } enquanto cria a senha nova (senha temporária)
 let tentativasLoginAdmin = 0, esperaLoginAte = 0;
 function emAreaAdmin() { return ABAS_ADMIN.indexOf(aba) >= 0; }
-function emPainel() { return aba === "gerador" || aba === "envios" || aba === "conta-arquivo" || emAreaAdmin(); }
+function emPainel() { return aba === "gerador" || aba === "envios" || aba === "relatorios" || aba === "conta-arquivo" || emAreaAdmin(); }
 function normMat(v) { return String(v || "").trim().toUpperCase(); }
 /* ---------- Navegação ---------- */
 function irPara(a) {
-  if ((ABAS_ADMIN.indexOf(a) >= 0 || a === "envios") && !podeAdminEquipe()) { toast("Só o Administrador abre esta área"); a = "equipe"; }
+  if ((ABAS_ADMIN.indexOf(a) >= 0 || a === "envios" || a === "relatorios") && !podeAdminEquipe()) { toast("Só o Administrador abre esta área"); a = "equipe"; }
   aba = a;
   fecharContaMenu();
   render();
   window.scrollTo(0, 0);
 }
 function aplicarShell() {
-  if ((emAreaAdmin() || aba === "envios") && !podeAdminEquipe()) aba = "equipe"; // v3.0.9: aba Envios só do admin
+  if ((emAreaAdmin() || aba === "envios" || aba === "relatorios") && !podeAdminEquipe()) aba = "equipe"; // v3.0.9: aba Envios só do admin
   const area = emAreaAdmin();
   const b = document.body;
   b.classList.toggle("area-admin", area);
@@ -33,6 +33,7 @@ function aplicarShell() {
   document.querySelectorAll("#abas [data-aba]").forEach((x) => { const on = x.dataset.aba === aba; x.classList.toggle("on", on); if (on) x.setAttribute("aria-current", "page"); else x.removeAttribute("aria-current"); });
   const na = $("navArea"); if (na) na.hidden = !podeAdminEquipe();
   const ne = $("navEnvios"); if (ne) ne.hidden = !podeAdminEquipe();
+  const nr = $("navRelatorios"); if (nr) nr.hidden = !podeAdminEquipe(); // v3.1.0: aba Relatórios só do admin
   const chip = $("chipSoVer"); if (chip) chip.hidden = !(so && aba === "equipe");
   desenharConta();
   desenharStatusSync();
